@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+    <title>航空航路规划器</title>
+    <script>
+      (() => {
+        const modes = new Set(["system", "zh-Hans", "en"]);
+        const systemLanguage = () => {
+          const languages = Array.isArray(navigator.languages) && navigator.languages.length
+            ? navigator.languages
+            : [navigator.language || "en"];
+          return String(languages[0] || "").toLowerCase().startsWith("zh")
+            ? "zh-Hans"
+            : "en";
+        };
+        let mode = "system";
+        try {
+          const saved = window.localStorage.getItem("navplannerLanguageMode");
+          mode = modes.has(saved) ? saved : "system";
+        } catch (_) {
+          mode = "system";
+        }
+        const language = mode === "system" ? systemLanguage() : mode;
+        document.documentElement.lang = language;
+        document.documentElement.dataset.languageMode = mode;
+        document.documentElement.dataset.language = language;
+      })();
+    </script>
+    <script>
+      (() => {
+        const modes = new Set(["system", "day", "night"]);
+        let mode = "system";
+        try {
+          const saved = window.localStorage.getItem("navplannerThemeMode");
+          mode = modes.has(saved) ? saved : "system";
+        } catch (_) {
+          mode = "system";
+        }
+        const prefersDay = window.matchMedia?.("(prefers-color-scheme: light)")?.matches;
+        document.documentElement.dataset.themeMode = mode;
+        document.documentElement.dataset.theme = mode === "system" ? (prefersDay ? "day" : "night") : mode;
+      })();
+    </script>
+    <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
+    <link rel="stylesheet" href="/vendor/maplibre-gl/maplibre-gl.css" />
+    <link rel="stylesheet" href="/styles.css?v=20260604-language-settings" />
+  </head>
+  <body data-mobile-tab="plan">
+    <div class="shell">
+      <aside class="panel planner-panel">
+        <section>
+          <div class="section-label" data-i18n="nav.plan">计划</div>
+          <label class="field-label" for="departureInput" data-i18n="plan.departureAirport">起飞机场</label>
+          <div class="search-wrap">
+            <input id="departureInput" autocomplete="off" placeholder="ICAO / IATA / 航点" data-i18n-placeholder="plan.airportPlaceholder" />
+            <div class="search-results hidden" id="departureResults"></div>
+          </div>
+
+          <label class="field-label" for="arrivalInput" data-i18n="plan.arrivalAirport">到达机场</label>
+          <div class="search-wrap">
+            <input id="arrivalInput" autocomplete="off" placeholder="ICAO / IATA / 航点" data-i18n-placeholder="plan.airportPlaceholder" />
+            <div class="search-results hidden" id="arrivalResults"></div>
+          </div>
+
+          <label class="field-label" for="manualInput" data-i18n="plan.manualAirport">手动机场</label>
+          <div class="search-wrap">
+            <input id="manualInput" autocomplete="off" placeholder="仅用于查看 SID / STAR / APPROACH" data-i18n-placeholder="plan.manualPlaceholder" />
+            <div class="search-results hidden" id="manualResults"></div>
+          </div>
+          <div class="helper-text manual-airport-hint" data-i18n="plan.manualHint">手动机场仅用于查看 SID / STAR / APPROACH 数据。</div>
+
+          <div class="plan-runway-grid">
+            <div>
+              <label class="field-label" data-i18n="plan.departureRunway">起飞跑道</label>
+              <div id="planDepartureRunway" class="button-choice-group"></div>
+            </div>
+            <div>
+              <label class="field-label" data-i18n="plan.arrivalRunway">到达跑道</label>
+              <div id="planArrivalRunway" class="button-choice-group"></div>
+            </div>
+          </div>
+
+          <label class="field-label" for="routeInput" data-i18n="plan.route">航路</label>
+          <div class="route-input-wrap">
+            <textarea
+              id="routeInput"
+              rows="4"
+              placeholder="例如：DOVAN A1 KEC B213 LIPRO 或 KTM *** LXA"
+              data-i18n-placeholder="plan.routePlaceholder"
+            ></textarea>
+          </div>
+
+          <div class="button-row">
+            <button id="planButton" class="primary-button" data-i18n="plan.buildRoute">生成航路</button>
+            <button id="recalculateButton" class="ghost-button" data-i18n="plan.recalculate">重新计算</button>
+            <button id="fr24MatchButton" class="ghost-button" data-i18n="plan.matchTrack">匹配轨迹</button>
+          </div>
+          <button id="stopRequestButton" class="stop-button hidden" type="button" disabled data-i18n="plan.stopTask">停止当前任务</button>
+          <div class="helper-text" data-i18n="plan.autoRouteHint">航路留空时，会从本地 `tbl_enroute_airways` 自动规划最近 IFR 航路。</div>
+          <div class="status" id="statusText" data-i18n="status.waitingRoute">等待输入航路。</div>
+        </section>
+
+        <section>
+          <div class="section-label" data-i18n="section.legs">航段</div>
+          <div class="route-legs" id="routeLegs"></div>
+        </section>
+
+        <section>
+          <div class="section-label" data-i18n="section.selectedProcedures">已选程序</div>
+          <div class="selected-procedures" id="selectedProcedures"></div>
+        </section>
+
+        <section>
+          <div class="section-label" data-i18n="section.selection">选中内容</div>
+          <div id="selectionInfo" class="selection-info" data-i18n="selection.chooseProcedure">选择一个程序以预览路径。</div>
+        </section>
+      </aside>
+
+      <button id="sidebarExpandButton" class="layout-rail-button sidebar-expand-button" type="button" aria-label="展开左侧面板" title="展开左侧面板" data-i18n-aria-label="layout.expandSidebar" data-i18n-title="layout.expandSidebar">
+        <svg class="layout-rail-icon" viewBox="0 0 24 64" aria-hidden="true">
+          <path d="M10 20 16 32 10 44" />
+          <path d="M6 20 12 32 6 44" />
+        </svg>
+      </button>
+
+      <main class="map-wrap">
+        <div id="map"></div>
+      </main>
+
+      <button id="mapExpandButton" class="layout-rail-button map-expand-button" type="button" aria-label="展开地图" title="展开地图" data-i18n-aria-label="layout.expandMap" data-i18n-title="layout.expandMap">
+        <svg class="layout-rail-icon" viewBox="0 0 24 64" aria-hidden="true">
+          <path d="M10 20 16 32 10 44" />
+          <path d="M6 20 12 32 6 44" />
+        </svg>
+      </button>
+
+      <aside class="panel detail-panel">
+        <div class="detail-mode-tabs" role="tablist" aria-label="详情与设置" data-i18n-aria-label="detail.tabsLabel">
+          <button id="detailAirportTab" class="detail-mode-tab active" type="button" data-detail-tab="airport" data-i18n="nav.airport">机场</button>
+          <button id="detailSettingsTab" class="detail-mode-tab" type="button" data-detail-tab="settings" data-i18n="nav.settings">设置</button>
+        </div>
+        <section id="airportDetailSection" class="detail-tab-panel" data-detail-panel="airport">
+          <div class="section-label" data-i18n="nav.airport">机场</div>
+          <div class="airport-slot-tabs" role="tablist" aria-label="机场详情" data-i18n-aria-label="airport.detailTabs">
+            <button id="departureAirportTab" class="airport-slot-tab active" type="button" data-airport-slot="departure">
+              <span>起飞</span>
+              <strong>----</strong>
+            </button>
+            <button id="arrivalAirportTab" class="airport-slot-tab" type="button" data-airport-slot="arrival">
+              <span>到达</span>
+              <strong>----</strong>
+            </button>
+            <button id="manualAirportTab" class="airport-slot-tab" type="button" data-airport-slot="manual">
+              <span>手动</span>
+              <strong>----</strong>
+            </button>
+          </div>
+          <div class="airport-placeholder" id="airportEmpty" data-i18n="airport.empty">选择上方机场槽位后搜索，或从机场弹窗设置。</div>
+          <div class="airport-panels hidden" id="airportPanels">
+            <div class="airport-details" id="departureAirportDetails">
+              <div class="subheading" data-i18n="airport.departureAirport">起飞机场</div>
+              <div class="airport-head">
+                <div>
+                  <div class="airport-ident" id="departureAirportIdent"></div>
+                  <div class="airport-name" id="departureAirportName"></div>
+                </div>
+                <button id="focusDepartureButton" class="ghost-button" data-i18n="airport.focus">定位</button>
+              </div>
+              <div class="airport-meta" id="departureAirportMeta"></div>
+              <div class="detail-block">
+                <div class="subheading" data-i18n="airport.runways">跑道</div>
+                <div id="departureRunwayList"></div>
+              </div>
+              <div class="detail-block">
+                <div class="subheading" data-i18n="airport.communications">通信频率</div>
+                <div id="departureCommList"></div>
+              </div>
+              <div class="detail-block">
+                <div class="subheading" data-i18n="airport.procedures">程序</div>
+                <label class="field-label" data-i18n="airport.runwayFilter">跑道筛选</label>
+                <div id="departureRunwaySelect" class="button-choice-group"></div>
+                <div class="procedure-grid">
+                  <div>
+                    <div class="procedure-heading">SID</div>
+                    <div class="procedure-list" id="departureSidList"></div>
+                  </div>
+                  <div>
+                    <div class="procedure-heading">STAR</div>
+                    <div class="procedure-list" id="departureStarList"></div>
+                  </div>
+                  <div>
+                    <div class="procedure-heading">APPROACH</div>
+                    <div class="procedure-list" id="departureApproachList"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="airport-details" id="arrivalAirportDetails">
+              <div class="subheading" data-i18n="airport.arrivalAirport">到达机场</div>
+              <div class="airport-head">
+                <div>
+                  <div class="airport-ident" id="arrivalAirportIdent"></div>
+                  <div class="airport-name" id="arrivalAirportName"></div>
+                </div>
+                <button id="focusArrivalButton" class="ghost-button" data-i18n="airport.focus">定位</button>
+              </div>
+              <div class="airport-meta" id="arrivalAirportMeta"></div>
+              <div class="detail-block">
+                <div class="subheading" data-i18n="airport.runways">跑道</div>
+                <div id="arrivalRunwayList"></div>
+              </div>
+              <div class="detail-block">
+                <div class="subheading" data-i18n="airport.communications">通信频率</div>
+                <div id="arrivalCommList"></div>
+              </div>
+              <div class="detail-block">
+                <div class="subheading" data-i18n="airport.procedures">程序</div>
+                <label class="field-label" data-i18n="airport.runwayFilter">跑道筛选</label>
+                <div id="arrivalRunwaySelect" class="button-choice-group"></div>
+                <div class="procedure-grid">
+                  <div>
+                    <div class="procedure-heading">SID</div>
+                    <div class="procedure-list" id="arrivalSidList"></div>
+                  </div>
+                  <div>
+                    <div class="procedure-heading">STAR</div>
+                    <div class="procedure-list" id="arrivalStarList"></div>
+                  </div>
+                  <div>
+                    <div class="procedure-heading">APPROACH</div>
+                    <div class="procedure-list" id="arrivalApproachList"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="airport-details hidden" id="manualAirportDetails">
+              <div class="subheading" data-i18n="airport.manualAirport">手动机场</div>
+              <div class="airport-head">
+                <div>
+                  <div class="airport-ident" id="manualAirportIdent"></div>
+                  <div class="airport-name" id="manualAirportName"></div>
+                </div>
+                <button id="focusManualButton" class="ghost-button" data-i18n="airport.focus">定位</button>
+              </div>
+              <div class="airport-meta" id="manualAirportMeta"></div>
+              <div class="detail-block">
+                <div class="subheading" data-i18n="airport.runways">跑道</div>
+                <div id="manualRunwayList"></div>
+              </div>
+              <div class="detail-block">
+                <div class="subheading" data-i18n="airport.communications">通信频率</div>
+                <div id="manualCommList"></div>
+              </div>
+              <div class="detail-block">
+                <div class="subheading" data-i18n="airport.procedures">程序</div>
+                <label class="field-label" data-i18n="airport.runwayFilter">跑道筛选</label>
+                <div id="manualRunwaySelect" class="button-choice-group"></div>
+                <div class="procedure-grid">
+                  <div>
+                    <div class="procedure-heading">SID</div>
+                    <div class="procedure-list" id="manualSidList"></div>
+                  </div>
+                  <div>
+                    <div class="procedure-heading">STAR</div>
+                    <div class="procedure-list" id="manualStarList"></div>
+                  </div>
+                  <div>
+                    <div class="procedure-heading">APPROACH</div>
+                    <div class="procedure-list" id="manualApproachList"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section id="settingsSection" class="detail-tab-panel settings-section hidden" data-detail-panel="settings">
+          <div class="section-label" data-i18n="nav.settings">设置</div>
+          <div class="settings-card">
+            <div class="subheading" data-i18n="settings.database">导航数据库</div>
+            <div class="settings-row">
+              <div>
+                <strong id="databaseNameText">navdata.sqlite</strong>
+                <span id="databaseStatusText" data-i18n="database.loading">正在读取本地导航数据库...</span>
+              </div>
+              <button id="selectDatabaseButton" class="ghost-button compact-button" type="button" data-i18n="settings.chooseS3db">选择 s3db</button>
+            </div>
+            <div class="helper-text" data-i18n="settings.databaseHint">支持从“文件”中选择 .s3db / .sqlite / .db，导入后核心查询会切换到新的本地数据库。</div>
+          </div>
+
+          <div class="settings-card">
+            <div class="subheading" data-i18n="settings.appearance">外观</div>
+            <div class="theme-choice-group" role="radiogroup" aria-label="外观模式" data-i18n-aria-label="settings.appearanceMode">
+              <button class="theme-choice active" type="button" data-theme-choice="system" data-i18n="theme.system">系统自动</button>
+              <button class="theme-choice" type="button" data-theme-choice="day" data-i18n="theme.day">日间</button>
+              <button class="theme-choice" type="button" data-theme-choice="night" data-i18n="theme.night">夜间</button>
+            </div>
+          </div>
+
+          <div class="settings-card">
+            <div class="subheading" data-i18n="settings.language">语言</div>
+            <div class="language-choice-group" role="radiogroup" aria-label="语言" data-i18n-aria-label="settings.language">
+              <button class="language-choice active" type="button" data-language-choice="system" data-i18n="language.system">系统语言</button>
+              <button class="language-choice" type="button" data-language-choice="zh-Hans" data-i18n="language.zhHans">简体中文</button>
+              <button class="language-choice" type="button" data-language-choice="en" data-i18n="language.en">English</button>
+            </div>
+            <div class="helper-text" data-i18n="settings.languageHint">默认跟随系统语言；无论选择哪种语言，SID / STAR / APPROACH、DCT、IFR、AIRAC 等航空标识保持英文。</div>
+          </div>
+
+          <div class="settings-card">
+            <div class="subheading" data-i18n="settings.appIcon">应用图标</div>
+            <div class="app-icon-choice-group" role="radiogroup" aria-label="应用图标" data-i18n-aria-label="settings.appIcon">
+              <div class="app-icon-choice-section">
+                <div class="app-icon-choice-heading" data-i18n="theme.day">日间</div>
+                <div class="app-icon-choice-row">
+                  <button class="app-icon-choice" type="button" data-app-icon-choice="day-high">
+                    <img class="app-icon-preview" src="/app-icons/day-high.png?v=20260604-icon-wider-border" alt="" />
+                    <span data-i18n="appIcon.highSaturation">高饱和</span>
+                  </button>
+                  <button class="app-icon-choice active" type="button" data-app-icon-choice="primary">
+                    <img class="app-icon-preview" src="/app-icons/day-medium.png?v=20260604-icon-wider-border" alt="" />
+                    <span data-i18n="appIcon.default">默认</span>
+                  </button>
+                  <button class="app-icon-choice" type="button" data-app-icon-choice="day-soft">
+                    <img class="app-icon-preview" src="/app-icons/day-soft.png?v=20260604-icon-wider-border" alt="" />
+                    <span data-i18n="appIcon.soft">柔和</span>
+                  </button>
+                </div>
+              </div>
+              <div class="app-icon-choice-section">
+                <div class="app-icon-choice-heading" data-i18n="theme.night">夜间</div>
+                <div class="app-icon-choice-row">
+                  <button class="app-icon-choice" type="button" data-app-icon-choice="night-high">
+                    <img class="app-icon-preview" src="/app-icons/night-high.png?v=20260604-icon-wider-border" alt="" />
+                    <span data-i18n="appIcon.highContrast">高对比</span>
+                  </button>
+                  <button class="app-icon-choice" type="button" data-app-icon-choice="night-medium">
+                    <img class="app-icon-preview" src="/app-icons/night-medium.png?v=20260604-icon-wider-border" alt="" />
+                    <span data-i18n="appIcon.balanced">均衡</span>
+                  </button>
+                  <button class="app-icon-choice" type="button" data-app-icon-choice="night-soft">
+                    <img class="app-icon-preview" src="/app-icons/night-soft.png?v=20260604-icon-wider-border" alt="" />
+                    <span data-i18n="appIcon.soft">柔和</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="helper-text" data-i18n="settings.appIconHint">默认图标为日间均衡，夜间图标使用蓝黑反色地形、紫色层次和暗橙航路。</div>
+          </div>
+
+          <div class="settings-card">
+            <div class="subheading" data-i18n="settings.offlineMaps">离线地图</div>
+            <div class="settings-row">
+              <div>
+                <strong id="offlineMapSummaryTitle" data-i18n="offline.loading">正在读取离线地图...</strong>
+                <span id="offlineMapSummaryText" data-i18n="offline.summaryInitial">本地资源、下载任务和启用状态会在这里显示。</span>
+              </div>
+            </div>
+            <div class="settings-action-row settings-action-row-paired">
+              <button id="manageOfflineMapsButton" class="ghost-button compact-button" type="button" data-i18n="offline.manage">管理离线地图</button>
+              <button id="refreshOfflineMapsButton" class="ghost-button compact-button" type="button" data-i18n="common.refreshStatus">刷新状态</button>
+            </div>
+            <div class="helper-text" data-i18n="offline.settingsHint">离线地图从本机 Application Support/NavPlanner/MapOffline 读取，可在这里启用、删除、下载和查看下载进度。</div>
+          </div>
+
+          <div class="settings-card">
+            <div class="subheading" data-i18n="settings.mapCache">在线地图缓存</div>
+            <div class="settings-row">
+              <div>
+                <strong id="mapCacheSummaryTitle" data-i18n="settings.mapCache">在线地图缓存</strong>
+                <span id="mapCacheSummaryText" data-i18n="cache.loading">正在统计缓存大小...</span>
+              </div>
+            </div>
+            <div class="settings-action-row settings-action-row-paired">
+              <button id="clearMapCacheButton" class="ghost-button compact-button" type="button" data-i18n="cache.clear">清理缓存</button>
+              <button id="refreshMapCacheButton" class="ghost-button compact-button" type="button" data-i18n="cache.refresh">刷新缓存</button>
+            </div>
+            <div class="helper-text" data-i18n="cache.settingsHint">仅清理在线增强底图缓存，不影响本地导航数据库、离线地图包和航路叠加层。</div>
+          </div>
+
+          <div class="settings-card copyright-card">
+            <div class="subheading" data-i18n="settings.copyright">版权与说明</div>
+            <p data-i18n="settings.copyrightP1">NavPlanner iOS 使用本地导航数据库和本地地图资源提供离线航路规划能力。</p>
+            <p data-i18n="settings.copyrightP2">地图底图、离线地图包和导航数据版权归各自数据来源所有；请确认你有权在本机使用导入的数据文件。</p>
+            <p data-i18n="settings.copyrightP3">当前版本为本地优先离线 MVP，不启动 Python server，不依赖局域网服务完成核心查询与规划。</p>
+          </div>
+        </section>
+      </aside>
+
+      <nav class="mobile-bottom-tabs" aria-label="iPhone 下部页面" data-i18n-aria-label="mobile.tabsLabel">
+        <button class="mobile-bottom-tab active" type="button" data-mobile-tab="plan" aria-label="计划" data-i18n-aria-label="nav.plan">
+          <span class="mobile-tab-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M4 17.5 9 7l5.4 9.4 2.1-4.2L20 16" />
+              <path d="M9 7 7.2 18" />
+              <path d="M14.4 16.4 18.8 7" />
+            </svg>
+          </span>
+          <span class="mobile-tab-text" data-i18n="nav.plan">计划</span>
+        </button>
+        <button class="mobile-bottom-tab" type="button" data-mobile-tab="airport" aria-label="机场" data-i18n-aria-label="nav.airport">
+          <span class="mobile-tab-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M3.5 17.5h17" />
+              <path d="M6 14.2 12 5l6 9.2" />
+              <path d="M8.2 14.2h7.6" />
+              <path d="M12 5v12.5" />
+            </svg>
+          </span>
+          <span class="mobile-tab-text" data-i18n="nav.airport">机场</span>
+        </button>
+        <button class="mobile-bottom-tab" type="button" data-mobile-tab="settings" aria-label="设置" data-i18n-aria-label="nav.settings">
+          <span class="mobile-tab-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M4 7h9" />
+              <path d="M17 7h3" />
+              <path d="M15 5v4" />
+              <path d="M4 17h3" />
+              <path d="M11 17h9" />
+              <path d="M9 15v4" />
+            </svg>
+          </span>
+          <span class="mobile-tab-text" data-i18n="nav.settings">设置</span>
+        </button>
+      </nav>
+    </div>
+
+    <script src="/vendor/leaflet/leaflet.js"></script>
+    <script src="/vendor/maplibre-gl/maplibre-gl.js"></script>
+    <script src="/vendor/maplibre-contour/index.min.js"></script>
+    <script src="/vendor/pmtiles/pmtiles.js"></script>
+    <script src="/app.js?v=20260604-language-settings" type="module"></script>
+  </body>
+</html>
