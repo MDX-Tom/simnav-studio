@@ -1,0 +1,41 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Xcode user state
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xccheckout
+*.xcscmblueprint
+
+# Swift / build artifacts
+.build/
+.swiftpm/
+build/
+*.dSYM
+*.dSYM.zip
+*.ipa
+
+# Logs and temporary output
+*.log
+tmp/
+temp/
+
+# Python helper caches
+__pycache__/
+*.py[cod]
+
+# Local reference-project runtime caches; NavPlanner-web itself remains read-only source.
+NavPlanner-web/
+NavPlanner-web/__pycache__/
+NavPlanner-web/src/__pycache__/
+NavPlanner-web/map_cache/
+NavPlanner-web/map_offline/
+
+# Local private configuration
+.env
+.env.*
+
+docs/Obsolete/
+NavPlanner/Resources/Database

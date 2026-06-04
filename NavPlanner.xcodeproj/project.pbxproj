@@ -1,0 +1,539 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		B00000000000000000000001 /* NavPlannerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000001 /* NavPlannerApp.swift */; };
+		B00000000000000000000002 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000002 /* AppEnvironment.swift */; };
+		B00000000000000000000003 /* AppRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000003 /* AppRootView.swift */; };
+		B00000000000000000000004 /* MapContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000004 /* MapContainerView.swift */; };
+		B00000000000000000000005 /* MapWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000005 /* MapWebView.swift */; };
+		B00000000000000000000006 /* PlanPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000006 /* PlanPanelView.swift */; };
+		B00000000000000000000007 /* AirportDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000007 /* AirportDetailView.swift */; };
+		B00000000000000000000008 /* OfflineMapsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000008 /* OfflineMapsView.swift */; };
+		B00000000000000000000009 /* SelectionPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000009 /* SelectionPanelView.swift */; };
+		B00000000000000000000010 /* SearchResultRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000010 /* SearchResultRow.swift */; };
+		B00000000000000000000011 /* NavModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000011 /* NavModels.swift */; };
+		B00000000000000000000012 /* SQLiteDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000012 /* SQLiteDatabase.swift */; };
+		B00000000000000000000013 /* LocalDataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000013 /* LocalDataStore.swift */; };
+		B00000000000000000000014 /* PlannerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000014 /* PlannerService.swift */; };
+		B00000000000000000000015 /* MapStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000015 /* MapStore.swift */; };
+		B00000000000000000000016 /* NavPlannerSchemeHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000016 /* NavPlannerSchemeHandler.swift */; };
+		B00000000000000000000017 /* MapBridgeScriptHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000017 /* MapBridgeScriptHandler.swift */; };
+		B00000000000000000000102 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000102 /* Assets.xcassets */; };
+		B00000000000000000000104 /* Web in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000104 /* Web */; };
+		B00000000000000000000105 /* Database in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000105 /* Database */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		000000000000000000000005 /* NavPlanner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NavPlanner.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F00000000000000000000001 /* NavPlannerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavPlannerApp.swift; sourceTree = "<group>"; };
+		F00000000000000000000002 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
+		F00000000000000000000003 /* AppRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRootView.swift; sourceTree = "<group>"; };
+		F00000000000000000000004 /* MapContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapContainerView.swift; sourceTree = "<group>"; };
+		F00000000000000000000005 /* MapWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapWebView.swift; sourceTree = "<group>"; };
+		F00000000000000000000006 /* PlanPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanPanelView.swift; sourceTree = "<group>"; };
+		F00000000000000000000007 /* AirportDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirportDetailView.swift; sourceTree = "<group>"; };
+		F00000000000000000000008 /* OfflineMapsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineMapsView.swift; sourceTree = "<group>"; };
+		F00000000000000000000009 /* SelectionPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionPanelView.swift; sourceTree = "<group>"; };
+		F00000000000000000000010 /* SearchResultRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchResultRow.swift; sourceTree = "<group>"; };
+		F00000000000000000000011 /* NavModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavModels.swift; sourceTree = "<group>"; };
+		F00000000000000000000012 /* SQLiteDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLiteDatabase.swift; sourceTree = "<group>"; };
+		F00000000000000000000013 /* LocalDataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalDataStore.swift; sourceTree = "<group>"; };
+		F00000000000000000000014 /* PlannerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlannerService.swift; sourceTree = "<group>"; };
+		F00000000000000000000015 /* MapStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapStore.swift; sourceTree = "<group>"; };
+		F00000000000000000000016 /* NavPlannerSchemeHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavPlannerSchemeHandler.swift; sourceTree = "<group>"; };
+		F00000000000000000000017 /* MapBridgeScriptHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapBridgeScriptHandler.swift; sourceTree = "<group>"; };
+		F00000000000000000000102 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		F00000000000000000000103 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		F00000000000000000000104 /* Web */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Web; sourceTree = "<group>"; };
+		F00000000000000000000105 /* Database */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Database; sourceTree = "<group>"; };
+		F00000000000000000000106 /* SampleMaps */ = {isa = PBXFileReference; lastKnownFileType = folder; path = SampleMaps; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		000000000000000000000008 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		000000000000000000000003 = {
+			isa = PBXGroup;
+			children = (
+				G00000000000000000000001 /* NavPlanner */,
+				000000000000000000000004 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		000000000000000000000004 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000005 /* NavPlanner.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		F00000000000000000000101 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000000104 /* Web */,
+				F00000000000000000000105 /* Database */,
+				F00000000000000000000106 /* SampleMaps */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000001 /* NavPlanner */ = {
+			isa = PBXGroup;
+			children = (
+				G00000000000000000000002 /* App */,
+				G00000000000000000000003 /* Features */,
+				G00000000000000000000009 /* Core */,
+				F00000000000000000000101 /* Resources */,
+				G00000000000000000000013 /* Support */,
+			);
+			path = NavPlanner;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000002 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000000001 /* NavPlannerApp.swift */,
+				F00000000000000000000002 /* AppEnvironment.swift */,
+				F00000000000000000000003 /* AppRootView.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000003 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				G00000000000000000000004 /* Map */,
+				G00000000000000000000005 /* Plan */,
+				G00000000000000000000006 /* Airports */,
+				G00000000000000000000007 /* OfflineMaps */,
+				G00000000000000000000008 /* Selection */,
+				G00000000000000000000014 /* Search */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000004 /* Map */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000000004 /* MapContainerView.swift */,
+				F00000000000000000000005 /* MapWebView.swift */,
+			);
+			path = Map;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000005 /* Plan */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000000006 /* PlanPanelView.swift */,
+			);
+			path = Plan;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000006 /* Airports */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000000007 /* AirportDetailView.swift */,
+			);
+			path = Airports;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000007 /* OfflineMaps */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000000008 /* OfflineMapsView.swift */,
+			);
+			path = OfflineMaps;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000008 /* Selection */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000000009 /* SelectionPanelView.swift */,
+			);
+			path = Selection;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000009 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				G00000000000000000000010 /* Models */,
+				G00000000000000000000011 /* LocalDataStore */,
+				G00000000000000000000012 /* PlannerCore */,
+				G00000000000000000000015 /* MapStore */,
+				G00000000000000000000016 /* WebBridge */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000010 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000000011 /* NavModels.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000011 /* LocalDataStore */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000000012 /* SQLiteDatabase.swift */,
+				F00000000000000000000013 /* LocalDataStore.swift */,
+			);
+			path = LocalDataStore;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000012 /* PlannerCore */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000000014 /* PlannerService.swift */,
+			);
+			path = PlannerCore;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000013 /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000000102 /* Assets.xcassets */,
+				F00000000000000000000103 /* PrivacyInfo.xcprivacy */,
+			);
+			path = Support;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000014 /* Search */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000000010 /* SearchResultRow.swift */,
+			);
+			path = Search;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000015 /* MapStore */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000000015 /* MapStore.swift */,
+			);
+			path = MapStore;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000016 /* WebBridge */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000000016 /* NavPlannerSchemeHandler.swift */,
+				F00000000000000000000017 /* MapBridgeScriptHandler.swift */,
+			);
+			path = WebBridge;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXAggregateTarget section */
+		A10000000000000000000002 /* ParityChecks */ = {
+			isa = PBXAggregateTarget;
+			buildConfigurationList = A10000000000000000000006 /* Build configuration list for PBXAggregateTarget "ParityChecks" */;
+			buildPhases = (
+				A10000000000000000000001 /* Run Route/Track Parity */,
+			);
+			dependencies = (
+			);
+			name = ParityChecks;
+			productName = ParityChecks;
+		};
+/* End PBXAggregateTarget section */
+
+/* Begin PBXNativeTarget section */
+		000000000000000000000002 /* NavPlanner */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 000000000000000000000009 /* Build configuration list for PBXNativeTarget "NavPlanner" */;
+			buildPhases = (
+				000000000000000000000006 /* Sources */,
+				000000000000000000000008 /* Frameworks */,
+				000000000000000000000007 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = NavPlanner;
+			productName = NavPlanner;
+			productReference = 000000000000000000000005 /* NavPlanner.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		000000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2650;
+				LastUpgradeCheck = 2650;
+				TargetAttributes = {
+					000000000000000000000002 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+				};
+			};
+			buildConfigurationList = 000000000000000000000012 /* Build configuration list for PBXProject "NavPlanner" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = "zh-Hans";
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				"zh-Hans",
+				en,
+				Base,
+			);
+			mainGroup = 000000000000000000000003;
+			productRefGroup = 000000000000000000000004 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				000000000000000000000002 /* NavPlanner */,
+				A10000000000000000000002 /* ParityChecks */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		000000000000000000000007 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B00000000000000000000102 /* Assets.xcassets in Resources */,
+				B00000000000000000000104 /* Web in Resources */,
+				B00000000000000000000105 /* Database in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A10000000000000000000001 /* Run Route/Track Parity */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/Tools/Parity/run_all_parity.py",
+				"$(SRCROOT)/Tools/RouteParity/route_parity.py",
+				"$(SRCROOT)/Tools/RouteParity/RouteParityProbe.swift",
+				"$(SRCROOT)/Tools/TrackParity/track_parity.py",
+				"$(SRCROOT)/Tools/TrackParity/TrackParityProbe.swift",
+				"$(SRCROOT)/Tools/ProcedureParity/procedure_parity.py",
+				"$(SRCROOT)/Tools/ProcedureParity/ProcedureParityProbe.swift",
+				"$(SRCROOT)/NavPlanner/Core/PlannerCore/PlannerService.swift",
+			);
+			name = "Run Route/Track Parity";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "python3 \"$SRCROOT/Tools/Parity/run_all_parity.py\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		000000000000000000000006 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B00000000000000000000001 /* NavPlannerApp.swift in Sources */,
+				B00000000000000000000002 /* AppEnvironment.swift in Sources */,
+				B00000000000000000000003 /* AppRootView.swift in Sources */,
+				B00000000000000000000004 /* MapContainerView.swift in Sources */,
+				B00000000000000000000005 /* MapWebView.swift in Sources */,
+				B00000000000000000000006 /* PlanPanelView.swift in Sources */,
+				B00000000000000000000007 /* AirportDetailView.swift in Sources */,
+				B00000000000000000000008 /* OfflineMapsView.swift in Sources */,
+				B00000000000000000000009 /* SelectionPanelView.swift in Sources */,
+				B00000000000000000000010 /* SearchResultRow.swift in Sources */,
+				B00000000000000000000011 /* NavModels.swift in Sources */,
+				B00000000000000000000012 /* SQLiteDatabase.swift in Sources */,
+				B00000000000000000000013 /* LocalDataStore.swift in Sources */,
+				B00000000000000000000014 /* PlannerService.swift in Sources */,
+				B00000000000000000000015 /* MapStore.swift in Sources */,
+				B00000000000000000000016 /* NavPlannerSchemeHandler.swift in Sources */,
+				B00000000000000000000017 /* MapBridgeScriptHandler.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		000000000000000000000010 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIconDayHigh AppIconDaySoft AppIconNightHigh AppIconNightMedium AppIconNightSoft";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = NavPlanner;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.navigation";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				OTHER_LDFLAGS = "-lsqlite3";
+				PRODUCT_BUNDLE_IDENTIFIER = com.midaxia.navplanner;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		000000000000000000000011 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIconDayHigh AppIconDaySoft AppIconNightHigh AppIconNightMedium AppIconNightSoft";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = NavPlanner;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.navigation";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				OTHER_LDFLAGS = "-lsqlite3";
+				PRODUCT_BUNDLE_IDENTIFIER = com.midaxia.navplanner;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		000000000000000000000013 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+			};
+			name = Debug;
+		};
+		000000000000000000000014 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		A10000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		A10000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		000000000000000000000009 /* Build configuration list for PBXNativeTarget "NavPlanner" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				000000000000000000000010 /* Debug */,
+				000000000000000000000011 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		000000000000000000000012 /* Build configuration list for PBXProject "NavPlanner" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				000000000000000000000013 /* Debug */,
+				000000000000000000000014 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10000000000000000000006 /* Build configuration list for PBXAggregateTarget "ParityChecks" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000003 /* Debug */,
+				A10000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 000000000000000000000001 /* Project object */;
+}

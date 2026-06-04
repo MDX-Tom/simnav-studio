@@ -1,0 +1,52 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+import time
+from pathlib import Path
+from typing import Any
+
+
+ROOT = Path(__file__).resolve().parents[2]
+CHECKS = [
+    ("RouteParity", ROOT / "Tools/RouteParity/route_parity.py"),
+    ("TrackParity", ROOT / "Tools/TrackParity/track_parity.py"),
+    ("ProcedureParity", ROOT / "Tools/ProcedureParity/procedure_parity.py"),
+]
+
+
+def run_check(name: str, script: Path) -> dict[str, Any]:
+    started = time.monotonic()
+    completed = subprocess.run(
+        [sys.executable, str(script)],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+    )
+    duration_ms = int((time.monotonic() - started) * 1000)
+    return {
+        "name": name,
+        "script": str(script.relative_to(ROOT)),
+        "status": "passed" if completed.returncode == 0 else "failed",
+        "returncode": completed.returncode,
+        "duration_ms": duration_ms,
+        "stdout": completed.stdout.strip(),
+        "stderr": completed.stderr.strip(),
+    }
+
+
+def main() -> int:
+    results = [run_check(name, script) for name, script in CHECKS]
+    failed = [result for result in results if result["returncode"] != 0]
+    print(json.dumps({"checks": results}, ensure_ascii=False, indent=2))
+    if failed:
+        names = ", ".join(result["name"] for result in failed)
+        print(f"Parity checks failed: {names}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
