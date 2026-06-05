@@ -12,6 +12,7 @@ const TRANSLATIONS = {
   "app.title": { "zh-Hans": "航空航路规划器", en: "Aviation Route Planner" },
   "nav.plan": { "zh-Hans": "计划", en: "Plan" },
   "nav.airport": { "zh-Hans": "机场", en: "Airport" },
+  "nav.query": { "zh-Hans": "查询", en: "Query" },
   "nav.settings": { "zh-Hans": "设置", en: "Settings" },
   "plan.departureAirport": { "zh-Hans": "起飞机场", en: "Departure" },
   "plan.arrivalAirport": { "zh-Hans": "到达机场", en: "Arrival" },
@@ -36,7 +37,7 @@ const TRANSLATIONS = {
   "layout.expandMap": { "zh-Hans": "展开地图", en: "Expand map" },
   "layout.restoreSidebar": { "zh-Hans": "恢复左侧面板", en: "Restore sidebar" },
   "layout.restoreMap": { "zh-Hans": "恢复地图布局", en: "Restore map layout" },
-  "detail.tabsLabel": { "zh-Hans": "详情与设置", en: "Details and settings" },
+  "detail.tabsLabel": { "zh-Hans": "详情、查询与设置", en: "Details, query, and settings" },
   "mobile.tabsLabel": { "zh-Hans": "iPhone 下部页面", en: "iPhone lower pages" },
   "airport.detailTabs": { "zh-Hans": "机场详情", en: "Airport details" },
   "airport.departureAirport": { "zh-Hans": "起飞机场", en: "Departure Airport" },
@@ -99,6 +100,16 @@ const TRANSLATIONS = {
   "appIcon.soft": { "zh-Hans": "柔和", en: "Soft" },
   "appIcon.highContrast": { "zh-Hans": "高对比", en: "High contrast" },
   "appIcon.balanced": { "zh-Hans": "均衡", en: "Balanced" },
+  "appIcon.choice.dayHigh": { "zh-Hans": "日间高饱和", en: "Day high saturation" },
+  "appIcon.choice.primary": { "zh-Hans": "日间均衡", en: "Day balanced" },
+  "appIcon.choice.daySoft": { "zh-Hans": "日间柔和", en: "Day soft" },
+  "appIcon.choice.nightHigh": { "zh-Hans": "夜间高对比", en: "Night high contrast" },
+  "appIcon.choice.nightMedium": { "zh-Hans": "夜间均衡", en: "Night balanced" },
+  "appIcon.choice.nightSoft": { "zh-Hans": "夜间柔和", en: "Night soft" },
+  "appIcon.alreadySelected": { "zh-Hans": "应用图标已是当前选择。", en: "App icon already uses the selected variant." },
+  "appIcon.changed": { "zh-Hans": "已切换为{name}应用图标。", en: "Changed app icon to {name}." },
+  "appIcon.unsupported": { "zh-Hans": "当前系统不支持切换 App 图标。", en: "This system does not support changing the app icon." },
+  "appIcon.changeFailed": { "zh-Hans": "切换应用图标失败。", en: "Failed to change app icon." },
   "database.loading": { "zh-Hans": "正在读取本地导航数据库...", en: "Reading local navigation database..." },
   "database.ready": { "zh-Hans": "本地导航数据库已就绪", en: "Local navigation database is ready" },
   "database.unavailable": { "zh-Hans": "数据库不可用", en: "Database unavailable" },
@@ -309,10 +320,64 @@ const TRANSLATIONS = {
   "track.importMatchedFallback": { "zh-Hans": "导入轨迹已匹配。", en: "Imported track matched." },
   "track.matchedStatus": { "zh-Hans": "{message} 已匹配 {distance}nm。", en: "{message} Matched {distance}nm." },
   "track.stopped": { "zh-Hans": "轨迹匹配已停止。", en: "Track match stopped." },
-  "track.prompt": { "zh-Hans": "{message}\n\n请粘贴轨迹点，可使用 JSON [{\"lat\":37.9,\"lon\":23.9}, ...] 或 CSV 行 lat,lon：", en: "{message}\n\nPaste track points as JSON [{\"lat\":37.9,\"lon\":23.9}, ...] or CSV rows lat,lon:" },
-  "track.importCancelled": { "zh-Hans": "轨迹匹配需要导入轨迹点，已取消。", en: "Track match requires imported track points and was cancelled." },
-  "track.emptyPaste": { "zh-Hans": "没有粘贴轨迹点。", en: "No track points pasted." },
-  "track.invalidJsonShape": { "zh-Hans": "JSON 轨迹必须是数组，或包含 points / track_points / data。", en: "JSON track must be an array or contain points / track_points / data." },
+  "query.title": { "zh-Hans": "FR24 航班查询", en: "FR24 Flight Query" },
+  "query.search": { "zh-Hans": "查询", en: "Search" },
+  "query.hint": { "zh-Hans": "FR24 是在线增强；查询或下载失败不会影响本地航路、Procedure、nav-overlay 和离线地图。", en: "FR24 is an online enhancement. Query or download failures do not affect local routes, Procedure, nav-overlay, or offline maps." },
+  "query.statusInitial": { "zh-Hans": "填好起飞和到达机场后，可查询该航线的最新 FR24 航班。", en: "Enter departure and arrival first, then search recent FR24 flights on this route." },
+  "query.empty": { "zh-Hans": "暂无查询结果。", en: "No query results yet." },
+  "query.loading": { "zh-Hans": "正在查询 FR24 航班...", en: "Searching FR24 flights..." },
+  "query.loaded": { "zh-Hans": "已找到 {count} 个 FR24 航班。", en: "Found {count} FR24 flights." },
+  "query.noFlights": { "zh-Hans": "没有找到该航线的 FR24 航班。", en: "No FR24 flights found for this route." },
+  "query.history": { "zh-Hans": "航班历史", en: "Flight History" },
+  "query.loadHistory": { "zh-Hans": "加载历史", en: "Load History" },
+  "query.historyLoading": { "zh-Hans": "正在读取航班历史...", en: "Loading flight history..." },
+  "query.historyLoaded": { "zh-Hans": "已加载 {count} 条航班历史。", en: "Loaded {count} history records." },
+  "query.noHistory": { "zh-Hans": "暂无可用航班历史。", en: "No flight history available." },
+  "query.downloadDraw": { "zh-Hans": "下载并绘制轨迹", en: "Download & Draw Track" },
+  "query.matchTrack": { "zh-Hans": "匹配轨迹", en: "Match Track" },
+  "query.downloading": { "zh-Hans": "正在下载 FR24 GPX 轨迹...", en: "Downloading FR24 GPX track..." },
+  "query.drawn": { "zh-Hans": "已绘制 FR24 GPX 轨迹，共 {count} 个点。", en: "FR24 GPX track drawn with {count} points." },
+  "query.matching": { "zh-Hans": "正在使用本地 airway 图匹配 FR24 轨迹...", en: "Matching FR24 track with the local airway graph..." },
+  "query.matched": { "zh-Hans": "{message} 已匹配 {distance}nm。", en: "{message} Matched {distance}nm." },
+  "query.cache": { "zh-Hans": "FR24 轨迹缓存", en: "FR24 Track Cache" },
+  "query.cacheStatus": { "zh-Hans": "正在读取缓存...", en: "Reading cache..." },
+  "query.cacheInitial": { "zh-Hans": "GPX、playback JSON 和 meta JSON 缓存在 App Caches 中。", en: "GPX, playback JSON, and meta JSON are stored in App Caches." },
+  "query.cacheSummary": { "zh-Hans": "FR24 缓存：{size}，{count} 个文件。", en: "FR24 cache: {size}, {count} files." },
+  "query.access": { "zh-Hans": "FR24 网络访问", en: "FR24 Network Access" },
+  "query.accessInitial": { "zh-Hans": "未同步 FR24 Web 会话。", en: "No FR24 Web session synced." },
+  "query.accessSummary": { "zh-Hans": "Cookie {cookie}，_frPl {frpl}。", en: "Cookie {cookie}, _frPl {frpl}." },
+  "query.accessConfigured": { "zh-Hans": "已配置", en: "configured" },
+  "query.accessMissing": { "zh-Hans": "未配置", en: "missing" },
+  "query.accessOpenBrowser": { "zh-Hans": "打开 FR24 验证页", en: "Open FR24 Verification" },
+  "query.accessSyncBrowser": { "zh-Hans": "同步内置浏览器会话", en: "Sync Browser Session" },
+  "query.accessOpening": { "zh-Hans": "已打开 FR24 验证页；完成验证后点“同步会话”。", en: "FR24 verification opened. Complete verification, then tap Sync Session." },
+  "query.accessSyncing": { "zh-Hans": "正在同步内置浏览器中的 FR24 会话...", en: "Syncing the FR24 session from the in-app browser..." },
+  "query.accessSynced": { "zh-Hans": "已从内置浏览器同步 FR24 Web 会话。", en: "FR24 Web session synced from the in-app browser." },
+  "query.accessSyncMissing": { "zh-Hans": "内置浏览器还没有可同步的 FR24 会话。请先完成 FR24 / Cloudflare 验证。", en: "No FR24 session is available in the in-app browser yet. Complete FR24 / Cloudflare verification first." },
+  "query.accessManual": { "zh-Hans": "高级：手动会话配置（可选）", en: "Advanced: Manual Session (Optional)" },
+  "query.accessCookie": { "zh-Hans": "FR24 Web Cookie", en: "FR24 Web Cookie" },
+  "query.accessFrPl": { "zh-Hans": "_frPl", en: "_frPl" },
+  "query.accessSave": { "zh-Hans": "保存手动配置", en: "Save Manual Session" },
+  "query.accessClear": { "zh-Hans": "清除会话配置", en: "Clear Session" },
+  "query.accessSaved": { "zh-Hans": "已保存 FR24 Web 会话配置。", en: "FR24 Web session saved." },
+  "query.accessCleared": { "zh-Hans": "已清除 FR24 Web 会话配置。", en: "FR24 Web session cleared." },
+  "query.accessHint": { "zh-Hans": "在 App 内打开 FR24 验证页并正常完成验证，然后同步会话；无需手动查 Cookie。App 只复用你已完成验证的会话，不绕过 Cloudflare。失败不会影响本地航路、Procedure、nav-overlay 和离线地图。", en: "Open FR24 verification inside the app, complete verification normally, then sync the session. No manual cookie lookup is required. The app only reuses your verified session and does not bypass Cloudflare. Failures do not affect local routes, Procedure, nav-overlay, or offline maps." },
+  "query.clearTrack": { "zh-Hans": "清除轨迹绘制", en: "Clear Track Drawing" },
+  "query.restoreMatch": { "zh-Hans": "还原轨迹匹配", en: "Restore Match" },
+  "query.clearCache": { "zh-Hans": "删除下载缓存", en: "Delete Download Cache" },
+  "query.clearCacheConfirm": { "zh-Hans": "确认删除 FR24 下载缓存？这会删除已缓存的 GPX、playback JSON 和 meta JSON。", en: "Delete the FR24 download cache? This removes cached GPX, playback JSON, and meta JSON." },
+  "query.cacheCleared": { "zh-Hans": "已删除 FR24 下载缓存。", en: "FR24 download cache deleted." },
+  "query.trackCleared": { "zh-Hans": "已清除 FR24 轨迹绘制。", en: "FR24 track drawing cleared." },
+  "query.noTrack": { "zh-Hans": "当前没有已绘制的 FR24 轨迹。", en: "No FR24 track is currently drawn." },
+  "query.noRestore": { "zh-Hans": "没有可还原的轨迹匹配航路。", en: "No matched route to restore." },
+  "query.restored": { "zh-Hans": "已还原轨迹匹配前的航路。", en: "Restored the route from before track matching." },
+  "query.flightUnknown": { "zh-Hans": "未知航班", en: "Unknown Flight" },
+  "query.airlineUnknown": { "zh-Hans": "未知航司", en: "Unknown airline" },
+  "query.aircraftUnknown": { "zh-Hans": "未知机型", en: "Unknown aircraft" },
+  "query.scheduleActual": { "zh-Hans": "计划 {scheduled} / 实际 {actual}", en: "Scheduled {scheduled} / Actual {actual}" },
+  "query.duration": { "zh-Hans": "时长 {duration}", en: "Duration {duration}" },
+  "query.cacheHit": { "zh-Hans": "使用缓存", en: "Cache hit" },
+  "query.cacheMiss": { "zh-Hans": "新下载", en: "Downloaded" },
   "error.requestFailed": { "zh-Hans": "请求失败。", en: "Request failed." },
   "error.invalidJson": { "zh-Hans": "响应不是有效的 JSON。", en: "Response is not valid JSON." },
   "error.http": { "zh-Hans": "请求失败：HTTP {code}。", en: "Request failed: HTTP {code}." },
@@ -342,8 +407,10 @@ const TRANSLATIONS = {
   "error.waypoint": { "zh-Hans": "航点 {fix} 未找到。", en: "Waypoint {fix} not found." },
   "error.trackNoPath": { "zh-Hans": "无法从导入轨迹构建合法航路。", en: "No legal airway path could be built from the imported trajectory." },
   "error.trackNoPoints": { "zh-Hans": "无法从导入轨迹构建可绘制航路点。", en: "No drawable route points could be built from the imported trajectory." },
-  "error.fr24Blocked": { "zh-Hans": "FR24 在线访问被阻止，可改为粘贴轨迹点进行本地匹配。", en: "FR24 web access was blocked. Paste track points for local matching instead." },
-  "error.fr24NotEnough": { "zh-Hans": "FR24 回放未返回足够轨迹点，可改为粘贴轨迹点进行本地匹配。", en: "FR24 playback did not return enough track points. Paste track points for local matching instead." },
+  "error.fr24Session": { "zh-Hans": "FR24 Web 会话不可用。请在查询页打开 FR24 验证页，完成验证后同步会话。", en: "FR24 Web session is unavailable. Open FR24 verification in Query, complete verification, then sync the session." },
+  "error.fr24Cloudflare": { "zh-Hans": "FR24 返回 Cloudflare 验证页。请在查询页打开 FR24 验证页，完成验证后同步会话。", en: "FR24 returned a Cloudflare verification page. Open FR24 verification in Query, complete verification, then sync the session." },
+  "error.fr24NotEnough": { "zh-Hans": "FR24 Web 未返回足够轨迹点，可选择其他历史航班或稍后重试。", en: "FR24 web did not return enough track points. Try another history entry or retry later." },
+  "error.fr24MissingId": { "zh-Hans": "FR24 flightId 缺失。", en: "FR24 flightId missing." },
 };
 
 function readLocalStorageValue(key) {
@@ -460,6 +527,8 @@ const state = {
   activeRouteOperation: "",
   procedureCache: new Map(),
   airportPopupCache: new Map(),
+  activeNavPopup: null,
+  refreshingNavPopup: false,
   activeSelectionProcedure: null,
   selectionHighlightLayer: null,
   offlineMapStatus: null,
@@ -468,6 +537,17 @@ const state = {
   offlineMapTileVersion: Date.now(),
   mapCacheStatus: null,
   mapCacheTileVersion: Date.now(),
+  fr24Flights: new Map(),
+  fr24SearchFlights: [],
+  fr24HistoryByKey: new Map(),
+  fr24CacheStatus: null,
+  fr24AccessStatus: null,
+  fr24QueryBusy: false,
+  fr24TrackPayload: null,
+  currentRoutePayload: null,
+  currentRouteAirports: null,
+  preTrackMatchRoutePayload: null,
+  preTrackMatchAirports: null,
   offlineDownloadError: "",
   offlineSelectionRequested: false,
   offlineDownloadBounds: null,
@@ -608,7 +688,6 @@ const elements = {
   planArrivalRunway: document.querySelector("#planArrivalRunway"),
   planButton: document.querySelector("#planButton"),
   recalculateButton: document.querySelector("#recalculateButton"),
-  fr24MatchButton: document.querySelector("#fr24MatchButton"),
   stopRequestButton: document.querySelector("#stopRequestButton"),
   statusText: document.querySelector("#statusText"),
   routeLegs: document.querySelector("#routeLegs"),
@@ -668,6 +747,23 @@ const elements = {
   mapCacheSummaryText: document.querySelector("#mapCacheSummaryText"),
   refreshMapCacheButton: document.querySelector("#refreshMapCacheButton"),
   clearMapCacheButton: document.querySelector("#clearMapCacheButton"),
+  fr24SearchButton: document.querySelector("#fr24SearchButton"),
+  fr24QueryStatus: document.querySelector("#fr24QueryStatus"),
+  fr24FlightList: document.querySelector("#fr24FlightList"),
+  fr24CacheTitle: document.querySelector("#fr24CacheTitle"),
+  fr24CacheSummary: document.querySelector("#fr24CacheSummary"),
+  fr24AccessSummary: document.querySelector("#fr24AccessSummary"),
+  fr24OpenBrowserButton: document.querySelector("#fr24OpenBrowserButton"),
+  fr24SyncBrowserButton: document.querySelector("#fr24SyncBrowserButton"),
+  fr24CookieInput: document.querySelector("#fr24CookieInput"),
+  fr24FrPlInput: document.querySelector("#fr24FrPlInput"),
+  fr24SaveAccessButton: document.querySelector("#fr24SaveAccessButton"),
+  fr24ClearAccessButton: document.querySelector("#fr24ClearAccessButton"),
+  fr24RefreshAccessButton: document.querySelector("#fr24RefreshAccessButton"),
+  fr24ClearTrackButton: document.querySelector("#fr24ClearTrackButton"),
+  fr24RestoreMatchButton: document.querySelector("#fr24RestoreMatchButton"),
+  fr24ClearCacheButton: document.querySelector("#fr24ClearCacheButton"),
+  fr24RefreshCacheButton: document.querySelector("#fr24RefreshCacheButton"),
 };
 
 function applyStaticTranslations() {
@@ -909,6 +1005,7 @@ installMobileInputTouchFocus();
 installPhoneLandscapeSafeAreaTuning();
 
 const routeLayerGroup = L.layerGroup().addTo(map);
+const fr24TrackLayerGroup = L.layerGroup().addTo(map);
 let navLayerGroup = L.layerGroup().addTo(map);
 let navLabelLayerGroup = L.layerGroup().addTo(map);
 const navRenderer = isPhoneWorkbench()
@@ -4036,6 +4133,9 @@ function refreshLocalizedDynamicText() {
   }
   updateOfflineMapSettingsSummary(state.offlineMapStatus);
   updateMapCacheSummary(state.mapCacheStatus);
+  updateFR24CacheSummary(state.fr24CacheStatus || {});
+  updateFR24AccessSummary(state.fr24AccessStatus || {});
+  renderFR24Flights(state.fr24SearchFlights);
   updateAirportPanelVisibility();
   AIRPORT_SLOTS.forEach((slot) => {
     const payload = state.airportPayloads[slot];
@@ -4053,6 +4153,7 @@ function refreshLocalizedDynamicText() {
   if (offlineMapModalElement && !offlineMapModalElement.classList.contains("hidden")) {
     renderOfflineMapModal();
   }
+  refreshActiveNavPopup();
 }
 
 function updateLayoutButtonLabels() {
@@ -4140,6 +4241,32 @@ function applyAppIconChoice(choice, { persist = true, notifyNative = true } = {}
   }
 }
 
+function appIconChoiceLabel(choice) {
+  const key = {
+    "day-high": "appIcon.choice.dayHigh",
+    primary: "appIcon.choice.primary",
+    "day-soft": "appIcon.choice.daySoft",
+    "night-high": "appIcon.choice.nightHigh",
+    "night-medium": "appIcon.choice.nightMedium",
+    "night-soft": "appIcon.choice.nightSoft",
+  }[choice] || "appIcon.choice.primary";
+  return t(key);
+}
+
+function appIconBridgeStatusMessage(payload = {}) {
+  const rawMessage = cleanErrorMessage(payload.message || "");
+  if (payload.error) {
+    if (/不支持|unsupported/i.test(rawMessage)) {
+      return t("appIcon.unsupported");
+    }
+    return currentLanguage() === "zh-Hans" && rawMessage ? rawMessage : t("appIcon.changeFailed");
+  }
+  if (/已是当前|already/i.test(rawMessage)) {
+    return t("appIcon.alreadySelected");
+  }
+  return t("appIcon.changed", { name: appIconChoiceLabel(payload.icon_choice || state.appIconChoice) });
+}
+
 /**
  * 功能：处理 Swift 切换 App 图标后的回调。
  * 输入：payload 为 Swift 返回的状态。
@@ -4150,17 +4277,17 @@ function handleNativeAppIconChanged(payload = {}) {
     applyAppIconChoice(payload.icon_choice, { persist: true, notifyNative: false });
   }
   if (payload.message) {
-    setStatus(payload.error ? localizedErrorMessage(payload.message) : payload.message, Boolean(payload.error));
+    setStatus(appIconBridgeStatusMessage(payload), Boolean(payload.error));
   }
 }
 
 /**
- * 功能：切换 iPad 详情栏中的 Airport / Settings 页面。
- * 输入：tab 为 airport 或 settings。
+ * 功能：切换 iPad 详情栏中的 Airport / Query / Settings 页面。
+ * 输入：tab 为 airport、query 或 settings。
  * 输出：无返回值；只切换右侧详情区域，不触碰地图状态。
  */
 function setDetailTab(tab) {
-  const normalized = tab === "settings" ? "settings" : "airport";
+  const normalized = ["airport", "query", "settings"].includes(tab) ? tab : "airport";
   state.activeDetailTab = normalized;
   elements.detailModeTabButtons.forEach((button) => {
     const active = button.dataset.detailTab === normalized;
@@ -4174,15 +4301,19 @@ function setDetailTab(tab) {
     refreshOfflineMapStatus().catch((error) => console.warn("离线地图状态刷新失败", error));
     refreshMapCacheStatus().catch((error) => console.warn("在线地图缓存状态刷新失败", error));
   }
+  if (normalized === "query") {
+    refreshFR24CacheStatus().catch((error) => console.warn("FR24 缓存状态刷新失败", error));
+    refreshFR24AccessStatus().catch((error) => console.warn("FR24 访问状态刷新失败", error));
+  }
 }
 
 /**
- * 功能：切换 iPhone 下部 Plan / Airport / Settings 标签。
- * 输入：tab 为 plan、airport 或 settings。
+ * 功能：切换 iPhone 下部 Plan / Airport / Query / Settings 标签。
+ * 输入：tab 为 plan、airport、query 或 settings。
  * 输出：无返回值；顶部地图保持原实例和当前视图。
  */
 function setMobileBottomTab(tab) {
-  const normalized = ["plan", "airport", "settings"].includes(tab) ? tab : "plan";
+  const normalized = ["plan", "airport", "query", "settings"].includes(tab) ? tab : "plan";
   const changed = normalized !== state.activeMobileTab;
   if (changed && document.activeElement instanceof HTMLElement) {
     document.activeElement.blur();
@@ -4194,7 +4325,7 @@ function setMobileBottomTab(tab) {
     button.classList.toggle("active", active);
     button.setAttribute("aria-selected", String(active));
   });
-  if (normalized === "airport" || normalized === "settings") {
+  if (normalized === "airport" || normalized === "query" || normalized === "settings") {
     setDetailTab(normalized);
   }
   window.setTimeout(() => {
@@ -4209,7 +4340,7 @@ function setMobileBottomTab(tab) {
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
 function setRouteControlsBusy(isBusy) {
-  [elements.planButton, elements.recalculateButton, elements.fr24MatchButton].forEach((button) => {
+  [elements.planButton, elements.recalculateButton, elements.fr24SearchButton].forEach((button) => {
     if (button) {
       button.disabled = isBusy;
     }
@@ -4335,8 +4466,11 @@ function localizedErrorMessage(message) {
     [/^Waypoint (.+) not found\.?$/i, (_match, fix) => t("error.waypoint", { fix })],
     [/^No legal airway path could be built from the imported trajectory\.?$/i, () => t("error.trackNoPath")],
     [/^No drawable route points could be built from the imported trajectory\.?$/i, () => t("error.trackNoPoints")],
-    [/^FR24 web access was blocked\.?$/i, () => t("error.fr24Blocked")],
+    [/^FR24 web access was blocked\. Open FR24 verification in Query, complete verification, then sync the session\.?$/i, () => t("error.fr24Session")],
+    [/^FR24 web access was blocked by Cloudflare verification\.?$/i, () => t("error.fr24Cloudflare")],
+    [/^FR24 web returned an HTML response\.?$/i, () => t("error.fr24Cloudflare")],
     [/^FR24 web playback did not return enough trajectory points\.?$/i, () => t("error.fr24NotEnough")],
+    [/^FR24 flightId missing\.?$/i, () => t("error.fr24MissingId")],
   ];
   for (const [pattern, build] of replacements) {
     const match = clean.match(pattern);
@@ -4354,18 +4488,6 @@ function localizedErrorMessage(message) {
  */
 function setErrorStatus(error) {
   setStatus(localizedErrorMessage(error?.message ?? error), true);
-}
-
-/**
- * 功能：判断 `shouldPromptForImportedTrack` 对应的业务逻辑。
- * 输入：message。
- * 输出：函数处理结果，或对应的界面/地图副作用。
- */
-function shouldPromptForImportedTrack(message) {
-  const normalized = cleanErrorMessage(message);
-  return normalized.includes("FR24_API_TOKEN")
-    || normalized.includes("FR24 web access was blocked")
-    || normalized.includes("FR24 web playback did not return enough trajectory points");
 }
 
 /**
@@ -5711,6 +5833,33 @@ async function hydrateAirportPopupDetails(ident) {
   }
 }
 
+function latLngSnapshot(latlng) {
+  return {
+    lat: Number(latlng?.lat ?? latlng?.[0] ?? 0),
+    lng: Number(latlng?.lng ?? latlng?.lon ?? latlng?.[1] ?? 0),
+  };
+}
+
+function rememberActiveNavPopup(point, latlng) {
+  state.activeNavPopup = {
+    point: normalizePopupPoint({ ...point }, point.kind || "waypoint"),
+    latlng: latLngSnapshot(latlng),
+  };
+}
+
+function refreshActiveNavPopup() {
+  const active = state.activeNavPopup;
+  if (!active) {
+    return;
+  }
+  state.refreshingNavPopup = true;
+  try {
+    showNavPointPopup(active.point, active.latlng);
+  } finally {
+    state.refreshingNavPopup = false;
+  }
+}
+
 /**
  * 功能：显示 `showNavPointPopup` 对应的业务逻辑。
  * 输入：point、latlng。
@@ -5728,7 +5877,7 @@ function showNavPointPopup(point, latlng) {
   const popupClass = ["nav-point-popup", point.kind === "airport" ? "airport-popup" : ""]
     .filter(Boolean)
     .join(" ");
-  L.popup({
+  const popup = L.popup({
     className: popupClass,
     closeButton: true,
     closeOnClick: false,
@@ -5763,9 +5912,11 @@ function showNavPointPopup(point, latlng) {
       </div>
     `)
     .openOn(map);
+  rememberActiveNavPopup(point, latlng);
   if (isAirportActionCandidate(point)) {
     hydrateAirportPopupDetails(point.ident || "");
   }
+  return popup;
 }
 
 /**
@@ -6494,6 +6645,11 @@ map.on("resize", () => {
   scheduleVectorMapResizeSync();
 });
 map.on("moveend zoomend", refreshNavOverlayDebounced);
+map.on("popupclose", () => {
+  if (!state.refreshingNavPopup) {
+    state.activeNavPopup = null;
+  }
+});
 map.on("click", (event) => {
   if (isHandledMapClick(event)) {
     return;
@@ -7682,6 +7838,8 @@ async function applyRoutePayload(payload, departure, arrival, options = {}) {
   elements.routeInput.value = routeStringFromPayload(payload);
   state.lastRouteWasGenerated = Boolean(payload.generated);
   state.lastGeneratedRouteDisplay = payload.generated ? routeStringFromPayload(payload).toUpperCase() : "";
+  state.currentRoutePayload = cloneJSON(payload);
+  state.currentRouteAirports = { departure, arrival };
   await applyAutoSelectedProcedures(payload.selected_procedures || {}, { signal: options.signal });
 }
 
@@ -7736,113 +7894,546 @@ async function buildRoute(options = {}) {
   }
 }
 
-/**
- * 功能：匹配 `matchFr24Route` 对应的业务逻辑。
- * 输入：无。
- * 输出：Promise，解析为函数处理结果。
- */
-async function matchFr24Route() {
-  hideSearchResults();
+function cloneJSON(value) {
+  return value === null || value === undefined ? value : JSON.parse(JSON.stringify(value));
+}
+
+function setFR24QueryStatus(message, isError = false) {
+  if (!elements.fr24QueryStatus) {
+    return;
+  }
+  elements.fr24QueryStatus.textContent = message;
+  elements.fr24QueryStatus.classList.toggle("settings-status-error", Boolean(isError));
+}
+
+function setFR24QueryBusy(isBusy) {
+  state.fr24QueryBusy = Boolean(isBusy);
+  [
+    elements.fr24SearchButton,
+    ...Array.from(elements.fr24FlightList?.querySelectorAll("[data-fr24-action]") || []),
+  ].forEach((button) => {
+    button.disabled = Boolean(isBusy);
+  });
+}
+
+function currentQueryRouteInputs() {
   const departure = elements.departureInput.value.trim().toUpperCase();
   const arrival = elements.arrivalInput.value.trim().toUpperCase();
   if (!departure || !arrival) {
     setStatus(t("route.needAirports"), true);
+    setFR24QueryStatus(t("route.needAirports"), true);
+    return null;
+  }
+  return { departure, arrival };
+}
+
+function fr24FlightKey(flight, index = 0, prefix = "flight") {
+  return [
+    prefix,
+    flight.fr24_id || flight.flight || flight.callsign || "unknown",
+    flight.timestamp || flight.scheduled_departure || flight.actual_departure || index,
+  ].map((part) => String(part).replace(/[^a-z0-9_-]+/gi, "-")).join("-");
+}
+
+function flightPrimaryLabel(flight) {
+  return flight.flight || flight.callsign || flight.fr24_id || t("query.flightUnknown");
+}
+
+function flightAirportCode(flight, side) {
+  const icao = flight[`${side}_icao`];
+  const iata = flight[`${side}_iata`];
+  return icao || iata || "----";
+}
+
+function normalizeFlightTimestamp(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return null;
+  }
+  return numeric > 1_000_000_000_000 ? Math.floor(numeric / 1000) : Math.floor(numeric);
+}
+
+function formatFlightTime(value) {
+  const timestamp = normalizeFlightTimestamp(value);
+  if (!timestamp) {
+    return "--";
+  }
+  try {
+    return new Intl.DateTimeFormat(currentLanguage() === "zh-Hans" ? "zh-CN" : "en-US", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(new Date(timestamp * 1000));
+  } catch (_error) {
+    return new Date(timestamp * 1000).toISOString().slice(5, 16).replace("T", " ");
+  }
+}
+
+function formatFlightDuration(seconds) {
+  const value = Number(seconds);
+  if (!Number.isFinite(value) || value <= 0) {
+    return "--";
+  }
+  const minutes = Math.round(value / 60);
+  const hours = Math.floor(minutes / 60);
+  const remain = minutes % 60;
+  return hours > 0 ? `${hours}h ${remain}m` : `${remain}m`;
+}
+
+function formatFlightTimes(flight) {
+  const scheduled = [
+    formatFlightTime(flight.scheduled_departure),
+    formatFlightTime(flight.scheduled_arrival),
+  ].join(" → ");
+  const actual = [
+    formatFlightTime(flight.actual_departure || flight.estimated_departure),
+    formatFlightTime(flight.actual_arrival || flight.estimated_arrival),
+  ].join(" → ");
+  return t("query.scheduleActual", { scheduled, actual });
+}
+
+function renderFR24FlightActions(key) {
+  return `
+    <div class="query-flight-actions">
+      <button class="ghost-button compact-button" type="button" data-fr24-action="draw" data-fr24-key="${escapeHtml(key)}">${escapeHtml(t("query.downloadDraw"))}</button>
+      <button class="ghost-button compact-button" type="button" data-fr24-action="match" data-fr24-key="${escapeHtml(key)}">${escapeHtml(t("query.matchTrack"))}</button>
+    </div>
+  `;
+}
+
+function renderFR24FlightCard(flight, key, { history = false } = {}) {
+  const route = `${flightAirportCode(flight, "origin")} → ${flightAirportCode(flight, "dest")}`;
+  const airline = flight.airline || t("query.airlineUnknown");
+  const aircraft = [flight.aircraft, flight.aircraft_registration].filter(Boolean).join(" / ") || t("query.aircraftUnknown");
+  const cacheBadge = flight.cache_hit === true
+    ? `<span class="query-flight-badge">${escapeHtml(t("query.cacheHit"))}</span>`
+    : "";
+  return `
+    <article class="query-flight-card ${history ? "is-history" : ""}">
+      <div class="query-flight-head">
+        <div>
+          <div class="query-flight-number">${escapeHtml(flightPrimaryLabel(flight))}</div>
+          <div class="query-flight-route">${escapeHtml(route)}</div>
+        </div>
+        ${cacheBadge}
+      </div>
+      <div class="query-flight-meta">
+        <span>${escapeHtml(airline)}</span>
+        <span>${escapeHtml(aircraft)}</span>
+        <span>${escapeHtml(formatFlightTimes(flight))}</span>
+        <span>${escapeHtml(t("query.duration", { duration: formatFlightDuration(flight.duration_seconds) }))}</span>
+      </div>
+      ${renderFR24FlightActions(key)}
+      ${history ? "" : `
+        <details class="query-history">
+          <summary>${escapeHtml(t("query.history"))}</summary>
+          <button class="ghost-button compact-button query-history-load" type="button" data-fr24-action="history" data-fr24-key="${escapeHtml(key)}">${escapeHtml(t("query.loadHistory"))}</button>
+          <div class="query-history-list" data-fr24-history-for="${escapeHtml(key)}">
+            ${renderFR24HistoryList(key)}
+          </div>
+        </details>
+      `}
+    </article>
+  `;
+}
+
+function renderFR24HistoryList(key) {
+  const histories = state.fr24HistoryByKey.get(key);
+  if (!histories) {
+    return "";
+  }
+  if (!histories.length) {
+    return `<div class="query-empty query-empty-inline">${escapeHtml(t("query.noHistory"))}</div>`;
+  }
+  return histories.map((flight, index) => {
+    const historyKey = fr24FlightKey(flight, index, `history-${key}`);
+    state.fr24Flights.set(historyKey, flight);
+    return renderFR24FlightCard(flight, historyKey, { history: true });
+  }).join("");
+}
+
+function renderFR24Flights(flights = []) {
+  if (!elements.fr24FlightList) {
     return;
   }
+  state.fr24SearchFlights = flights;
+  state.fr24Flights.clear();
+  if (!flights.length) {
+    elements.fr24FlightList.innerHTML = `<div class="query-empty">${escapeHtml(t("query.empty"))}</div>`;
+    return;
+  }
+  elements.fr24FlightList.innerHTML = flights.map((flight, index) => {
+    const key = fr24FlightKey(flight, index);
+    state.fr24Flights.set(key, flight);
+    return renderFR24FlightCard(flight, key);
+  }).join("");
+}
 
-  const routeText = elements.routeInput.value.trim();
-  const flightHint = /(?:flightradar24\.com|flightId=|^[0-9a-f]{6,12}$)/i.test(routeText) ? routeText : "";
-  const controller = beginRouteOperation(t("track.operation"));
-  setStatus(t("track.searching"));
+function updateFR24CacheSummary(payload) {
+  state.fr24CacheStatus = payload || null;
+  if (!elements.fr24CacheTitle || !elements.fr24CacheSummary) {
+    return;
+  }
+  const size = formatBytes(payload?.size_bytes || 0);
+  const count = formatCount(payload?.file_count || 0);
+  elements.fr24CacheTitle.textContent = t("query.cacheSummary", { size, count });
+  elements.fr24CacheSummary.textContent = payload?.root || t("query.cacheInitial");
+}
+
+function formatFR24AccessFlag(value) {
+  return value ? t("query.accessConfigured") : t("query.accessMissing");
+}
+
+function updateFR24AccessSummary(payload) {
+  state.fr24AccessStatus = payload || null;
+  if (!elements.fr24AccessSummary) {
+    return;
+  }
+  elements.fr24AccessSummary.textContent = t("query.accessSummary", {
+    cookie: formatFR24AccessFlag(payload?.cookie_configured),
+    frpl: formatFR24AccessFlag(payload?.frpl_configured),
+  });
+}
+
+function fr24NativeSessionMessage(payload = {}) {
+  const rawMessage = cleanErrorMessage(payload.message || "");
+  if (payload.error) {
+    if (/没有可同步|no fr24 session/i.test(rawMessage)) {
+      return t("query.accessSyncMissing");
+    }
+    return currentLanguage() === "zh-Hans" && rawMessage ? rawMessage : t("error.fr24Session");
+  }
+  if (/同步|synced/i.test(rawMessage)) {
+    return t("query.accessSynced");
+  }
+  return currentLanguage() === "zh-Hans" && rawMessage ? rawMessage : t("query.accessSaved");
+}
+
+function openFR24VerificationBrowser() {
+  if (!window.webkit?.messageHandlers?.navplanner) {
+    setFR24QueryStatus(t("database.iosOnly"), true);
+    setStatus(t("database.iosOnly"), true);
+    return;
+  }
+  postNativeEvent("openFR24Verification");
+  setFR24QueryStatus(t("query.accessOpening"));
+  setStatus(t("query.accessOpening"));
+}
+
+function syncFR24BrowserSession() {
+  if (!window.webkit?.messageHandlers?.navplanner) {
+    setFR24QueryStatus(t("database.iosOnly"), true);
+    setStatus(t("database.iosOnly"), true);
+    return;
+  }
+  postNativeEvent("syncFR24Session");
+  setFR24QueryStatus(t("query.accessSyncing"));
+  setStatus(t("query.accessSyncing"));
+}
+
+function handleNativeFR24SessionUpdated(payload = {}) {
+  updateFR24AccessSummary(payload);
+  const message = fr24NativeSessionMessage(payload);
+  setFR24QueryStatus(message, Boolean(payload.error));
+  setStatus(message, Boolean(payload.error));
+}
+
+async function refreshFR24CacheStatus() {
+  const payload = await fetchJson("/api/fr24/cache/status");
+  updateFR24CacheSummary(payload);
+  return payload;
+}
+
+async function refreshFR24AccessStatus() {
+  const payload = await fetchJson("/api/fr24/access/status");
+  updateFR24AccessSummary(payload);
+  return payload;
+}
+
+function clearFR24AccessInputs() {
+  if (elements.fr24CookieInput) {
+    elements.fr24CookieInput.value = "";
+  }
+  if (elements.fr24FrPlInput) {
+    elements.fr24FrPlInput.value = "";
+  }
+}
+
+async function saveFR24Access() {
+  const payload = await fetchJson("/api/fr24/access/update", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      web_cookie: elements.fr24CookieInput?.value || "",
+      frpl: elements.fr24FrPlInput?.value || "",
+    }),
+  });
+  clearFR24AccessInputs();
+  updateFR24AccessSummary(payload);
+  setFR24QueryStatus(t("query.accessSaved"));
+  setStatus(t("query.accessSaved"));
+}
+
+async function clearFR24Access() {
+  const payload = await fetchJson("/api/fr24/access/clear", { method: "POST" });
+  clearFR24AccessInputs();
+  updateFR24AccessSummary(payload);
+  setFR24QueryStatus(t("query.accessCleared"));
+  setStatus(t("query.accessCleared"));
+}
+
+async function searchFR24Flights() {
+  hideSearchResults();
+  const route = currentQueryRouteInputs();
+  if (!route) {
+    renderFR24Flights([]);
+    return;
+  }
+  setFR24QueryBusy(true);
+  setFR24QueryStatus(t("query.loading"));
   try {
     const payload = await fetchJson(
-      `/api/route/fr24-match?departure=${encodeURIComponent(departure)}&arrival=${encodeURIComponent(arrival)}&flight_id=${encodeURIComponent(flightHint)}`,
-      { signal: controller.signal },
+      `/api/fr24/search?departure=${encodeURIComponent(route.departure)}&arrival=${encodeURIComponent(route.arrival)}&limit=10`,
     );
+    const flights = payload.flights || [];
+    state.fr24HistoryByKey.clear();
+    renderFR24Flights(flights);
+    updateFR24CacheSummary(payload.cache || state.fr24CacheStatus || {});
+    updateFR24AccessSummary(payload.access || state.fr24AccessStatus || {});
+    setFR24QueryStatus(flights.length ? t("query.loaded", { count: flights.length }) : t("query.noFlights"), !flights.length);
+  } catch (error) {
+    renderFR24Flights([]);
+    const message = localizedErrorMessage(error.message);
+    setFR24QueryStatus(message, true);
+    setStatus(message, true);
+  } finally {
+    setFR24QueryBusy(false);
+  }
+}
+
+async function loadFR24History(key) {
+  const flight = state.fr24Flights.get(key);
+  const route = currentQueryRouteInputs();
+  if (!flight || !route) {
+    return;
+  }
+  setFR24QueryBusy(true);
+  setFR24QueryStatus(t("query.historyLoading"));
+  try {
+    const payload = await fetchJson(
+      `/api/fr24/history?departure=${encodeURIComponent(route.departure)}&arrival=${encodeURIComponent(route.arrival)}&flight=${encodeURIComponent(flight.flight || "")}&callsign=${encodeURIComponent(flight.callsign || "")}&limit=10`,
+    );
+    const histories = payload.flights || [];
+    state.fr24HistoryByKey.set(key, histories);
+    renderFR24Flights(state.fr24SearchFlights);
+    updateFR24AccessSummary(payload.access || state.fr24AccessStatus || {});
+    setFR24QueryStatus(histories.length ? t("query.historyLoaded", { count: histories.length }) : t("query.noHistory"), !histories.length);
+  } catch (error) {
+    const message = localizedErrorMessage(error.message);
+    setFR24QueryStatus(message, true);
+    setStatus(message, true);
+  } finally {
+    setFR24QueryBusy(false);
+  }
+}
+
+async function fetchFR24TrackPayload(flight, options = {}) {
+  const flightID = flight.fr24_id;
+  if (!flightID) {
+    throw new Error(t("error.fr24MissingId"));
+  }
+  return fetchJson("/api/fr24/download", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ flight_id: flightID, flight }),
+    signal: options.signal,
+  });
+}
+
+function drawFR24TrackPoints(trackPoints, { fitBounds = true } = {}) {
+  const basePoints = withDisplayLongitudes((trackPoints || []).map((point) => ({
+    lat: Number(point.lat ?? point.latitude),
+    lon: Number(point.lon ?? point.lng ?? point.longitude),
+  })).filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon)));
+  fr24TrackLayerGroup.clearLayers();
+  if (basePoints.length < 2) {
+    return 0;
+  }
+  ROUTE_WORLD_COPY_OFFSETS.forEach((longitudeOffset) => {
+    const latlngs = routeWorldCopy(basePoints, longitudeOffset).map(latLngForPoint);
+    const layer = L.polyline(latlngs, {
+      pane: "routePane",
+      color: "#050505",
+      weight: 3.4,
+      opacity: 0.92,
+      interactive: false,
+      lineCap: "round",
+      lineJoin: "round",
+    }).addTo(fr24TrackLayerGroup);
+    layer.bringToFront();
+  });
+  state.fr24TrackPayload = { track_points: basePoints };
+  if (fitBounds) {
+    const bounds = L.polyline(basePoints.map(latLngForPoint), {
+      pane: "routePane",
+      color: "#000000",
+      weight: 0,
+      opacity: 0,
+      interactive: false,
+    }).addTo(fr24TrackLayerGroup).getBounds();
+    map.fitBounds(bounds, { padding: [36, 36] });
+  }
+  return basePoints.length;
+}
+
+async function downloadAndDrawFR24Track(key) {
+  const flight = state.fr24Flights.get(key);
+  if (!flight) {
+    return;
+  }
+  setFR24QueryBusy(true);
+  setFR24QueryStatus(t("query.downloading"));
+  try {
+    const payload = await fetchFR24TrackPayload(flight);
+    const count = drawFR24TrackPoints(payload.track_points || []);
+    updateFR24CacheSummary(payload.cache || state.fr24CacheStatus || {});
+    updateFR24AccessSummary(payload.access || state.fr24AccessStatus || {});
+    setFR24QueryStatus(t("query.drawn", { count }));
+    setStatus(t("query.drawn", { count }));
+  } catch (error) {
+    const message = localizedErrorMessage(error.message);
+    setFR24QueryStatus(message, true);
+    setStatus(message, true);
+  } finally {
+    setFR24QueryBusy(false);
+  }
+}
+
+async function matchFR24FlightTrack(key) {
+  const flight = state.fr24Flights.get(key);
+  const route = currentQueryRouteInputs();
+  if (!flight || !route) {
+    return;
+  }
+  const controller = beginRouteOperation(t("track.operation"));
+  setFR24QueryBusy(true);
+  setFR24QueryStatus(t("query.matching"));
+  setStatus(t("query.matching"));
+  try {
+    const download = await fetchFR24TrackPayload(flight, { signal: controller.signal });
     throwIfAborted(controller.signal);
-    await applyRoutePayload(payload, departure, arrival, { signal: controller.signal });
-    setStatus(t("track.matchedStatus", {
-      message: currentLanguage() === "zh-Hans" && payload.message ? payload.message : t("track.matchedFallback"),
+    drawFR24TrackPoints(download.track_points || [], { fitBounds: false });
+    updateFR24CacheSummary(download.cache || state.fr24CacheStatus || {});
+    updateFR24AccessSummary(download.access || state.fr24AccessStatus || {});
+    if (state.currentRoutePayload && !state.preTrackMatchRoutePayload) {
+      state.preTrackMatchRoutePayload = cloneJSON(state.currentRoutePayload);
+      state.preTrackMatchAirports = cloneJSON(state.currentRouteAirports);
+    }
+    const payload = await fetchJson("/api/route/track-match", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        departure: route.departure,
+        arrival: route.arrival,
+        track_points: download.track_points || [],
+      }),
+      signal: controller.signal,
+    });
+    throwIfAborted(controller.signal);
+    await applyRoutePayload(payload, route.departure, route.arrival, { signal: controller.signal });
+    const message = t("query.matched", {
+      message: currentLanguage() === "zh-Hans" && payload.message ? payload.message : t("track.importMatchedFallback"),
       distance: Math.round(payload.distance_nm || 0),
-    }));
+    });
+    setFR24QueryStatus(message);
+    setStatus(message);
   } catch (error) {
     if (isAbortError(error)) {
       setStatus(t("track.stopped"));
-      return;
+    } else {
+      const message = localizedErrorMessage(error.message);
+      setFR24QueryStatus(message, true);
+      setStatus(message, true);
     }
-    const message = cleanErrorMessage(error.message);
-    const displayMessage = localizedErrorMessage(message);
-    if (!shouldPromptForImportedTrack(message)) {
-      setStatus(displayMessage, true);
-      return;
-    }
-    const text = window.prompt(t("track.prompt", { message: displayMessage }));
-    if (!text) {
-      setStatus(t("track.importCancelled"), true);
-      return;
-    }
-    try {
-      throwIfAborted(controller.signal);
-      const trackPoints = parseImportedTrackPoints(text);
-      const payload = await fetchJson("/api/route/track-match", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ departure, arrival, track_points: trackPoints }),
-        signal: controller.signal,
-      });
-      throwIfAborted(controller.signal);
-      await applyRoutePayload(payload, departure, arrival, { signal: controller.signal });
-      setStatus(t("track.matchedStatus", {
-        message: currentLanguage() === "zh-Hans" && payload.message ? payload.message : t("track.importMatchedFallback"),
-        distance: Math.round(payload.distance_nm || 0),
-      }));
-    } catch (importError) {
-      if (isAbortError(importError)) {
-        setStatus(t("track.stopped"));
-      } else {
-        setErrorStatus(importError);
-      }
+  } finally {
+    setFR24QueryBusy(false);
+    endRouteOperation(controller);
+  }
+}
+
+function clearFR24TrackDrawing() {
+  if (!state.fr24TrackPayload) {
+    setFR24QueryStatus(t("query.noTrack"), true);
+    return;
+  }
+  fr24TrackLayerGroup.clearLayers();
+  state.fr24TrackPayload = null;
+  setFR24QueryStatus(t("query.trackCleared"));
+  setStatus(t("query.trackCleared"));
+}
+
+async function restoreFR24MatchedRoute() {
+  if (!state.preTrackMatchRoutePayload || !state.preTrackMatchAirports) {
+    setFR24QueryStatus(t("query.noRestore"), true);
+    return;
+  }
+  const controller = beginRouteOperation(t("query.restoreMatch"));
+  try {
+    await applyRoutePayload(
+      cloneJSON(state.preTrackMatchRoutePayload),
+      state.preTrackMatchAirports.departure,
+      state.preTrackMatchAirports.arrival,
+      { signal: controller.signal },
+    );
+    state.preTrackMatchRoutePayload = null;
+    state.preTrackMatchAirports = null;
+    setFR24QueryStatus(t("query.restored"));
+    setStatus(t("query.restored"));
+  } catch (error) {
+    if (isAbortError(error)) {
+      setStatus(t("track.stopped"));
+    } else {
+      setErrorStatus(error);
     }
   } finally {
     endRouteOperation(controller);
   }
 }
 
-/**
- * 功能：解析 `parseImportedTrackPoints` 对应的业务逻辑。
- * 输入：text。
- * 输出：函数处理结果，或对应的界面/地图副作用。
- */
-function parseImportedTrackPoints(text) {
-  const trimmed = text.trim();
-  if (!trimmed) {
-    throw new Error(t("track.emptyPaste"));
+async function clearFR24Cache() {
+  const status = state.fr24CacheStatus || await refreshFR24CacheStatus();
+  const size = formatBytes(status.size_bytes || 0);
+  const count = formatCount(status.file_count || 0);
+  if (!window.confirm(`${t("query.clearCacheConfirm")}\n\n${t("query.cacheSummary", { size, count })}`)) {
+    return;
   }
-  if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
-    const parsed = JSON.parse(trimmed);
-    const items = Array.isArray(parsed) ? parsed : parsed.points || parsed.track_points || parsed.data;
-    if (!Array.isArray(items)) {
-      throw new Error(t("track.invalidJsonShape"));
-    }
-    return items.map((item) => ({
-      lat: Number(item.lat ?? item.latitude),
-      lon: Number(item.lon ?? item.lng ?? item.longitude),
-    })).filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lon));
+  const payload = await fetchJson("/api/fr24/cache/clear", { method: "POST" });
+  updateFR24CacheSummary(payload);
+  setFR24QueryStatus(t("query.cacheCleared"));
+  setStatus(t("query.cacheCleared"));
+}
+
+function handleFR24FlightAction(event) {
+  const button = event.target instanceof Element ? event.target.closest("[data-fr24-action]") : null;
+  if (!button) {
+    return;
   }
-  return trimmed
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [lat, lon] = line.split(/[,\s]+/).map(Number);
-      return { lat, lon };
-    })
-    .filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lon));
+  event.preventDefault();
+  const key = button.dataset.fr24Key;
+  const action = button.dataset.fr24Action;
+  if (action === "history") {
+    loadFR24History(key).catch(setErrorStatus);
+  } else if (action === "draw") {
+    downloadAndDrawFR24Track(key).catch(setErrorStatus);
+  } else if (action === "match") {
+    matchFR24FlightTrack(key).catch(setErrorStatus);
+  }
 }
 
 elements.planButton.addEventListener("click", buildRoute);
 elements.recalculateButton.addEventListener("click", () => buildRoute({ forceAuto: true }));
-elements.fr24MatchButton.addEventListener("click", matchFr24Route);
 elements.stopRequestButton.addEventListener("click", stopActiveRouteOperation);
 elements.mapExpandButton.addEventListener("click", () => {
   const expanded = !document.body.classList.contains("map-expanded");
@@ -7914,6 +8505,38 @@ elements.refreshMapCacheButton?.addEventListener("click", () => {
 elements.clearMapCacheButton?.addEventListener("click", () => {
   clearMapCache().catch(setErrorStatus);
 });
+elements.fr24SearchButton?.addEventListener("click", () => {
+  searchFR24Flights().catch(setErrorStatus);
+});
+elements.fr24FlightList?.addEventListener("click", handleFR24FlightAction);
+elements.fr24ClearTrackButton?.addEventListener("click", clearFR24TrackDrawing);
+elements.fr24RestoreMatchButton?.addEventListener("click", () => {
+  restoreFR24MatchedRoute().catch(setErrorStatus);
+});
+elements.fr24ClearCacheButton?.addEventListener("click", () => {
+  clearFR24Cache().catch(setErrorStatus);
+});
+elements.fr24RefreshCacheButton?.addEventListener("click", () => {
+  refreshFR24CacheStatus()
+    .then(() => setFR24QueryStatus(t("query.cacheSummary", {
+      size: formatBytes(state.fr24CacheStatus?.size_bytes || 0),
+      count: formatCount(state.fr24CacheStatus?.file_count || 0),
+    })))
+    .catch(setErrorStatus);
+});
+elements.fr24OpenBrowserButton?.addEventListener("click", openFR24VerificationBrowser);
+elements.fr24SyncBrowserButton?.addEventListener("click", syncFR24BrowserSession);
+elements.fr24SaveAccessButton?.addEventListener("click", () => {
+  saveFR24Access().catch(setErrorStatus);
+});
+elements.fr24ClearAccessButton?.addEventListener("click", () => {
+  clearFR24Access().catch(setErrorStatus);
+});
+elements.fr24RefreshAccessButton?.addEventListener("click", () => {
+  refreshFR24AccessStatus()
+    .then(() => setFR24QueryStatus(elements.fr24AccessSummary?.textContent || t("query.accessInitial")))
+    .catch(setErrorStatus);
+});
 elements.themeChoiceButtons.forEach((button) => {
   button.addEventListener("click", () => applyThemeMode(button.dataset.themeChoice));
 });
@@ -7935,6 +8558,7 @@ window.addEventListener("languagechange", () => {
 });
 window.navplannerNativeDatabaseSelected = handleNativeDatabaseSelected;
 window.navplannerNativeAppIconChanged = handleNativeAppIconChanged;
+window.navplannerNativeFR24SessionUpdated = handleNativeFR24SessionUpdated;
 
 elements.departureInput.addEventListener(
   "input",

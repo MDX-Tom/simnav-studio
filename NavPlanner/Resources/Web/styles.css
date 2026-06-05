@@ -614,7 +614,7 @@ textarea:focus-visible {
 
 .button-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin-top: 12px;
 }
@@ -1231,7 +1231,7 @@ body.left-panel-expanded .selection-table {
 
 .detail-mode-tabs {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 7px;
   margin-bottom: 12px;
   flex: 0 0 auto;
@@ -1305,6 +1305,195 @@ body.left-panel-expanded .selection-table {
 
 .settings-card + .settings-card {
   margin-top: 12px;
+}
+
+.query-section {
+  gap: 10px;
+  overflow-y: auto;
+  padding-right: 5px;
+}
+
+.query-card,
+.query-flight-card {
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.014)),
+    rgba(255, 255, 255, 0.025);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.query-card {
+  padding: 12px;
+}
+
+.query-action-card .primary-button {
+  justify-self: end;
+  margin-top: 0;
+  min-width: 96px;
+}
+
+.query-access-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(120px, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.query-access-grid label {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+
+.query-access-grid label span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 760;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.query-access-grid textarea {
+  min-height: 62px;
+  resize: vertical;
+}
+
+.query-access-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, auto));
+  justify-content: start;
+  gap: 7px;
+  margin-top: 9px;
+}
+
+.query-manual-access {
+  border-top: 1px solid var(--surface-line);
+  margin-top: 10px;
+  padding-top: 8px;
+}
+
+.query-manual-access summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.query-manual-actions {
+  grid-template-columns: minmax(0, auto);
+}
+
+.query-flight-list {
+  display: grid;
+  gap: 9px;
+}
+
+.query-flight-card {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.query-flight-card.is-history {
+  margin-top: 7px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.query-flight-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+}
+
+.query-flight-number {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 860;
+  line-height: 1.08;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.query-flight-route {
+  margin-top: 3px;
+  color: rgba(255, 209, 102, 0.9);
+  font-size: 11px;
+  font-weight: 780;
+  line-height: 1.1;
+}
+
+.query-flight-badge {
+  align-self: start;
+  border: 1px solid rgba(72, 213, 151, 0.42);
+  border-radius: 999px;
+  padding: 4px 7px;
+  color: rgba(174, 246, 210, 0.92);
+  font-size: 9px;
+  font-weight: 820;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.query-flight-meta {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.28;
+}
+
+.query-flight-meta span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.query-flight-actions,
+.query-control-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.query-history {
+  border-top: 1px solid var(--surface-line);
+  padding-top: 7px;
+}
+
+.query-history summary {
+  cursor: pointer;
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 820;
+}
+
+.query-history-load {
+  width: 100%;
+  margin-top: 7px;
+}
+
+.query-history-list {
+  display: grid;
+  gap: 7px;
+}
+
+.query-empty {
+  border: 1px dashed rgba(155, 173, 194, 0.24);
+  border-radius: 10px;
+  padding: 12px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.query-empty-inline {
+  margin-top: 7px;
+  padding: 8px;
 }
 
 .settings-action-row {
@@ -1521,6 +1710,7 @@ html[data-theme="day"] .selection-table td {
 }
 
 html[data-theme="day"] .airport-ident,
+html[data-theme="day"] .query-flight-number,
 html[data-theme="day"] .airport-slot-tab.active strong,
 html[data-theme="day"] .selection-summary strong,
 html[data-theme="day"] .selection-table td strong {
@@ -1544,6 +1734,8 @@ html[data-theme="day"] .route-leg,
 html[data-theme="day"] .procedure-chip,
 html[data-theme="day"] .info-chip,
 html[data-theme="day"] .settings-card,
+html[data-theme="day"] .query-card,
+html[data-theme="day"] .query-flight-card,
 html[data-theme="day"] .list-row,
 html[data-theme="day"] .airport-slot-tab {
   background:
@@ -3295,13 +3487,16 @@ html[data-theme="day"] .offline-progress {
 
   html:not([data-device="pad"]) body[data-mobile-tab="plan"] .detail-panel,
   html:not([data-device="pad"]) body[data-mobile-tab="airport"] .planner-panel,
+  html:not([data-device="pad"]) body[data-mobile-tab="query"] .planner-panel,
   html:not([data-device="pad"]) body[data-mobile-tab="settings"] .planner-panel {
     display: none !important;
   }
 
   html:not([data-device="pad"]) body[data-mobile-tab="airport"] .detail-panel,
+  html:not([data-device="pad"]) body[data-mobile-tab="query"] .detail-panel,
   html:not([data-device="pad"]) body[data-mobile-tab="settings"] .detail-panel,
   html:not([data-device="pad"]) body[data-mobile-tab="airport"].map-expanded .detail-panel,
+  html:not([data-device="pad"]) body[data-mobile-tab="query"].map-expanded .detail-panel,
   html:not([data-device="pad"]) body[data-mobile-tab="settings"].map-expanded .detail-panel {
     display: flex !important;
   }
@@ -3312,7 +3507,7 @@ html[data-theme="day"] .offline-progress {
     justify-self: stretch;
     z-index: 80;
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 2px;
     margin: 0;
     padding: 1px;
@@ -3428,11 +3623,13 @@ html[data-theme="day"] .offline-progress {
   }
 
   html:not([data-device="pad"]) .airport-panels,
+  html:not([data-device="pad"]) .query-section,
   html:not([data-device="pad"]) .settings-section {
     flex-direction: column;
     overflow-y: auto;
   }
 
+  html:not([data-device="pad"]) .query-section,
   html:not([data-device="pad"]) .settings-section {
     gap: 7px;
     padding-right: 2px;
@@ -3517,7 +3714,7 @@ html[data-theme="day"] .offline-progress {
   }
 
   html:not([data-device="pad"]) .button-row {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 5px;
     margin-top: 5px;
   }
@@ -3738,6 +3935,88 @@ html[data-theme="day"] .offline-progress {
   html:not([data-device="pad"]) .settings-card {
     padding: 6px;
     border-radius: 8px;
+  }
+
+  html:not([data-device="pad"]) .query-card,
+  html:not([data-device="pad"]) .query-flight-card {
+    padding: 6px;
+    border-radius: 8px;
+  }
+
+  html:not([data-device="pad"]) .query-flight-list {
+    gap: 5px;
+  }
+
+  html:not([data-device="pad"]) .query-flight-card {
+    gap: 5px;
+  }
+
+  html:not([data-device="pad"]) .query-flight-number {
+    font-size: 8.6px;
+  }
+
+  html:not([data-device="pad"]) .query-flight-route,
+  html:not([data-device="pad"]) .query-flight-meta,
+  html:not([data-device="pad"]) .query-empty {
+    font-size: 7.4px;
+    line-height: 1.16;
+  }
+
+  html:not([data-device="pad"]) .query-flight-badge {
+    padding: 2.5px 5px;
+    font-size: 6.8px;
+  }
+
+  html:not([data-device="pad"]) .query-flight-actions,
+  html:not([data-device="pad"]) .query-control-row {
+    gap: 4px;
+  }
+
+  html:not([data-device="pad"]) .query-action-card .primary-button {
+    justify-self: center;
+    width: min(100%, 180px);
+    min-width: 0;
+  }
+
+  html:not([data-device="pad"]) .query-access-grid {
+    grid-template-columns: 1fr;
+    gap: 5px;
+    margin-top: 6px;
+  }
+
+  html:not([data-device="pad"]) .query-access-grid label {
+    gap: 3px;
+  }
+
+  html:not([data-device="pad"]) .query-access-grid label span {
+    font-size: 7.2px;
+  }
+
+  html:not([data-device="pad"]) .query-access-grid textarea {
+    min-height: 42px;
+  }
+
+  html:not([data-device="pad"]) .query-access-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px;
+    margin-top: 6px;
+  }
+
+  html:not([data-device="pad"]) .query-manual-access {
+    margin-top: 6px;
+    padding-top: 5px;
+  }
+
+  html:not([data-device="pad"]) .query-manual-access summary {
+    font-size: 7.2px;
+  }
+
+  html:not([data-device="pad"]) .query-history {
+    padding-top: 5px;
+  }
+
+  html:not([data-device="pad"]) .query-history summary {
+    font-size: 7.2px;
   }
 
   html:not([data-device="pad"]) .settings-card + .settings-card {
@@ -4468,6 +4747,7 @@ html[data-theme="day"] .offline-progress {
   html[data-device="phone"] .planner-panel,
   html[data-device="phone"] body[data-mobile-tab="plan"] .planner-panel,
   html[data-device="phone"] body[data-mobile-tab="airport"] .planner-panel,
+  html[data-device="phone"] body[data-mobile-tab="query"] .planner-panel,
   html[data-device="phone"] body[data-mobile-tab="settings"] .planner-panel,
   html[data-device="phone"] body.left-panel-expanded .planner-panel,
   html[data-device="phone"] body[data-mobile-keyboard="open"] .planner-panel {
@@ -4498,6 +4778,7 @@ html[data-theme="day"] .offline-progress {
   html[data-device="phone"] .detail-panel,
   html[data-device="phone"] body[data-mobile-tab="plan"] .detail-panel,
   html[data-device="phone"] body[data-mobile-tab="airport"] .detail-panel,
+  html[data-device="phone"] body[data-mobile-tab="query"] .detail-panel,
   html[data-device="phone"] body[data-mobile-tab="settings"] .detail-panel,
   html[data-device="phone"] body[data-mobile-keyboard="open"] .detail-panel {
     grid-area: detail;
@@ -4518,6 +4799,8 @@ html[data-theme="day"] .offline-progress {
   }
 
   html[data-device="phone"][data-landscape-notch-side="left"] .detail-panel .settings-card,
+  html[data-device="phone"][data-landscape-notch-side="left"] .detail-panel .query-card,
+  html[data-device="phone"][data-landscape-notch-side="left"] .detail-panel .query-flight-card,
   html[data-device="phone"][data-landscape-notch-side="left"] .detail-panel .airport-placeholder {
     margin-right: var(--phone-landscape-text-offset);
   }
@@ -4576,11 +4859,13 @@ html[data-theme="day"] .offline-progress {
   }
 
   html[data-device="phone"] .airport-panels,
+  html[data-device="phone"] .query-section,
   html[data-device="phone"] .settings-section {
     flex-direction: column;
     overflow-y: auto;
   }
 
+  html[data-device="phone"] .query-section,
   html[data-device="phone"] .settings-section {
     gap: 7px;
     padding-right: 2px;

@@ -26,24 +26,25 @@ NavPlanner 是一个 iPhone / iPad Universal App 项目，目标是做成本地�
 - 已将 Web 参考项目的静态工作台复制到 iOS 自有资源目录：`NavPlanner/Resources/Web/map.html`、`styles.css`、`app.js`、`nav-icons/`。
 - 已将 Leaflet、MapLibre GL、maplibre-contour、pmtiles 前端运行时打包到 `NavPlanner/Resources/Web/vendor/`，地图内核启动不依赖 CDN。
 - SwiftUI 当前提供全屏 WKWebView 容器和本地服务层，Plan、Airport、Settings、Selection、Offline Maps 等交互由本地 Web 工作台渲染，以优先满足 Web 行为复刻。
-- iPhone 下部工作区已拆分为中文图标标签 `计划`、`机场`、`设置`，标签采用更薄的紧凑玻璃质感并独占底部一行，同时为 iOS Home Indicator 保留安全区距离；切换时顶部地图实例、视角和叠加层保持不变。
-- iPhone 横屏不显示底部三标签，改用 iPad 工作台的左右折叠栏与右侧 `机场 / 设置` 详情切换；左右面板使用横屏专用窄列宽，刘海侧安全避让，非刘海侧尽量贴近机身圆角边缘，避免左右同时留出大空白。当前紧凑布局断点已扩展到 1024px，覆盖 iPhone 17 Pro Max 等更宽机型。
-- iPad 工作台新增 `Airport / Settings` 详情切换，原有左侧计划栏、地图区和详情区布局保持不变；左右竖向折叠栏按钮已按日间 / 夜间主题分别使用浅蓝灰和深色玻璃配色，并在 WebView 首屏加载前预设主题，同时用显式日间样式兜底，避免日间模式短暂或持续显示深蓝长条。
+- iPhone 下部工作区已拆分为中文图标标签 `计划`、`机场`、`查询`、`设置`，标签采用更薄的紧凑玻璃质感并独占底部一行，同时为 iOS Home Indicator 保留安全区距离；切换时顶部地图实例、视角和叠加层保持不变。
+- iPhone 横屏不显示底部四标签，改用 iPad 工作台的左右折叠栏与右侧 `机场 / 查询 / 设置` 详情切换；左右面板使用横屏专用窄列宽，刘海侧安全避让，非刘海侧尽量贴近机身圆角边缘，避免左右同时留出大空白。当前紧凑布局断点已扩展到 1024px，覆盖 iPhone 17 Pro Max 等更宽机型。
+- iPad 工作台新增 `Airport / Query / Settings` 详情切换，原有左侧计划栏、地图区和详情区布局保持不变；左右竖向折叠栏按钮已按日间 / 夜间主题分别使用浅蓝灰和深色玻璃配色，并在 WebView 首屏加载前预设主题，同时用显式日间样式兜底，避免日间模式短暂或持续显示深蓝长条。
 - Settings 页面支持从 Files 选择 `.s3db` / `.sqlite` / `.sqlite3` / `.db` 本地导航数据库，导入后 Swift 本地 SQLite 服务即时切库。
-- Settings 页面支持系统自动、日间、夜间外观模式，并新增系统语言 / 简体中文 / English 语言选择；语言默认跟随 `navigator.languages[0]` / 系统首选语言，偏好保存到 `localStorage.navplannerLanguageMode`，切换后会即时刷新 Settings、Plan、Airport、Procedure、地图弹窗、离线地图和常见状态/错误提示。无论选择哪种语言，`SID` / `STAR` / `APPROACH`、`DCT`、`IFR`、`AIRAC`、`PMTiles`、`MBTiles`、`SQLite` 等航空和技术标识保持英文。Settings 仍显示离线 MVP、地图/数据版权和本地优先说明；Web 主题会同步到 SwiftUI 外壳，顶部刘海 / 状态栏安全区也跟随日间或夜间切换；应用图标提供日间三档和夜间三档：默认主图标为日间均衡，日间高饱和备用图标保留源图饱和度但不额外提升，上一轮“默认”档位已下放为柔和；夜间版使用类似反色的深蓝黑地形、紫色地形层次和暗橙航路，弱化整图玻璃罩，把 Liquid Glass 反光主要放在航路和山体局部；当前六套图标均已加宽外框，夜间图标仍保留更强轮廓。
+- Settings 页面支持系统自动、日间、夜间外观模式，并新增系统语言 / 简体中文 / English 语言选择；语言默认跟随 `navigator.languages[0]` / 系统首选语言，偏好保存到 `localStorage.navplannerLanguageMode`，切换后会即时刷新 Settings、Plan、Airport、Procedure、已打开的地图弹窗、离线地图和常见状态/错误提示。无论选择哪种语言，`SID` / `STAR` / `APPROACH`、`DCT`、`IFR`、`AIRAC`、`PMTiles`、`MBTiles`、`SQLite` 等航空和技术标识保持英文。Settings 仍显示离线 MVP、地图/数据版权和本地优先说明；Web 主题会同步到 SwiftUI 外壳，顶部刘海 / 状态栏安全区也跟随日间或夜间切换；应用图标提供日间三档和夜间三档：默认主图标为日间均衡，日间高饱和备用图标保留源图饱和度但不额外提升，上一轮“默认”档位已下放为柔和；夜间版使用类似反色的深蓝黑地形、紫色地形层次和暗橙航路，弱化整图玻璃罩，把 Liquid Glass 反光主要放在航路和山体局部；当前六套图标均已加宽外框，夜间图标仍保留更强轮廓；iOS 替代图标回调状态也会按当前语言显示，不直接透出 Swift 中文原文。
 - Settings 页面已集中管理离线地图和在线地图缓存：离线地图卡片下排提供“管理离线地图 / 刷新状态”，下载功能整合在离线地图管理页内部；在线地图缓存卡片下排提供“清理缓存 / 刷新缓存”，并通过 Swift 本地 `/api/map-cache/status` / `clear` 统计和清理在线增强底图缓存。
 - 已隐藏 Leaflet / MapLibre 右下角版权水印；版权说明集中放到 Settings 页面。
 - 已关闭地图和页面空白处的双击/双触放大，保留单指平移、双指缩放、缩放按钮、触控输入和地图点击弹窗。
 - iPhone WebView 已撤销零高度 input accessory 覆盖，避免破坏 WKWebView 键盘 responder；Swift 侧保留 WKWebView 外层 scroll view 的输入触控能力并关闭 bounce / 自动 inset，同时由 `UIScrollViewDelegate` 将外层 `contentOffset` / inset 锁回 0，避免 UIKit 键盘自动滚动和 Web 布局互相拉扯；Web 侧用非 fixed 根页面和页面级 scroll reset 锁住页面级滚动，输入框改为原生单击聚焦加 click 阶段兜底聚焦，并完全移除输入框 `touchstart` 聚焦桥；软键盘出现时 Web 工作台会按 `visualViewport` 缩到键盘上方可见高度，临时隐藏底部 Tab，把当前输入面板留在键盘上方并滚动到当前输入框，键盘收起后恢复原布局；iPhone 的 Plan 输入框实际字号保持 16px 以规避 WebKit 聚焦自动缩放，视觉上再缩放回约 9.5px 的小屏紧凑字号。
 - iPhone 地图弹窗、机场/航点/导航台/航路标签和符号已进一步缩小；iPad 地图弹窗也已同步为与 iPhone 一致的半透明毛玻璃、内嵌圆角标题和更紧凑宽度，机场弹窗操作按钮仍仅在机场类型中显示。
-- Plan / Airport / Settings 常用路径已从单一中文化推进到中英双语本地化：表单标签、占位提示、按钮、机场详情、Procedure 空状态、弹窗动作、离线地图管理标题、航路状态和常见错误提示可随语言选择切换；iPhone Airport 页的机场槽位、跑道筛选和机场标题框已进一步压缩高度与字号，起飞 / 到达 / 手动机场详情头部改为无背景纯文本信息块，跑道列表使用专用两列布局；Selection 的 Procedure 明细表已改为 `SEQ / WAYPOINT / ALTITUDE / SPEED / LEG / TURN` 顺序，`LEG / TURN` 列压缩到旧视觉宽度约 60%，iPhone 下标题和表头继续缩小，日间主题下高度 / 速度 / leg 正文使用不透明深色文字和轻量行底色保持可读；Procedure 类型显示固定为 `SID` / `STAR` / `APPROACH`，不随界面语言翻译；少量底层服务长错误、真实在线失败状态和控制台日志仍在后续收敛。
+- Plan / Airport / Settings 常用路径已从单一中文化推进到中英双语本地化：表单标签、占位提示、按钮、机场详情、Procedure 空状态、弹窗动作、离线地图管理标题、航路状态和常见错误提示可随语言选择切换；语言切换时当前打开的机场 / 航点 / 航路弹窗会按原位置和原内容重新渲染。iPhone Airport 页的机场槽位、跑道筛选和机场标题框已进一步压缩高度与字号，起飞 / 到达 / 手动机场详情头部改为无背景纯文本信息块，跑道列表使用专用两列布局；Selection 的 Procedure 明细表已改为 `SEQ / WAYPOINT / ALTITUDE / SPEED / LEG / TURN` 顺序，`LEG / TURN` 列压缩到旧视觉宽度约 60%，iPhone 下标题和表头继续缩小，日间主题下高度 / 速度 / leg 正文使用不透明深色文字和轻量行底色保持可读；Procedure 类型显示固定为 `SID` / `STAR` / `APPROACH`，不随界面语言翻译；少量底层服务长错误、真实在线失败状态和控制台日志仍在后续收敛。
 - 已实现离线地图资源扫描、本地瓦片读取和下载：扫描 Application Support 中的 PMTiles / MBTiles / SQLite 单文件资源，也兼容 Web `map_offline` 目录；MBTiles、Web `tiles.sqlite`、Web `tiles/` 文件布局可直接读取瓦片，PMTiles 通过 Range 响应供 MapLibre `pmtiles://` 协议读取；离线地图管理页使用暗色透明背景和居中紧凑弹窗，下载标签可在 iOS 本地下载 OpenTopoMap / Esri / OSM / OpenFreeMap 瓦片并写入 SQLite 瓦片库。按最新需求已取消离线地图下载代理服务器设置，Swift 下载器使用系统直连 URLSession，并保留启动前 provider 探测、12 worker / 24 inflight 有界并发、慢请求提示、连续失败中止和旧散瓦片迁移。
 - 已补齐 Web UI 启动所需的 `/api/airway`、`/api/map-cache`、`/api/terrain`、`/api/offline-maps/*` 通路；在线地形图和 terrarium 高程瓦片可由 Swift 本地缓存异步下载，`google_terrain` 通路已加入 Esri / OpenTopoMap 兜底，底图缺失或下载失败不阻塞 nav-overlay；在线缓存支持状态统计和清理。
 - `/api/route/resolve` 当前支持本地 DCT、航点串、基础“航路名 + 退出点”展开、同航路优先自动规划、partial airway + DCT fallback 和 `***` 自动补航段；Route 留空时会按跑道选择 SID / STAR / APPROACH 接入本地离线航路。airway graph 与 route-between 已按当前数据库缓存，导入新数据库后自动失效；airway graph、airway 展开、Dijkstra tie-break、Procedure 候选分组、Approach 排序和 `NSNull` 文本处理已进一步按 Web `planner_routes.py` 对齐，8 条典型自动航线的 `route_display`、legs、点列签名、距离和 SID / STAR / Approach 选择已与 Web 探针对齐；自动航路压缩已按 Web `_merge_continuing_airway_legs` / `_merge_repeated_airway_legs` 迁移连续 airway 与 A-B-A 重复 airway 合并，`route_display` 也区分普通显示和展开显示；起降点与普通 route token 已拆成 Web 同形态查找优先级，避免 IATA 与 waypoint 同名时手动航路选错；Swift 内部搜索已补齐 Web `_ifrr_route_between_with_exclusions` 的 excluded airway 通路，非空排除集不会污染默认 route-between 缓存；手动航路缺目标、未知 fix、非法 airway 边界等错误会按 Web 版返回 400 JSON。更多异常航线和前端 hit layer 仍在继续补充回归。
 - 已新增 `Tools/RouteParity/route_parity.py` 可重复回归工具，会编译 Swift 探针并与只读 Web 参考实现对比 22 个 `/api/route/resolve` case，覆盖典型自动航线、跨日期变更线自动 / 手动航线、手动航路、IATA/waypoint 查找优先级、点列几何摘要和错误语义。
 - 已新增 `Tools/TrackParity/track_parity.py` 可重复回归工具，会用 Web 参考 route resolve 生成离线合成轨迹点，再分别对比 Web `match_imported_track_route(...)` 与 Swift `trackMatchPayload(...)`，当前覆盖 7 个 `/api/route/track-match` case。
 - 已新增 Xcode `ParityChecks` Aggregate Target 和共享 scheme，统一运行 RouteParity / TrackParity / ProcedureParity；也可通过 `python3 Tools/Parity/run_all_parity.py` 在命令行直接运行。
-- `/api/route/track-match` 已支持导入轨迹点的本地 airway 匹配，并继续迁移 Web 版 FR24/导入轨迹的轨迹误差约束、单航路替换保护、zigzag 平滑清理和 Procedure 自动挂接；`/api/route/fr24-match` 在 iOS 离线状态下返回可触发 Web 粘贴轨迹降级流程的提示，不依赖 Python server 或远程服务完成导入轨迹匹配。
+- `/api/route/track-match` 已支持导入轨迹点的本地 airway 匹配，并继续迁移 Web 版 FR24/导入轨迹的轨迹误差约束、单航路替换保护、zigzag 平滑清理和 Procedure 自动挂接；`查询` Tab 与 Swift 本地 `/api/fr24/search`、`history`、`download`、`cache`、`access` API 可按 FR24 Web schedule/playback 逻辑查询航线航班、下载并缓存 GPX / playback JSON、用黑色线绘制轨迹，并复用本地 `track-match` 匹配航路。FR24 仍是在线增强，失败、断网或会话缺失不会阻塞本地核心能力。
+- FR24 查询使用 Web 会话方式：Query 页可在 App 内打开 FR24 验证页，用户正常完成 FR24 / Cloudflare 验证后由 App 自动同步内置浏览器中的 FR24 Cookie / `_frPl`；FR24 schedule/playback 请求会优先通过共享 WKWebView 浏览器上下文顶层导航到 FR24 API URL，再读取页面 JSON 文本，避免跨域 `fetch` 在 WKWebView 中触发 `Load failed`。Swift `URLSession` 仅在浏览器运行时失败时兜底；若浏览器上下文已明确返回 401 / 403、Cloudflare 或 HTML 响应，则直接向 Query 页暴露该原因。App 不实现 Cloudflare 绕过、挑战破解或 CAPTCHA 自动化，只复用用户已完成验证的浏览器会话。
 - `/api/procedure/...` 已按 Web `procedure_geometry` 迁移 RF / AF 弧线、复飞段分割和末端等待航线几何；`Tools/ProcedureParity` 已可重复比较 6 个 Procedure case，覆盖 RF 弧线、复飞 / holding、transition 合并、ZULS 复飞异常圆弧回归和空结果语义。
 - `/api/nav-overlay` 已按 Web `planner_overlay.py` 迁移本地缓存、世界副本边界过滤、空间分桶、航路标签预算、terminal waypoint / navaid、跑道和 ILS 输出；跨日期变更线视野的 payload 计数已与 Web 参考一致，前端刷新采用双缓冲图层替换，iPhone 使用 SVG renderer + 延迟移除旧层来降低缩放后灰色航路叠加层闪烁；矢量底图拖动/缩放期间改为 CSS 镜像并在结束后同步真实 MapLibre 相机，减少底图与航路层动画不同步。
 
@@ -75,6 +76,7 @@ Docs/                          子功能设计文档
   RouteResolve.md              航路解析、自动规划和 Web parity 差距
   RouteParity.md               Swift/Web route resolve 回归工具
   TrackParity.md               Swift/Web track-match 回归工具
+  FR24Query.md                        FR24 查询、GPX 缓存和轨迹匹配增强
   ProcedureParity.md           Swift/Web Procedure 几何回归工具
   CodexGoal.md                 新线程继续开发时推荐使用的 /goal 草案
   Settings.md                  设置页、数据库导入、主题和版权说明
@@ -107,6 +109,17 @@ xcodebuild -project NavPlanner.xcodeproj \
 
 最近一次验证：
 
+- `node --check NavPlanner/Resources/Web/app.js` 成功；CSS 大括号配对检查成功；HTML 本地化覆盖检查确认 126 个 `data-i18n*` 属性均有翻译键，402 个翻译键已被扫描。
+- FR24 Query 页已切换为 App 内 FR24 验证页 + 自动同步会话，手动 Cookie / `_frPl` 仅作为高级可选兜底；FR24 返回 Cloudflare 验证页、HTML 或 401 / 403 时显示可本地化提示，本地规划、Procedure、nav-overlay 和离线地图继续可用；`map.html` 资源版本刷新为 `20260605-fr24-inapp-session`。后续每次修改 FR24 相关功能时，固定使用 `ZULS` / `ZUAL` 做 FR24 路径验证。
+- ZULS/ZUAL FR24 验证：本地导航数据库解析 `ZULS -> LXA`、`ZUAL -> NGQ` 成功；无已同步 FR24 会话时，FR24 schedule 探测返回 403，Query 页应提示先打开 FR24 验证页并同步会话。
+- 模拟器调试确认旧实现中已同步 Cookie 包含 `cf_clearance`、`PHPSESSID`、`XSRF-TOKEN` 等，但 `_frPl` 缺失且 `URLSession` 带 Cookie 请求 ZULS/ZUAL schedule 仍返回 403；因此当前实现已改为优先用 WKWebView 浏览器上下文执行 FR24 Web 请求。2026-06-05 进一步定位到 `evaluateJavaScript(async...)` 未等待 Promise 会报“JavaScript 返回结果类型不受支持”，而跨域 `fetch` 会在 WKWebView 中报 `Load failed`；当前已改为隐藏 WKWebView 顶层导航加载 FR24 API JSON，并加入不含 Cookie 值的 FR24 请求状态诊断日志。
+- ZULS/ZUAL FR24 在线验证：在 iPhone 17 Pro Max 模拟器中，隐藏 WKWebView 对 `/common/v1/airport.json` 返回 `status=200 type=application/json body=json-object`；`LXA departures offset=24` 命中 1-2 条 `ZULS -> ZUAL` 航班，UI 已显示 `TV9723`、`TV9943` 等航班卡片。FR24 对更早 `offset=48` timestamp 返回 HTTP 400 时，查询会停止继续向前扫描并返回已找到的最新航班。
+- FR24 playback 轨迹解析已支持 JSON 中的 ISO 时间戳，下载缓存继续写入 App Caches 下的 GPX、playback JSON 和 meta JSON。
+- `swift -frontend -parse NavPlanner/Core/WebBridge/NavPlannerSchemeHandler.swift NavPlanner/Core/PlannerCore/PlannerService.swift` 成功。
+- `plutil -lint NavPlanner.xcodeproj/project.pbxproj NavPlanner/Support/PrivacyInfo.xcprivacy` 成功；`git diff --check` 成功。
+- `python3 Tools/Parity/run_all_parity.py` 成功；RouteParity 22、TrackParity 7、ProcedureParity 6 均无差异。
+- XcodeBuildMCP `build_run_sim` 在 iPhone 17 Pro Max 成功，构建、安装、启动无 warning / error；首屏截图确认地图、Plan 表单和底部 `计划 / 机场 / 查询 / 设置` 四标签正常，截图为 `/var/folders/7m/jzh_ftyn6_gfjz552yy612zr0000gn/T/screenshot_optimized_dbe5336d-cebb-4d85-a580-36d3dd8ad58f.jpg`。
+- `git -C NavPlanner-web status --short` 无输出，参考项目保持未修改。
 - `swift -frontend -parse Tools/Icon/generate_app_icons.swift` 成功；`swift Tools/Icon/generate_app_icons.swift` 成功，已重新生成日间三档 / 夜间三档 6 套图标和 Settings 预览图。
 - 视觉检查确认默认日间均衡图标与夜间高对比图标外框均已加宽，航路、地形和跑道主体仍清晰；`map.html` 图标预览查询串和 `app.js` 资源版本刷新为 `20260604-icon-wider-border`。
 - `shasum` 确认 6 张 marketing 图标和 6 张 Settings 预览图均为不同 PNG；`sips` 检查 6 张 marketing 图为 1024 x 1024，Settings 预览图为 180 x 180；图标 PNG 数量检查为 96 张 AppIcon PNG 和 6 张预览图。

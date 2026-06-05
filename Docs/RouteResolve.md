@@ -22,7 +22,7 @@
 
 - 多 airway mixed-route 的权重细节仍需用典型航线继续对照 Web 参考输出。
 - 22 个 route resolve case 已由 `Tools/RouteParity/route_parity.py` 做可重复 Swift/Web 对照，包含典型自动航线、手动航路、错误语义和跨日期变更线自动 / 手动航线；仍需逐步沉淀为 Xcode 测试目标。
-- FR24 在线增强不属于本接口，但会复用部分 airway graph 匹配逻辑，仍需继续迁移。
+- FR24 在线增强不属于本接口；当前 `查询` Tab 会通过 `/api/fr24/download` 获取轨迹，再复用 `/api/route/track-match` 的本地 airway graph 匹配逻辑。
 
 ## 验证重点
 

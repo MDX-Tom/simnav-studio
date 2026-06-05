@@ -67,7 +67,7 @@
   - 支持离线地图管理 POST API 的 Swift 占位响应。
 - 扩展 `PlannerService`：
   - 增加 `/api/airway/{airway}`。
-  - 增加 `/api/route/fr24-match` 和 `/api/route/track-match` 离线不可用响应。
+  - 增加 `/api/route/flightaware-match` 和 `/api/route/track-match` 离线不可用响应。
   - 将 `/api/route/resolve` 从纯 placeholder 提升为可返回本地 DCT、航点串和基础航路展开 payload。
 - 扩展 `MapStore`：
   - 资源 payload 对齐 Web 离线地图 UI 需要的字段。
@@ -205,7 +205,7 @@
 待验证 / 待迁移：
 
 - 与 Web Python 版逐条对照更多典型航线、跨日期变更线航线和含多个 airway 的 mixed-route。
-- 迁移 route cache、excluded airway、错误提示、FR24 / track match 及完整单元测试。
+- 迁移 route cache、excluded airway、错误提示、FlightAware AeroAPI / track match 及完整单元测试。
 
 ## 2026-05-30 Route Resolve 缓存对齐
 
@@ -230,7 +230,7 @@
 待验证 / 待迁移：
 
 - 增加正式 XCTest 或命令行 route fixture，记录 cache hit、跨数据库切换和典型航线 payload 对照。
-- 继续迁移 excluded airway、FR24 / track match、错误提示和多 airway mixed-route 权重。
+- 继续迁移 excluded airway、FlightAware AeroAPI / track match、错误提示和多 airway mixed-route 权重。
 
 ## 2026-05-30 iPhone / iPad 界面与触控复验
 
@@ -250,10 +250,10 @@
 
 已完成：
 
-- 对照 Web `NavPlanner-web/src/planner_routes.py` 的 `match_imported_track_route`、`_match_track_points_to_airways`、`_simplify_fr24_legs` 与 Web 前端 `matchFr24Route()` 降级流程。
+- 对照 Web `NavPlanner-web/src/planner_routes.py` 的 `match_imported_track_route`、`_match_track_points_to_airways`、`_simplify_flightaware_legs` 与 Web 前端 `matchFlightAwareRoute()` 降级流程。
 - `NavPlannerSchemeHandler` 接通 POST `/api/route/track-match`，读取 `{ departure, arrival, track_points }` 并返回 Swift 本地 route payload。
 - `PlannerService.trackMatchPayload(...)` 新增导入轨迹点规范化、airway graph 最近节点吸附、图上最短路匹配、detour 过大时 direct fallback、连续 leg 合并和基础同航路窗口简化。
-- `/api/route/fr24-match` 当前保持离线增强边界，不访问远程 FR24；错误文案包含 `FR24_API_TOKEN`，可触发 Web 工作台的粘贴轨迹降级路径。
+- `/api/route/flightaware-match` 当时保持离线增强边界，不访问远程 FlightAware；后续已迁移为 AeroAPI 在线增强入口。
 - `MapWebView` 接入 `WKUIDelegate` 的 alert / confirm / prompt，让 Web 版 `window.prompt(...)` 在 iOS 上显示原生输入框。
 - 同步更新 README、TODO、WebBridge、AppShell、WebParity 文档。
 
@@ -261,15 +261,15 @@
 
 - `node --check NavPlanner/Resources/Web/app.js` 成功。
 - 临时 Swift 探针重新编译成功，并直连 `PlannerService.trackMatchPayload` 验证：用 `DODGR V370 GARNE` 的 9 个轨迹点导入匹配，返回 `DODGR V370 GARNE`，包含 1 条 airway leg。
-- `PlannerService.fr24UnavailablePayload()` 返回可导入轨迹的离线增强提示。
+- `PlannerService.legacyFlightAwareUnavailablePayload()` 返回可导入轨迹的离线增强提示。
 - `plutil -lint NavPlanner/Support/PrivacyInfo.xcprivacy` 成功。
 - `xcodebuild -project NavPlanner.xcodeproj -scheme NavPlanner -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/NavPlannerDerived build` 成功。
 - XcodeBuildMCP `build_run_sim` 在 iPhone 17 Pro 成功启动。
 
 待验证 / 待迁移：
 
-- 继续迁移 Web 的 Procedure 自动挂接、轨迹误差平滑、zigzag 清理和在线 FR24 查询增强。
-- 在模拟器中补测 `Match FR24` 按钮触发 prompt、粘贴 JSON/CSV 轨迹并绘图。
+- 继续迁移 Web 的 Procedure 自动挂接、轨迹误差平滑、zigzag 清理和在线 FlightAware AeroAPI 查询增强。
+- 在模拟器中补测 `Match FlightAware AeroAPI` 按钮触发 prompt、粘贴 JSON/CSV 轨迹并绘图。
 
 ## 2026-05-30 route/resolve 错误语义对齐
 
@@ -750,7 +750,7 @@
 
 已完成：
 
-- 对照 `NavPlanner-web/src/planner_routes.py` 的 `_simplify_fr24_legs`、`_smooth_fr24_zigzag_legs` 和轨迹误差辅助函数。
+- 对照 `NavPlanner-web/src/planner_routes.py` 的 `_simplify_flightaware_legs`、`_smooth_flightaware_zigzag_legs` 和轨迹误差辅助函数。
 - `PlannerService.matchTrackPointsToAirways(...)` 在基础 airway graph 匹配后继续执行 Web 同形态的轨迹误差约束：单航路替换只有在候选路径仍贴合导入轨迹时才允许发生。
 - 新增导入轨迹 zigzag 平滑清理：在短窗口内移除偏离轨迹的 direct 折返段，同时要求新 direct 路径距离更短且轨迹误差增量不超过 Web 默认阈值。
 - 增加本地投影距离、polyline 距离、轨迹采样范围和经度包裹辅助函数，用于跨日期变更线附近的轨迹误差计算。
@@ -767,7 +767,7 @@
 待验证 / 待迁移：
 
 - 继续迁移导入轨迹匹配后的 Procedure 自动挂接。
-- 继续补齐 `/api/route/fr24-match` 在线增强和剩余错误提示细节。
+- 继续补齐 `/api/route/flightaware-match` 在线增强和剩余错误提示细节。
 
 ## 2026-05-31 导入轨迹 Procedure 自动挂接对齐
 
@@ -789,8 +789,8 @@
 
 待验证 / 待迁移：
 
-- 继续补齐 `/api/route/fr24-match` 在线增强。
-- 继续对齐 track-match 的剩余错误提示细节和更多典型 FR24 导入样例。
+- 继续补齐 `/api/route/flightaware-match` 在线增强。
+- 继续对齐 track-match 的剩余错误提示细节和更多典型 FlightAware AeroAPI 导入样例。
 
 ## 2026-05-31 手动 route payload 细节对齐
 
@@ -1230,7 +1230,7 @@
 
 - 新增 `Tools/TrackParity/track_parity.py`，把 Web 参考 `NavDatabase.match_imported_track_route(...)` 与 Swift `PlannerService.trackMatchPayload(...)` 做字段级对照。
 - 新增 `Tools/TrackParity/TrackParityProbe.swift`，编译为临时 CLI 后直接调用 Swift 本地服务层，不依赖 Web 或 Python server。
-- TrackParity 使用 Web 参考 `resolve_route(...)` 生成离线合成轨迹点，避免依赖 FR24 或外网，同时保证 Web / Swift 使用同一组导入轨迹。
+- TrackParity 使用 Web 参考 `resolve_route(...)` 生成离线合成轨迹点，避免依赖 FlightAware AeroAPI 或外网，同时保证 Web / Swift 使用同一组导入轨迹。
 - 当前 7 个 case 覆盖：
   - `KLAX->KPSP` 的 `DODGR V370 GARNE` 和 `DODGR *** GARNE` 合成轨迹；
   - `ZBAA->ZSPD`、`VHHH->WSSS` 自动航线合成轨迹；
@@ -1251,8 +1251,8 @@
 
 待验证：
 
-- TrackParity 仍需扩展真实 FR24 / 手动粘贴轨迹样例，覆盖噪声、稀疏点、折返和缺点。
-- `/api/route/fr24-match` 在线增强仍未迁移；当前 iOS 继续保持离线粘贴轨迹降级路径。
+- TrackParity 仍需扩展真实 FlightAware AeroAPI 轨迹样例，覆盖噪声、稀疏点、折返和缺点。
+- `/api/route/flightaware-match` 当时在线增强仍未迁移；当前已改为 FlightAware AeroAPI 在线增强入口。
 
 ## 2026-06-01 ParityChecks 工程校验目标
 
@@ -1746,10 +1746,10 @@
 已完成：
 
 - 新增 `localizedErrorMessage(...)` 和 `setErrorStatus(...)`，统一清理 Web 工作台用户可见错误提示。
-- `fetchJson(...)` 现在会把成功响应但 JSON 解析失败的情况显示为中文错误，非 2xx 响应仍保留后端原始 error 供本地化和 FR24 降级判断使用。
+- `fetchJson(...)` 现在会把成功响应但 JSON 解析失败的情况显示为中文错误，非 2xx 响应仍保留后端原始 error 供本地化和 FlightAware AeroAPI 降级判断使用。
 - 本地化常见浏览器 / API 错误：`Request failed`、`Failed to fetch`、离线网络、未知本地 host、Web 资源缺失、本地 API 缺失、机场未找到、离线地图 API 缺失、PMTiles 缺失和无效瓦片坐标。
 - 本地化航路解析错误：起降点无法解析、DCT 缺目标、`***` 缺起终点、airway 缺退出点、退出点未找到、airway 不连接指定航点和 waypoint 未找到。
-- 本地化导入轨迹错误：无法从轨迹构建合法航路、无法构建可绘制航路点，以及 FR24 在线访问被阻止 / 回放轨迹点不足的降级提示。
+- 本地化导入轨迹错误：无法从轨迹构建合法航路、无法构建可绘制航路点，以及 FlightAware AeroAPI 在线访问失败 / 轨迹点不足的降级提示。
 - 将离线地图、在线缓存、机场弹窗操作、搜索结果机场加载、数据库切换、路线生成、轨迹导入和 Settings 按钮等状态栏错误统一走 `setErrorStatus(...)`。
 - `map.html` Web 资源版本刷新为 `20260604-error-localization`。
 - 同步更新 README、TODO、Settings、WebParity 和本执行记录。
@@ -1818,3 +1818,222 @@
 - 启动截图确认系统默认中文 UI 正常，且手动机场提示保留 `SID / STAR / APPROACH` 英文标识：`/var/folders/7m/jzh_ftyn6_gfjz552yy612zr0000gn/T/screenshot_optimized_57df7939-fc3c-47c6-a05d-00cc43c6a3cb.jpg`。
 - WKWebView 内部控件未通过 XcodeBuildMCP 暴露为可点击 AX 元素，且当前 `xcrun simctl io ... tap` 不支持坐标点击，因此 Settings 语言按钮的模拟器深层点击未自动化；本轮通过静态覆盖检查、构建运行和首屏截图完成可验证项。
 - `git -C NavPlanner-web status --short` 无输出，参考项目保持未修改。
+
+## 2026-06-05 地图弹窗语言即时刷新与 App 图标回调本地化
+
+已完成：
+
+- 继续收敛 Web 工作台多语言即时刷新，不修改只读参考项目 `NavPlanner-web/`。
+- 为地图弹窗增加 `activeNavPopup` 状态：打开机场 / 航点 / 航路弹窗时记录规范化 point 和原始 `latlng`，关闭弹窗或点击地图空白处会清除该状态。
+- 语言切换时会在原位置重渲染当前打开的地图弹窗，并继续沿用既有机场详情异步加载与缓存逻辑，避免弹窗动作、详情字段和关联航路标题停留在旧语言。
+- App 图标 Swift bridge 回调不再直接显示 Swift 中文原文；Web 侧按当前语言展示“已是当前选择 / 已切换 / 当前系统不支持 / 切换失败”等状态，并保留日间 / 夜间六套图标名称的中英双语标签。
+- `map.html` 中 `app.js` 资源版本刷新为 `20260605-popup-language-refresh`。
+- 同步更新 `README.md`、`TODO.md`、`Docs/Settings.md`、`Docs/WebParity.md` 和本执行记录。
+
+验证记录：
+
+- `node --check NavPlanner/Resources/Web/app.js` 成功。
+- CSS 大括号配对检查成功。
+- HTML 静态本地化覆盖检查成功：100 个 `data-i18n*` 属性均有翻译键。
+- 翻译字典检查成功：345 个 `TRANSLATIONS` 条目均包含 `zh-Hans` 和 `en`。
+- `plutil -lint NavPlanner.xcodeproj/project.pbxproj NavPlanner/Support/PrivacyInfo.xcprivacy` 成功。
+- `git diff --check` 成功。
+- `python3 Tools/Parity/run_all_parity.py` 成功：RouteParity 22、TrackParity 7、ProcedureParity 6 均无差异。
+- XcodeBuildMCP `build_run_sim` 在 iPhone 17 Pro Max 成功，构建、安装、启动无 warning / error。
+- 启动截图确认中文首屏、地图、Plan 表单和 `SID / STAR / APPROACH` 标识正常：`/var/folders/7m/jzh_ftyn6_gfjz552yy612zr0000gn/T/screenshot_optimized_8d1d8127-2646-49b4-b43e-30cc33c043fc.jpg`。
+- WKWebView 内部控件仍未通过 XcodeBuildMCP 暴露为可点击 AX 元素，本轮未自动化“打开弹窗后切换语言”的深层点击；已通过代码路径和启动验证覆盖可自动化部分。
+- `git -C NavPlanner-web status --short` 无输出，参考项目保持未修改。
+
+## 2026-06-05 FlightAware AeroAPI 查询 Tab 与 GPX 轨迹增强
+
+已完成：
+
+- 按用户要求移除 Plan 中旧的“匹配轨迹”按钮，将 FlightAware AeroAPI 操作集中到独立 `查询` Tab；iPhone 竖屏底部改为 `计划 / 机场 / 查询 / 设置` 四标签，iPad 与 iPhone 横屏右侧详情栏改为 `机场 / 查询 / 设置`。
+- 新增 Swift 本地 FlightAware AeroAPI 在线增强服务，不修改只读参考项目 `NavPlanner-web/`：
+  - `/api/flightaware/search` 按起飞 / 到达机场查询 FlightAware AeroAPI 航线最新最多 10 个航班。
+  - `/api/flightaware/history` 按同航线和同航班号 / callsign 查询航班历史。
+  - `/api/flightaware/download` 下载 `AeroAPI track JSON`，提取轨迹点并写入 GPX、AeroAPI JSON 和 meta JSON 缓存。
+  - `/api/flightaware/cache/status` / `clear` 统计和删除 FlightAware AeroAPI 下载缓存。
+  - `/api/route/flightaware-match` 保留 Web parity 入口，改为在线尝试下载回放并复用本地 `track-match`。
+- `PlannerService` 增加 FlightAware AeroAPI 查询所需的起降机场 ICAO / IATA / 坐标摘要，继续复用现有本地数据库解析，避免前端自行猜测机场代码。
+- Query 页每个航班和历史记录显示航班号、起降机场、航司、机型 / 注册号、计划 / 实际时间和飞行时长，并提供“下载并绘制轨迹”和“匹配轨迹”。
+- 地图新增独立 FlightAware AeroAPI 轨迹图层，使用黑色线绘制 GPX 轨迹，并复用现有经度展开 / world copy 逻辑以兼容跨日期变更线。
+- 匹配轨迹时先下载 / 读取缓存轨迹，再 POST `/api/route/track-match`，继续使用 Swift 本地 airway graph、FlightAware AeroAPI 平滑 / zigzag 清理和 Procedure 自动挂接；匹配前保存当前 route payload，可通过“还原轨迹匹配”恢复。
+- Query 页底部提供清除轨迹绘制、还原轨迹匹配、删除下载缓存和刷新缓存状态；FlightAware AeroAPI 缓存与在线地图缓存、离线地图包和导航数据库互不影响。
+- FlightAware 在线增强失败时会快速返回错误，不阻塞本地航路、Procedure、nav-overlay 和离线地图；当前已改为 FlightAware AeroAPI Key 访问方式。
+- 新增 `Docs/FlightAwareQuery.md`，并同步更新 README、TODO、Docs/WebBridge.md、Docs/WebParity.md、Docs/TrackParity.md、Docs/RouteResolve.md、Docs/Settings.md 和本执行记录。
+
+验证记录：
+
+- `node --check NavPlanner/Resources/Web/app.js` 成功。
+- CSS 大括号配对检查成功。
+- HTML 静态本地化覆盖检查成功：103 个 `data-i18n*` 属性均有翻译键，386 个翻译键已被扫描。
+- `swift -frontend -parse ...` 成功。
+- `plutil -lint NavPlanner.xcodeproj/project.pbxproj NavPlanner/Support/PrivacyInfo.xcprivacy` 成功。
+- `git diff --check` 成功。
+- `python3 Tools/Parity/run_all_parity.py` 成功：RouteParity 22、TrackParity 7、ProcedureParity 6 均无差异。
+- XcodeBuildMCP `build_run_sim` 在 iPhone 17 Pro Max 成功，构建、安装、启动无 warning / error。
+- 启动截图确认地图、Plan 表单和底部四标签正常：`/var/folders/7m/jzh_ftyn6_gfjz552yy612zr0000gn/T/screenshot_optimized_932e5092-4263-407f-89de-b6825c50158f.jpg`。
+- WKWebView 内部控件仍未通过 XcodeBuildMCP 暴露为可点击 AX 元素，本轮未自动化点入 Query Tab；已通过静态检查、构建运行和首屏截图完成可自动化部分。
+- `git -C NavPlanner-web status --short` 无输出，参考项目保持未修改。
+
+## 2026-06-05 FlightAware AeroAPI Query 降级提示修正
+
+已完成：
+
+- 根据 Query 页截图修正 FlightAware AeroAPI 失败后的用户可见提示，不再指向已从 Plan 移除的旧入口。
+- 将 FlightAware AeroAPI 轨迹点不足的提示改为选择其他历史航班或稍后重试。
+- 压缩小屏 Query 查询按钮视觉重量：在移动布局中改为居中紧凑宽度，不再占满整行。
+- `map.html` 中 `app.js` / `styles.css` 资源版本刷新为 `20260605-flightaware-query-copy`。
+- 同步更新 README、TODO、Docs/FlightAwareQuery.md 和本执行记录。
+
+验证记录：
+
+- `node --check NavPlanner/Resources/Web/app.js` 成功。
+- CSS 大括号配对检查成功。
+- HTML 静态本地化覆盖检查成功：103 个 `data-i18n*` 属性均有翻译键，386 个翻译键已被扫描。
+- `git diff --check` 成功。
+
+## 2026-06-05 FlightAware AeroAPI 网络访问配置
+
+已完成：
+
+- 将网络访问方案收敛为 FlightAware AeroAPI：不再使用旧的非 AeroAPI 访问方式。
+- Swift `FlightAwareService` 新增 FlightAware AeroAPI Key 的本地保存、清除、状态查询与请求注入：
+  - `/api/flightaware/access/status`
+  - `/api/flightaware/access/update`
+  - `/api/flightaware/access/clear`
+- 配置 AeroAPI Key 时，`/api/flightaware/search` / `history` 走 `aeroapi.flightaware.com/aeroapi/airports/{origin}/flights/to/{destination}`，`download` 走 `aeroapi.flightaware.com/aeroapi/flights/{id}/track`。
+- Query 页新增“FlightAware 网络访问”卡片，可保存 / 清除 / 刷新 FlightAware AeroAPI Key；前端只显示是否已配置，不回显敏感值。
+- `map.html` 中 `app.js` / `styles.css` 资源版本刷新为 `20260605-flightaware-network-access`。
+- 同步更新 README、TODO、Docs/FlightAwareQuery.md 和本执行记录。
+
+验证记录：
+
+- `node --check NavPlanner/Resources/Web/app.js` 成功。
+- CSS 大括号配对检查成功。
+- HTML 静态本地化覆盖检查成功：112 个 `data-i18n*` 属性均有翻译键，399 个翻译键已被扫描。
+- `swift -frontend -parse NavPlanner/Core/WebBridge/NavPlannerSchemeHandler.swift NavPlanner/Core/PlannerCore/PlannerService.swift` 成功。
+- `plutil -lint NavPlanner.xcodeproj/project.pbxproj NavPlanner/Support/PrivacyInfo.xcprivacy` 成功。
+- `git diff --check` 成功。
+- `python3 Tools/Parity/run_all_parity.py` 成功：RouteParity 22、TrackParity 7、ProcedureParity 6 均无差异。
+- XcodeBuildMCP `build_run_sim` 在 iPhone 17 Pro Max 成功，构建、安装、启动无 warning / error。
+- 首屏截图确认地图、Plan 表单和底部 `计划 / 机场 / 查询 / 设置` 四标签正常：`/var/folders/7m/jzh_ftyn6_gfjz552yy612zr0000gn/T/screenshot_optimized_dbe5336d-cebb-4d85-a580-36d3dd8ad58f.jpg`。
+
+## 2026-06-05 FlightAware AeroAPI 替换收敛
+
+已完成：
+
+- 按用户新方案将查询功能收敛为 FlightAware AeroAPI，不再使用旧的非 AeroAPI 访问方式。
+- Swift `FlightAwareService` 现在通过 `https://aeroapi.flightaware.com/aeroapi` 和 `x-apikey` 请求：
+  - `/airports/{origin}/flights/to/{destination}` 查询航线最近航班。
+  - `/flights/{id}/track` 下载轨迹点。
+- Query 页访问配置简化为单一 FlightAware AeroAPI Key，前端只展示是否已配置，不回显敏感值。
+- 删除 Web 侧旧的 Plan 轨迹粘贴降级函数和未使用的 FlightAware 旧匹配入口代码，查询页继续提供“下载并绘制轨迹”和“匹配轨迹”。
+- AeroAPI 轨迹点解析支持 ISO 时间戳；缓存说明更新为 GPX / AeroAPI JSON / meta JSON。
+- `map.html` 中 `app.js` / `styles.css` 资源版本刷新为 `20260605-flightaware-aeroapi-v2`。
+- 同步更新 README、TODO、Docs/FlightAwareQuery.md、Docs/WebBridge.md、Docs/WebParity.md、Docs/AppShell.md、Docs/Settings.md、Docs/TrackParity.md 和本执行记录。
+
+已完成的本地校验：
+
+- `swift -frontend -parse NavPlanner/Core/WebBridge/NavPlannerSchemeHandler.swift NavPlanner/Core/PlannerCore/PlannerService.swift` 成功。
+- `node --check NavPlanner/Resources/Web/app.js` 成功。
+- CSS 大括号配对检查成功。
+- HTML 静态本地化覆盖检查成功：123 个 `data-i18n*` 属性均有翻译键，395 个翻译键已被扫描。
+- `plutil -lint NavPlanner.xcodeproj/project.pbxproj NavPlanner/Support/PrivacyInfo.xcprivacy` 成功。
+- `git diff --check` 成功。
+- `python3 Tools/Parity/run_all_parity.py` 成功：RouteParity 22、TrackParity 7、ProcedureParity 6 均无差异。
+- XcodeBuildMCP `build_run_sim` 在 iPhone 17 Pro Max 成功，构建、安装、启动无 warning / error。
+- 启动截图确认地图、Plan 表单和底部 `计划 / 机场 / 查询 / 设置` 四标签正常：`/var/folders/7m/jzh_ftyn6_gfjz552yy612zr0000gn/T/screenshot_optimized_756adbbc-6a01-4091-b3e5-ece7c2b58a82.jpg`。
+- `git -C NavPlanner-web status --short` 无输出，参考项目保持未修改。
+
+## 2026-06-05 FR24 Web 会话查询与 GPX 轨迹回切
+
+已完成：
+
+- 按用户最新要求将 Query 在线增强从 FlightAware AeroAPI 改回 FR24 Web 逻辑，保持 `NavPlanner-web/` 只读未修改。
+- Swift 本地服务新增 `FR24Service`：
+  - `/api/fr24/search` 按 Web 参考扫描 FR24 `/common/v1/airport.json` schedule 插件，检查起飞机场 `departures` 与到达机场 `arrivals`，最多返回 10 个航线航班。
+  - `/api/fr24/history` 按航班号 / callsign 扫描更长历史窗口。
+  - `/api/fr24/download` 使用 `/common/v1/flight-playback.json?flightId=...&timestamp=...` 下载 playback JSON，提取轨迹点并写入 GPX、playback JSON 和 meta JSON 缓存。
+  - `/api/fr24/cache/status` / `clear` 统计和删除 `Caches/NavPlanner/FR24`。
+  - `/api/fr24/access/status` / `update` / `clear` 保存 FR24 Web Cookie / `_frPl`，只向前端回传是否已配置，不回显敏感值。
+  - `/api/route/fr24-match` 保留 Web parity 入口，下载 FR24 playback 后复用 Swift 本地 `/api/route/track-match`。
+- Query 页文案、DOM id、JS 状态和请求路径从 FlightAware 切换为 FR24；访问配置卡片改为 Cookie 文本框和 `_frPl` 输入框。
+- 明确 Cloudflare 边界：App 不实现绕过、挑战破解或 CAPTCHA 自动化；只复用用户在浏览器中正常完成 FR24 / Cloudflare 验证后的 Cookie / `_frPl`。遇到 `cf-mitigated: challenge`、Cloudflare HTML 或非 JSON 响应时快速返回可本地化错误，不阻塞本地核心能力。
+- 地图黑色轨迹图层改为 `fr24TrackLayerGroup`，继续复用跨日期变更线 world-copy / 经度展开逻辑；匹配成功前仍保存当前 route payload，支持“还原轨迹匹配”。
+- `map.html` 中 `app.js` / `styles.css` 资源版本刷新为 `20260605-fr24-web-session`。
+- 新增 `Docs/FR24Query.md`，删除旧 `Docs/FlightAwareQuery.md`，并同步更新 README、TODO、Docs/WebBridge.md、Docs/WebParity.md、Docs/TrackParity.md、Docs/RouteResolve.md、Docs/Settings.md、Docs/AppShell.md 和本执行记录。
+
+已完成的本地校验：
+
+- `swift -frontend -parse NavPlanner/Core/WebBridge/NavPlannerSchemeHandler.swift NavPlanner/Core/PlannerCore/PlannerService.swift` 成功。
+- `node --check NavPlanner/Resources/Web/app.js` 成功。
+- CSS 大括号配对检查成功。
+- HTML 静态本地化覆盖检查成功：123 个 `data-i18n*` 属性均有翻译键，395 个翻译键已被扫描。
+- `plutil -lint NavPlanner.xcodeproj/project.pbxproj NavPlanner/Support/PrivacyInfo.xcprivacy` 成功。
+- `rg -n "FlightAware|flightaware|AeroAPI|FlightAwareQuery" README.md TODO.md Docs NavPlanner/Core NavPlanner/Resources/Web -g '!Docs/Obsolete/**'` 无输出，当前正式文档和运行路径已无 FlightAware / AeroAPI 残留。
+- `git diff --check` 成功。
+- `python3 Tools/Parity/run_all_parity.py` 成功：RouteParity 22、TrackParity 7、ProcedureParity 6 均无差异。
+- XcodeBuildMCP `build_run_sim` 在 iPhone 17 Pro Max 成功，构建、安装、启动无 warning / error。
+- 启动截图确认地图、Plan 表单和底部 `计划 / 机场 / 查询 / 设置` 四标签正常：`/var/folders/7m/jzh_ftyn6_gfjz552yy612zr0000gn/T/screenshot_optimized_620db475-c3f7-4d53-91ac-6e6f059aa85c.jpg`。
+- `git -C NavPlanner-web status --short` 无输出，参考项目保持未修改。
+
+## 2026-06-05 FR24 App 内验证与会话自动同步
+
+已完成：
+
+- 按用户要求不再要求用户手动查找 FR24 Cookie；Query 页新增“打开 FR24 验证页”和“同步内置浏览器会话”。
+- Swift `MapWebView` 新增 App 内 FR24 验证浏览器：打开 `https://www.flightradar24.com/`，用户正常完成 FR24 / Cloudflare 验证后点击“同步会话”。
+- Swift 会自动读取 `WKWebsiteDataStore.default().httpCookieStore` 中 `flightradar24.com` 域 Cookie，并额外从当前 FR24 页面读取 `document.cookie` 与 `_frPl` local/session storage，合并后写入同一套 `FR24SessionStore`。
+- `FR24SessionStore` 统一管理 `navplanner.fr24.webCookie` 和 `navplanner.fr24.frPl`，`FR24Service`、Query 页高级手动兜底和 App 内浏览器同步共用同一套存取逻辑。
+- 模拟器调试确认：已同步 Cookie 包含 `cf_clearance`、`PHPSESSID`、`XSRF-TOKEN` 等，但 `_frPl` 缺失；使用该 Cookie 通过 Swift/Python 非浏览器请求 FR24 ZULS/ZUAL schedule 仍返回 403。
+- 基于上述调试，新增 `FR24BrowserFetch`：`FR24Service.webGet(...)` 会优先通过共享 WKWebView 浏览器上下文执行 FR24 schedule/playback `fetch(..., credentials: "include")`，Swift `URLSession` 只作为兜底；浏览器上下文失败会保留 FR24 降级提示。
+- 明确安全边界：仍不实现 Cloudflare 绕过、挑战破解、CAPTCHA 自动化或反检测逻辑；只复用用户在 App 内正常完成验证后的会话。
+- Query 页手动 Cookie / `_frPl` 输入折叠为“高级：手动会话配置（可选）”，主流程改为 App 内验证与自动同步。
+- `map.html` 中 `app.js` / `styles.css` 资源版本刷新为 `20260605-fr24-inapp-session`。
+- 同步更新 README、TODO、Docs/FR24Query.md、Docs/WebBridge.md、Docs/WebParity.md、Docs/Settings.md、Docs/AppShell.md 和本执行记录。
+
+已完成的本地校验：
+
+- `swift -frontend -parse NavPlanner/Features/Map/MapWebView.swift NavPlanner/Core/WebBridge/MapBridgeScriptHandler.swift NavPlanner/Core/WebBridge/NavPlannerSchemeHandler.swift NavPlanner/Core/PlannerCore/PlannerService.swift NavPlanner/App/AppEnvironment.swift` 成功。
+- `node --check NavPlanner/Resources/Web/app.js` 成功。
+- CSS 大括号配对检查成功。
+- HTML 静态本地化覆盖检查成功：126 个 `data-i18n*` 属性均有翻译键，402 个翻译键已被扫描。
+- ZULS/ZUAL FR24 验证：本地导航数据库解析 `ZULS -> LXA`、`ZUAL -> NGQ` 成功；无已同步 FR24 会话时，FR24 `airport.json` schedule 探测对 `LXA departures` 和 `NGQ arrivals` 均返回 HTTP 403，符合需要先在 App 内完成 FR24 / Cloudflare 验证并同步会话的降级路径。
+- `plutil -lint NavPlanner.xcodeproj/project.pbxproj NavPlanner/Support/PrivacyInfo.xcprivacy` 成功。
+- `git diff --check` 成功。
+- `python3 Tools/Parity/run_all_parity.py` 成功：RouteParity 22、TrackParity 7、ProcedureParity 6 均无差异。
+- XcodeBuildMCP `build_run_sim` 在 iPhone 17 Pro Max 成功，构建、安装、启动无 warning / error。
+- 启动截图确认地图、Plan 表单和底部 `计划 / 机场 / 查询 / 设置` 四标签正常：`/var/folders/7m/jzh_ftyn6_gfjz552yy612zr0000gn/T/screenshot_optimized_7e971695-e3a0-4ab5-afab-04d1f0ecc7fe.jpg`。
+- `git -C NavPlanner-web status --short` 无输出，参考项目保持未修改。
+
+## 2026-06-05 FR24 浏览器 fetch 调试修复
+
+已完成：
+
+- 按用户反馈重新打开 iPhone 17 Pro Max 模拟器并开启 FR24 专用系统日志。
+- 复现并定位“Cookie 已同步、`_frPl` 未同步，但查询仍显示 Cloudflare 验证页”的关键链路：App 内验证页同步成功，CookieStore 中包含 `cf_clearance`、`PHPSESSID`、`XSRF-TOKEN` 等 FR24 Cookie，但 `_frPl` 未由 FR24 页面下发。
+- 日志确认旧实现的 FR24 schedule 请求先进入 `FR24BrowserFetch`，但隐藏 WKWebView 使用 `evaluateJavaScript(async () => fetch(...))` 时返回“JavaScript 返回结果的类型不受支持”，随后回落到 `URLSession`，最终被 Cloudflare / 403 拦截。
+- 第一轮修复将 `FR24BrowserFetch.evaluateFetch(...)` 改为 `WKWebView.callAsyncJavaScript(...)`，由 WKWebView 等待浏览器上下文中的 `fetch(..., credentials: "include")` 完成；继续调试发现 WKWebView 跨域 `fetch api.flightradar24.com` 仍会返回 `Load failed`。
+- 最终修复改为共享隐藏 WKWebView 顶层导航到 FR24 API URL，并在 `didFinish` 后读取页面 JSON 文本；该路径复用用户已验证的 WKWebsiteDataStore Cookie，同时避开跨域 `fetch` 限制。
+- 收紧 `URLSession` 兜底策略：如果浏览器上下文已经明确返回 401 / 403、Cloudflare、HTML 或非 JSON 响应，直接向 Query 页暴露浏览器上下文的真实原因，不再用 URLSession 的 Cloudflare 结果覆盖。
+- 增加不含敏感值的 FR24 请求诊断日志：仅记录 path、当前 FR24 page URL、HTTP status、content type 和 body 类型，不输出 Cookie、`_frPl` 或响应正文。
+- 保持安全边界不变：App 不实现 Cloudflare 绕过、挑战破解、CAPTCHA 自动化或反检测逻辑，只复用用户在 App 内正常完成验证后的浏览器会话。
+- 同步更新 README、TODO、Docs/FR24Query.md、Docs/WebBridge.md 和本执行记录。
+
+已完成的本地校验：
+
+- `swift -frontend -parse NavPlanner/Core/WebBridge/NavPlannerSchemeHandler.swift NavPlanner/Core/PlannerCore/PlannerService.swift` 成功。
+- `node --check NavPlanner/Resources/Web/app.js` 成功。
+- CSS 大括号配对检查成功。
+- `plutil -lint NavPlanner.xcodeproj/project.pbxproj NavPlanner/Support/PrivacyInfo.xcprivacy` 成功。
+- `git diff --check` 成功。
+- `python3 Tools/Parity/run_all_parity.py` 成功：RouteParity 22、TrackParity 7、ProcedureParity 6 均无差异。
+- XcodeBuildMCP `build_run_sim` 在 iPhone 17 Pro Max 成功，构建、安装、启动无 warning / error。
+- `git -C NavPlanner-web status --short` 无输出，参考项目保持未修改。
+
+待继续验证：
+
+- ZULS/ZUAL 在线调试已复测：iPhone 17 Pro Max 模拟器中，FR24 `/common/v1/airport.json` 通过隐藏 WKWebView 顶层导航返回 `status=200 type=application/json body=json-object`；`LXA departures offset=24` 从 138 条 raw schedule 中命中 1-2 条 `ZULS -> ZUAL` 航班，Query 页显示 `TV9723`、`TV9943` 等航班卡片。
+- FR24 对更早的 `offset=48` schedule timestamp 返回 HTTP 400 JSON；已增加停止条件，较新窗口已有航班后遇到该 400 会停止继续向前扫描并返回已找到结果，避免 Query 页长时间等待。

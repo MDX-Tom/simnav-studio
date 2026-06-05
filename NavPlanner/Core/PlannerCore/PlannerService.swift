@@ -540,12 +540,20 @@ final class PlannerService: @unchecked Sendable {
         ]
     }
 
-    func fr24UnavailablePayload() -> [String: Any] {
-        [
-            "error": "FR24_API_TOKEN 未配置或当前 iOS 离线版本未启用在线 FR24。可粘贴轨迹点，使用本地 airway 图执行导入轨迹匹配。",
-            "offline": true,
-            "can_import_track": true
-        ]
+    func fr24RouteAirportsPayload(departure: String, arrival: String) -> [String: Any] {
+        let departureToken = departure.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let arrivalToken = arrival.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+
+        return dataStore.read(fallback: ["error": "本地导航数据库不可用。"]) { database in
+            guard let departurePoint = try lookupDepartureArrivalPoint(departureToken, database: database),
+                  let arrivalPoint = try lookupDepartureArrivalPoint(arrivalToken, database: database) else {
+                return ["error": "Departure or arrival could not be resolved."]
+            }
+            return [
+                "departure": try fr24AirportInfo(point: departurePoint, database: database),
+                "arrival": try fr24AirportInfo(point: arrivalPoint, database: database)
+            ]
+        }
     }
 
     func trackMatchPayload(departure: String, arrival: String, trackPoints: [[String: Any]]) -> [String: Any] {
@@ -3065,6 +3073,36 @@ final class PlannerService: @unchecked Sendable {
             }
         }
         return try lookupPoint(token, database: database)
+    }
+
+    private func fr24AirportInfo(point: [String: Any], database: SQLiteDatabase) throws -> [String: Any] {
+        let ident = navString(point["ident"]).uppercased()
+        let airport = try database.first(
+            sql: """
+            select airport_identifier, airport_name, iata_ata_designator,
+                   airport_ref_latitude, airport_ref_longitude
+            from tbl_airports
+            where airport_identifier = ?
+            limit 1
+            """,
+            arguments: [.text(ident)]
+        )
+        let iata = navString(airport?["iata_ata_designator"]).uppercased()
+        var codes = [ident]
+        if !iata.isEmpty, iata != ident {
+            codes.append(iata)
+        }
+        return [
+            "ident": ident,
+            "icao": ident,
+            "iata": iata,
+            "schedule_code": iata.isEmpty ? ident : iata,
+            "codes": codes,
+            "name": navString(airport?["airport_name"]),
+            "lat": navDouble(point["lat"]) ?? navDouble(airport?["airport_ref_latitude"]) ?? 0,
+            "lon": navDouble(point["lon"]) ?? navDouble(airport?["airport_ref_longitude"]) ?? 0,
+            "point": point
+        ]
     }
 
     private func lookupPoint(_ token: String, database: SQLiteDatabase) throws -> [String: Any]? {

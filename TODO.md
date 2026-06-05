@@ -2,7 +2,7 @@
 
 ## 下一阶段工作方向
 
-- [ ] 把 Web parity 从“核心 API 对齐”推进到“端到端行为对齐”：继续扩展 RouteParity / TrackParity / ProcedureParity 样例，补齐弹窗命中层、空白关闭、非规划航路点击、Procedure 表格细节和异常错误文案。
+- [ ] 把 Web parity 从“核心 API 对齐”推进到“端到端行为对齐”：继续扩展 RouteParity / TrackParity / ProcedureParity / FR24 真实轨迹样例，补齐弹窗命中层、空白关闭、非规划航路点击、Procedure 表格细节和异常错误文案。
 - [ ] 做地图性能专项：用真实数据和复杂视野验证 nav-overlay 双缓冲、矢量底图同步、缩放/拖动帧率、Procedure 大弧线绘制、低端 iPhone 和 iPad 分屏场景。
 - [ ] 做离线地图专项：验证 PMTiles / MBTiles / SQLite 大包导入、真实大范围下载、取消恢复、空间占用、缓存清理和断网可用性。
 - [ ] 做真机触控专项：覆盖 iPhone 竖屏/横屏、不同刘海/灵动岛机型、iPad 横竖屏、软键盘、Home Indicator、安全区和外接键盘。
@@ -16,8 +16,8 @@
 - [x] 创建 SwiftUI Universal App Xcode 工程。
 - [x] 建立 iPad 工作台布局和 iPhone 地图主屏 + Sheet 布局。
 - [x] 调整 iPhone 为上部 60% 地图、下部 40% 输入工作区。
-- [x] 为 iPhone 下部工作区加入 Plan / Airport / Settings 三标签，切换时保持地图实例和视角不变。
-- [x] 将 iPhone 底部标签中文化为 `计划 / 机场 / 设置`，加入图标和紧凑玻璃质感。
+- [x] 为 iPhone 下部工作区加入 Plan / Airport / Query / Settings 标签，切换时保持地图实例和视角不变。
+- [x] 将 iPhone 底部标签中文化为 `计划 / 机场 / 查询 / 设置`，加入图标和紧凑玻璃质感。
 - [x] 将 iPhone 底部标签改为独占底部行，避免覆盖 Settings 和表单内容。
 - [x] 将 iPhone 横屏切换为 iPad 横屏式左计划栏 / 中地图 / 右详情栏布局，同时保留 iPhone 竖屏紧凑字号和控件尺寸。
 - [x] 优化 iPhone 横屏安全区：SwiftUI 横向铺满 WebView，Web 层按刘海所在侧保留安全区，非刘海侧缩小留白以利用可用宽度；已修正 90° / 270° 映射反向导致留白出现在刘海对侧的问题，并按手动验证结果将非刘海侧白色边栏圆角固定为 50px，横屏上下边距统一为 8px，外侧文字做小幅避让；紧凑工作台断点扩展到 1024px，覆盖 iPhone 17 Pro Max 等更宽横屏机型。
@@ -42,7 +42,7 @@
 - [x] 增加 iPhone 软键盘可见性处理：键盘出现时将 Web 工作台缩到键盘上方可见高度，隐藏底部 Tab，并把当前输入面板留在键盘上方。
 - [x] 二次修复 iPhone 软键盘遮挡：保持 WKWebView 输入触控能力，用原生 `UIScrollViewDelegate` 锁定外层页面偏移，键盘态扩大输入面板占比并多次校正当前焦点控件。
 - [x] 修复 iPhone 防 WebKit 输入聚焦缩放后字号过大的回归：Plan 输入框实际字号保留 16px，视觉缩放回小屏紧凑尺寸，并按 `visualViewport` 硬边界校正焦点可见性。
-- [x] 对齐 iPhone `生成航路 / 重新计算 / 匹配轨迹` 三个按钮高度。
+- [x] 移除 Plan 中旧的“匹配轨迹”按钮，保留 `生成航路 / 重新计算` 两个规划按钮。
 - [x] 将 iPhone 底部三标签再贴近底部，输入区比例收紧到约 36%，释放更多地图高度。
 - [x] 为 iPhone 底部三标签恢复 Home Indicator 安全区留白，避免标签贴到系统横条。
 - [x] 略增 iPhone 地图 `+ / -` 缩放按钮之间的间距。
@@ -102,8 +102,13 @@
 - [x] 按 Web `_simplify_fr24_legs` / `_smooth_fr24_zigzag_legs` 迁移导入轨迹的轨迹误差约束、单航路替换保护和 zigzag 平滑清理。
 - [x] 按 Web `_match_procedures_for_enroute` 迁移导入轨迹匹配后的 SID / STAR / APPROACH 自动挂接、enroute 延展和 STAR 修剪。
 - [x] 新增 `Tools/TrackParity` 回归工具，自动编译 Swift 探针并与 Web 参考比较 7 个 track-match case，覆盖合成导入轨迹、Procedure 自动挂接、日期变更线和基础错误语义。
-- [x] `/api/route/fr24-match` 离线状态返回可触发 Web 粘贴轨迹降级流程的提示。
-- [ ] 继续按 Web 行为补齐 `/api/route/fr24-match` 在线增强和 track-match 的剩余错误提示细节。
+- [x] 新增 `查询` Tab：按起飞 / 到达机场查询 FR24 航线最新最多 10 个航班，提供航班历史、下载并绘制黑色 GPX 轨迹、匹配轨迹、清除绘制、还原匹配和删除下载缓存。
+- [x] `/api/fr24/search`、`history`、`download`、`cache/status`、`cache/clear`、`access/*` 已由 Swift 本地服务承接；`/api/route/fr24-match` 也会通过 FR24 playback 下载轨迹并复用本地 track-match。
+- [x] FR24 查询已切回 Web 逻辑：Query 页可在 App 内打开 FR24 验证页并自动同步内置浏览器 Cookie / `_frPl`，Swift 使用 `/common/v1/airport.json` schedule 插件和 `/common/v1/flight-playback.json` 查询 / 下载；手动 Cookie 输入只作为高级兜底。
+- [x] 修复 FR24 隐藏浏览器请求问题：先定位 `evaluateJavaScript(async...)` 未等待 Promise 和跨域 `fetch` 的 `Load failed`，再改为共享 WKWebView 顶层导航加载 FR24 API JSON；ZULS/ZUAL 查询已在模拟器显示航班卡片。
+- [x] 修正 FR24 会话缺失、Cloudflare 验证页、HTML 响应、401 / 403、轨迹点不足和网络失败时的 Query 页降级文案，不再指向已移除的旧入口，并压缩小屏 Query 查询按钮视觉重量。
+- [x] 将 `ZULS` / `ZUAL` 固定为 FR24 相关改动的验证航线；无已同步 FR24 会话时至少验证该航线的会话缺失 / Cloudflare 降级路径。
+- [ ] 继续补齐 FR24 在线增强的真实样例回归：会话缺失、Cloudflare 验证、轨迹不足、飞行中航班、跨日期变更线航班、噪声/稀疏轨迹和剩余错误提示细节。
 - [ ] 对齐 Web 弹窗、航路点命中层、非规划航路点击、空白关闭弹窗等交互细节。
 - [x] 将 Plan / Airport / Settings 常用路径的表单、按钮、空状态、机场详情、Procedure 和主要弹窗动作改为中文。
 - [x] 提高计划航路地图标签清晰度，并收紧 iPhone Airport 页面跑道行、通信频率和 Procedure chip 的字号与控件高度。
@@ -111,7 +116,8 @@
 - [x] 二次清理离线地图管理页中文化：资源类型、供应商类型/格式、下载进度、范围选择、离线地形状态提示和 Swift 下载状态中的可见英文已改为中文。
 - [x] 三次清理 Web UI 中文化：机场弹窗详情字段、机场跑道摘要、Procedure 明细阶段 / 特征、Settings 数据库状态、控制台状态和进近标题中的可见英文已改为中文。
 - [x] 四次清理 Web UI 中文化：统一本地化常见网络、API、航路解析、轨迹匹配、离线地图下载和 App 图标回调错误提示，避免状态栏直接显示 `Request failed`、`Failed to fetch`、`Waypoint not found` 等英文。
-- [x] 增加 Web 工作台多语言支持：默认跟随系统首选语言，并在 Settings 增加系统语言 / 简体中文 / English 选择；Plan、Airport、Settings、Procedure、地图弹窗、离线地图和常见状态/错误提示可即时切换，同时保持 `SID` / `STAR` / `APPROACH`、`DCT`、`IFR`、`AIRAC` 等标识英文。
+- [x] 增加 Web 工作台多语言支持：默认跟随系统首选语言，并在 Settings 增加系统语言 / 简体中文 / English 选择；Plan、Airport、Settings、Procedure、已打开的地图弹窗、离线地图和常见状态/错误提示可即时切换，同时保持 `SID` / `STAR` / `APPROACH`、`DCT`、`IFR`、`AIRAC` 等标识英文。
+- [x] 细化多语言即时刷新：语言切换时保留当前机场 / 航点 / 航路弹窗位置并重渲染弹窗内容，App 图标 Swift bridge 回调状态按当前语言显示。
 - [ ] 继续完成 Web UI 双语覆盖，优先清理底层服务透出的长错误、真实在线失败状态和更多控制台可见状态中的未本地化文案。
 
 ## 第三阶段：原生化与离线地图
