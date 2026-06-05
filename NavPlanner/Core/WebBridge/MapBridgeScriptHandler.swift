@@ -5,6 +5,8 @@ final class MapBridgeScriptHandler: NSObject, WKScriptMessageHandler {
     weak var environment: AppEnvironment?
     var selectDatabaseHandler: (() -> Void)?
     var setAppIconHandler: ((String) -> Void)?
+    var openFR24VerificationHandler: (() -> Void)?
+    var syncFR24SessionHandler: (() -> Void)?
 
     init(environment: AppEnvironment) {
         self.environment = environment
@@ -21,6 +23,14 @@ final class MapBridgeScriptHandler: NSObject, WKScriptMessageHandler {
             if type == "setAppIcon" {
                 let payload = event["payload"] as? [String: Any] ?? [:]
                 self?.setAppIconHandler?(navString(payload["iconChoice"]))
+                return
+            }
+            if type == "openFR24Verification" {
+                self?.openFR24VerificationHandler?()
+                return
+            }
+            if type == "syncFR24Session" {
+                self?.syncFR24SessionHandler?()
                 return
             }
             self?.environment?.handleMapEvent(event)

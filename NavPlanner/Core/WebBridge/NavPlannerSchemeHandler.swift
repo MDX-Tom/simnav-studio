@@ -1,6 +1,101 @@
 import Foundation
 import WebKit
 
+enum FR24SessionStore {
+    static let webCookieKey = "navplanner.fr24.webCookie"
+    static let frPlKey = "navplanner.fr24.frPl"
+
+    static func accessStatusPayload(userDefaults: UserDefaults = .standard) -> [String: Any] {
+        [
+            "cookie_configured": !storedWebCookie(userDefaults: userDefaults).isEmpty,
+            "frpl_configured": !storedFRPl(userDefaults: userDefaults).isEmpty,
+            "message": "FR24 网络访问状态已读取。"
+        ]
+    }
+
+    static func updateAccessPayload(
+        webCookie: String?,
+        frPl: String?,
+        userDefaults: UserDefaults = .standard
+    ) -> [String: Any] {
+        let cookie = sanitizedHeaderSecret(webCookie)
+        let token = sanitizedHeaderSecret(frPl)
+        setSecret(cookie, forKey: webCookieKey, userDefaults: userDefaults)
+        if !token.isEmpty {
+            setSecret(token, forKey: frPlKey, userDefaults: userDefaults)
+        } else if let embedded = cookieValue(named: "_frPl", in: cookie), !embedded.isEmpty {
+            setSecret(embedded, forKey: frPlKey, userDefaults: userDefaults)
+        }
+        var payload = accessStatusPayload(userDefaults: userDefaults)
+        payload["message"] = "已保存 FR24 Web 会话配置。"
+        return payload
+    }
+
+    static func clearAccessPayload(userDefaults: UserDefaults = .standard) -> [String: Any] {
+        userDefaults.removeObject(forKey: webCookieKey)
+        userDefaults.removeObject(forKey: frPlKey)
+        var payload = accessStatusPayload(userDefaults: userDefaults)
+        payload["message"] = "已清除 FR24 Web 会话配置。"
+        return payload
+    }
+
+    static func storedWebCookie(userDefaults: UserDefaults = .standard) -> String {
+        sanitizedHeaderSecret(userDefaults.string(forKey: webCookieKey))
+    }
+
+    static func storedFRPl(userDefaults: UserDefaults = .standard) -> String {
+        sanitizedHeaderSecret(userDefaults.string(forKey: frPlKey))
+    }
+
+    static func requestCookieHeader(userDefaults: UserDefaults = .standard) -> String? {
+        let cookie = storedWebCookie(userDefaults: userDefaults)
+        let frPl = storedFRPl(userDefaults: userDefaults)
+        if cookie.isEmpty {
+            return frPl.isEmpty ? nil : "_frPl=\(frPl)"
+        }
+        if !frPl.isEmpty, cookieValue(named: "_frPl", in: cookie) == nil {
+            return "\(cookie); _frPl=\(frPl)"
+        }
+        return cookie
+    }
+
+    static func cookieValue(named name: String, in cookie: String) -> String? {
+        let parts = cookie.split(separator: ";")
+        for part in parts {
+            let item = part.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let equals = item.firstIndex(of: "=") else { continue }
+            let key = item[..<equals].trimmingCharacters(in: .whitespacesAndNewlines)
+            if key == name {
+                let value = item[item.index(after: equals)...].trimmingCharacters(in: .whitespacesAndNewlines)
+                return value.isEmpty ? nil : String(value)
+            }
+        }
+        return nil
+    }
+
+    static func sanitizedHeaderSecret(_ value: String?) -> String {
+        var text = (value ?? "")
+            .replacingOccurrences(of: "\r", with: " ")
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\t", with: " ")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.lowercased().hasPrefix("cookie:") {
+            text = String(text.dropFirst("cookie:".count)).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return text
+    }
+
+    private static func setSecret(_ value: String?, forKey key: String, userDefaults: UserDefaults) {
+        let secret = sanitizedHeaderSecret(value)
+        if secret.isEmpty {
+            userDefaults.removeObject(forKey: key)
+        } else {
+            userDefaults.set(secret, forKey: key)
+        }
+    }
+}
+
 final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
     private struct SchemeResponse {
         let statusCode: Int
@@ -12,6 +107,7 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
     private let plannerService: PlannerService
     private let mapStore: MapStore
     private let onlineTileCache = OnlineTileCache()
+    private let fr24Service = FR24Service()
     private let workQueue = DispatchQueue(label: "com.navplanner.web-bridge", qos: .userInitiated)
     private let lock = NSLock()
     private var stoppedTasks = Set<ObjectIdentifier>()
@@ -96,6 +192,9 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
         if pathComponents.first == "offline-maps" {
             return offlineMapsResponse(for: url, request: request, path: path, pathComponents: pathComponents)
         }
+        if pathComponents.first == "fr24" {
+            return fr24Response(for: request, path: path, queryValue: queryValue)
+        }
         if path == "/header" {
             return jsonResponse(plannerService.headerPayload())
         }
@@ -140,7 +239,47 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
             return jsonResponse(payload, statusCode: payload["error"] == nil ? 200 : 400)
         }
         if path == "/route/fr24-match" {
-            return jsonResponse(plannerService.fr24UnavailablePayload(), statusCode: 503)
+            let departure = queryValue("departure", "")
+            let arrival = queryValue("arrival", "")
+            let routeAirports = plannerService.fr24RouteAirportsPayload(departure: departure, arrival: arrival)
+            if routeAirports["error"] != nil {
+                return jsonResponse(routeAirports, statusCode: 400)
+            }
+            let flightHint = queryValue("flight_id", "")
+            let downloadPayload: [String: Any]
+            if let hintedFlightID = FR24Service.extractFlightID(from: flightHint) {
+                downloadPayload = fr24Service.downloadPayload(flightID: hintedFlightID, flight: ["fr24_id": hintedFlightID])
+            } else {
+                let searchPayload = fr24Service.searchPayload(routeAirports: routeAirports, limit: 1)
+                guard (searchPayload["error"] as? String) == nil,
+                      let flights = searchPayload["flights"] as? [[String: Any]],
+                      let firstFlight = flights.first,
+                      let flightID = firstFlight["fr24_id"] as? String,
+                      !flightID.isEmpty else {
+                    return jsonResponse(searchPayload, statusCode: 503)
+                }
+                downloadPayload = fr24Service.downloadPayload(flightID: flightID, flight: firstFlight)
+            }
+            guard (downloadPayload["error"] as? String) == nil,
+                  let trackPoints = downloadPayload["track_points"] as? [[String: Any]] else {
+                return jsonResponse(downloadPayload, statusCode: 503)
+            }
+            var payload = plannerService.trackMatchPayload(
+                departure: departure,
+                arrival: arrival,
+                trackPoints: trackPoints
+            )
+            if payload["error"] != nil {
+                return jsonResponse(payload, statusCode: 400)
+            }
+            payload["message"] = "已从 FR24 Web 轨迹匹配本地航路。"
+            payload["source"] = [
+                "provider": "Flightradar24 web",
+                "flight": downloadPayload["flight"] ?? [:],
+                "track_points": trackPoints,
+                "cache": downloadPayload["cache"] ?? [:]
+            ]
+            return jsonResponse(payload)
         }
         if path == "/route/track-match" {
             guard request.httpMethod == "POST" else {
@@ -242,6 +381,74 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
             return pmtilesResponse(for: request, pathComponents: pathComponents)
         }
         return jsonResponse(["error": "Offline maps API not found"], statusCode: 404)
+    }
+
+    private func fr24Response(
+        for request: URLRequest,
+        path: String,
+        queryValue: (String, String) -> String
+    ) -> SchemeResponse {
+        if path == "/fr24/cache/status" {
+            return jsonResponse(fr24Service.cacheStatusPayload())
+        }
+        if path == "/fr24/cache/clear", request.httpMethod == "POST" {
+            return jsonResponse(fr24Service.clearCachePayload())
+        }
+        if path == "/fr24/access/status" {
+            return jsonResponse(fr24Service.accessStatusPayload())
+        }
+        if path == "/fr24/access/update", request.httpMethod == "POST" {
+            let body = jsonBody(from: request)
+            return jsonResponse(fr24Service.updateAccessPayload(
+                webCookie: body["web_cookie"] as? String,
+                frPl: body["frpl"] as? String
+            ))
+        }
+        if path == "/fr24/access/clear", request.httpMethod == "POST" {
+            return jsonResponse(fr24Service.clearAccessPayload())
+        }
+        if path == "/fr24/search" {
+            let routeAirports = plannerService.fr24RouteAirportsPayload(
+                departure: queryValue("departure", ""),
+                arrival: queryValue("arrival", "")
+            )
+            if routeAirports["error"] != nil {
+                return jsonResponse(routeAirports, statusCode: 400)
+            }
+            let payload = fr24Service.searchPayload(
+                routeAirports: routeAirports,
+                limit: Int(queryValue("limit", "10")) ?? 10
+            )
+            return jsonResponse(payload, statusCode: payload["error"] == nil ? 200 : 503)
+        }
+        if path == "/fr24/history" {
+            let routeAirports = plannerService.fr24RouteAirportsPayload(
+                departure: queryValue("departure", ""),
+                arrival: queryValue("arrival", "")
+            )
+            if routeAirports["error"] != nil {
+                return jsonResponse(routeAirports, statusCode: 400)
+            }
+            let payload = fr24Service.historyPayload(
+                routeAirports: routeAirports,
+                flightNumber: queryValue("flight", ""),
+                callsign: queryValue("callsign", ""),
+                limit: Int(queryValue("limit", "10")) ?? 10
+            )
+            return jsonResponse(payload, statusCode: payload["error"] == nil ? 200 : 503)
+        }
+        if path == "/fr24/download", request.httpMethod == "POST" {
+            let body = jsonBody(from: request)
+            let rawFlight = body["flight"] as? [String: Any] ?? [:]
+            let flightID = FR24Service.extractFlightID(from: body["flight_id"] as? String ?? "")
+                ?? FR24Service.extractFlightID(from: rawFlight["fr24_id"] as? String ?? "")
+            guard let flightID, !flightID.isEmpty else {
+                return jsonResponse(["error": "FR24 flightId missing."], statusCode: 400)
+            }
+            let payload = fr24Service.downloadPayload(flightID: flightID, flight: rawFlight)
+            return jsonResponse(payload, statusCode: payload["error"] == nil ? 200 : 503)
+        }
+        return jsonResponse(["error": "FR24 API not found"], statusCode: 404)
     }
 
     private func tileResponse(for url: URL) -> SchemeResponse {
@@ -447,6 +654,1238 @@ private extension NSLock {
         lock()
         defer { unlock() }
         return body()
+    }
+}
+
+private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
+    private struct BrowserError: LocalizedError {
+        let message: String
+        var errorDescription: String? { message }
+    }
+
+    static let shared = FR24BrowserFetch()
+    private var webView: WKWebView?
+    private struct PageResponse {
+        let status: Int
+        let contentType: String
+        let text: String
+    }
+    private var pendingPageCompletion: ((Result<PageResponse, Error>) -> Void)?
+    private var pendingPageURL: URL?
+    private var pendingPageStatus = 0
+    private var pendingPageContentType = ""
+
+    func performJSONRequest(path: String, params: [(String, String)]) throws -> [String: Any] {
+        guard var components = URLComponents(string: "https://api.flightradar24.com\(path)") else {
+            throw BrowserError(message: "FR24 web request failed.")
+        }
+        components.queryItems = params.map { URLQueryItem(name: $0.0, value: $0.1) }
+        guard let url = components.url else {
+            throw BrowserError(message: "FR24 web request failed.")
+        }
+
+        let semaphore = DispatchSemaphore(value: 0)
+        var output: Result<[String: Any], Error>?
+        DispatchQueue.main.async { [weak self] in
+            guard let self else {
+                output = .failure(BrowserError(message: "FR24 web request failed."))
+                semaphore.signal()
+                return
+            }
+            self.loadJSONPage(url: url) { result in
+                output = result.flatMap { page in
+                    Self.decodePageResponse(page, requestURL: url)
+                }
+                semaphore.signal()
+            }
+        }
+        if semaphore.wait(timeout: .now() + 28) == .timedOut {
+            throw BrowserError(message: "FR24 web request timed out.")
+        }
+        switch output {
+        case let .success(payload):
+            return payload
+        case let .failure(error):
+            throw error
+        case .none:
+            throw BrowserError(message: "FR24 web request failed.")
+        }
+    }
+
+    private func loadJSONPage(url: URL, completion: @escaping (Result<PageResponse, Error>) -> Void) {
+        guard pendingPageCompletion == nil else {
+            completion(.failure(BrowserError(message: "FR24 browser is already handling a web request.")))
+            return
+        }
+        let webView = ensureWebView()
+        pendingPageCompletion = completion
+        pendingPageURL = url
+        pendingPageStatus = 0
+        pendingPageContentType = ""
+        var request = URLRequest(url: url)
+        request.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
+        request.setValue("https://www.flightradar24.com/", forHTTPHeaderField: "Referer")
+        webView.load(request)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 24) { [weak self] in
+            guard let self,
+                  self.pendingPageCompletion != nil,
+                  self.pendingPageURL == url else {
+                return
+            }
+            self.finishPendingPage(.failure(BrowserError(message: "FR24 web request timed out.")))
+        }
+    }
+
+    private func ensureWebView() -> WKWebView {
+        if let webView {
+            return webView
+        }
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .default()
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.navigationDelegate = self
+        if #available(iOS 16.4, *) {
+            webView.isInspectable = true
+        }
+        self.webView = webView
+        return webView
+    }
+
+    private static func decodePageResponse(_ page: PageResponse, requestURL: URL) -> Result<[String: Any], Error> {
+        NSLog(
+            "NavPlanner FR24 browser load path=%@ status=%d type=%@ body=%@",
+            requestURL.path,
+            page.status,
+            page.contentType,
+            bodyKind(page.text)
+        )
+        if page.status == 401 || page.status == 403 {
+            return .failure(BrowserError(message: "FR24 web access was blocked. Open FR24 verification in Query, complete verification, then sync the session."))
+        }
+        guard page.status == 0 || (200..<300).contains(page.status) else {
+            return .failure(BrowserError(message: "FR24 web returned HTTP \(page.status)."))
+        }
+        if page.text.localizedCaseInsensitiveContains("cloudflare")
+            || page.text.localizedCaseInsensitiveContains("challenge-platform")
+            || page.text.localizedCaseInsensitiveContains("just a moment")
+            || page.text.localizedCaseInsensitiveContains("<html") {
+            return .failure(BrowserError(message: "FR24 web returned an HTML response."))
+        }
+        guard let bodyData = page.text.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any] else {
+            return .failure(BrowserError(message: "FR24 web response was not valid JSON."))
+        }
+        return .success(object)
+    }
+
+    private static func bodyKind(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return "empty"
+        }
+        if trimmed.localizedCaseInsensitiveContains("cloudflare")
+            || trimmed.localizedCaseInsensitiveContains("challenge-platform")
+            || trimmed.localizedCaseInsensitiveContains("just a moment") {
+            return "cloudflare"
+        }
+        if trimmed.localizedCaseInsensitiveContains("<html") {
+            return "html"
+        }
+        if trimmed.hasPrefix("{") {
+            return "json-object"
+        }
+        if trimmed.hasPrefix("[") {
+            return "json-array"
+        }
+        return "text"
+    }
+
+    func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+        if pendingPageCompletion != nil,
+           let response = navigationResponse.response as? HTTPURLResponse {
+            pendingPageStatus = response.statusCode
+            pendingPageContentType = response.mimeType ?? response.value(forHTTPHeaderField: "Content-Type") ?? ""
+        }
+        decisionHandler(.allow)
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if pendingPageCompletion != nil {
+            let script = "document.body ? (document.body.innerText || document.body.textContent || '') : (document.documentElement ? document.documentElement.innerText || document.documentElement.textContent || '' : '')"
+            webView.evaluateJavaScript(script) { [weak self] result, error in
+                guard let self else { return }
+                if let error {
+                    self.finishPendingPage(.failure(BrowserError(message: "FR24 web response could not be read: \(error.localizedDescription)")))
+                    return
+                }
+                self.finishPendingPage(.success(PageResponse(
+                    status: self.pendingPageStatus,
+                    contentType: self.pendingPageContentType,
+                    text: result as? String ?? ""
+                )))
+            }
+            return
+        }
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        if pendingPageCompletion != nil {
+            finishPendingPage(.failure(BrowserError(message: "FR24 web request failed: \(error.localizedDescription)")))
+        }
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        if pendingPageCompletion != nil {
+            finishPendingPage(.failure(BrowserError(message: "FR24 web request failed: \(error.localizedDescription)")))
+        }
+    }
+
+    private func finishPendingPage(_ result: Result<PageResponse, Error>) {
+        let completion = pendingPageCompletion
+        pendingPageCompletion = nil
+        pendingPageURL = nil
+        pendingPageStatus = 0
+        pendingPageContentType = ""
+        completion?(result)
+    }
+}
+
+private final class FR24Service {
+    private struct ServiceError: LocalizedError {
+        let message: String
+        var errorDescription: String? { message }
+    }
+
+    private let fileManager: FileManager
+    private let userDefaults: UserDefaults
+    private let rootDirectory: URL
+    private let session: URLSession
+    private let apiBaseURL = "https://api.flightradar24.com"
+    private let isoFormatter = ISO8601DateFormatter()
+
+    init(fileManager: FileManager = .default, userDefaults: UserDefaults = .standard) {
+        self.fileManager = fileManager
+        self.userDefaults = userDefaults
+        let cacheRoot = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
+            ?? fileManager.temporaryDirectory
+        self.rootDirectory = cacheRoot
+            .appendingPathComponent("NavPlanner", isDirectory: true)
+            .appendingPathComponent("FR24", isDirectory: true)
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 16
+        configuration.timeoutIntervalForResource = 22
+        configuration.httpMaximumConnectionsPerHost = 2
+        self.session = URLSession(configuration: configuration)
+
+        try? fileManager.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
+    }
+
+    static func extractFlightID(from text: String) -> String? {
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return nil }
+        for pattern in [
+            #"flightId=([0-9a-fA-F]{6,12})"#,
+            #"/flight/[^/#?\s]+#([0-9a-fA-F]{6,12})"#,
+            #"FR24[:\s]+([0-9a-fA-F]{6,12})"#,
+            #"^([0-9a-fA-F]{6,12})$"#
+        ] {
+            if let regex = try? NSRegularExpression(pattern: pattern),
+               let match = regex.firstMatch(in: value, range: NSRange(value.startIndex..., in: value)),
+               let range = Range(match.range(at: 1), in: value) {
+                return (String(value[range]).removingPercentEncoding ?? String(value[range])).lowercased()
+            }
+        }
+        return nil
+    }
+
+    func cacheStatusPayload() -> [String: Any] {
+        let usage = diskUsage()
+        return [
+            "root": rootDirectory.path,
+            "file_count": usage.files,
+            "size_bytes": usage.bytes,
+            "message": "FR24 轨迹缓存状态已读取。"
+        ]
+    }
+
+    func accessStatusPayload() -> [String: Any] {
+        FR24SessionStore.accessStatusPayload(userDefaults: userDefaults)
+    }
+
+    func updateAccessPayload(webCookie: String?, frPl: String?) -> [String: Any] {
+        FR24SessionStore.updateAccessPayload(
+            webCookie: webCookie,
+            frPl: frPl,
+            userDefaults: userDefaults
+        )
+    }
+
+    func clearAccessPayload() -> [String: Any] {
+        FR24SessionStore.clearAccessPayload(userDefaults: userDefaults)
+    }
+
+    func clearCachePayload() -> [String: Any] {
+        if let items = try? fileManager.contentsOfDirectory(
+            at: rootDirectory,
+            includingPropertiesForKeys: nil,
+            options: []
+        ) {
+            for item in items {
+                try? fileManager.removeItem(at: item)
+            }
+        }
+        try? fileManager.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
+        var payload = cacheStatusPayload()
+        payload["message"] = "已清理 FR24 轨迹缓存。"
+        return payload
+    }
+
+    func searchPayload(routeAirports: [String: Any], limit: Int) -> [String: Any] {
+        let clampedLimit = max(1, min(limit, 10))
+        do {
+            let flights = try routeFlights(
+                routeAirports: routeAirports,
+                limit: clampedLimit,
+                flightNumber: "",
+                callsign: "",
+                lookbackHours: 720
+            )
+            if flights.isEmpty {
+                return [
+                    "error": "FR24 web did not find recent flights for this route.",
+                    "flights": [],
+                    "cache": cacheStatusPayload(),
+                    "access": accessStatusPayload()
+                ]
+            }
+            return [
+                "route": routeAirports,
+                "flights": flights,
+                "cache": cacheStatusPayload(),
+                "access": accessStatusPayload(),
+                "message": "已读取 FR24 航线查询结果。"
+            ]
+        } catch {
+            return [
+                "error": error.localizedDescription,
+                "flights": [],
+                "cache": cacheStatusPayload(),
+                "access": accessStatusPayload()
+            ]
+        }
+    }
+
+    func historyPayload(
+        routeAirports: [String: Any],
+        flightNumber: String,
+        callsign: String,
+        limit: Int
+    ) -> [String: Any] {
+        let clampedLimit = max(1, min(limit, 12))
+        do {
+            let flights = try routeFlights(
+                routeAirports: routeAirports,
+                limit: clampedLimit,
+                flightNumber: flightNumber,
+                callsign: callsign,
+                lookbackHours: 1440
+            )
+            return [
+                "route": routeAirports,
+                "flights": flights,
+                "cache": cacheStatusPayload(),
+                "access": accessStatusPayload(),
+                "message": flights.isEmpty ? "未找到该航班号的 FR24 历史记录。" : "已读取 FR24 航班历史。"
+            ]
+        } catch {
+            return [
+                "error": error.localizedDescription,
+                "flights": [],
+                "cache": cacheStatusPayload(),
+                "access": accessStatusPayload()
+            ]
+        }
+    }
+
+    func downloadPayload(flightID: String, flight: [String: Any]) -> [String: Any] {
+        let normalizedID = sanitizeCacheKey(flightID)
+        guard !normalizedID.isEmpty else {
+            return ["error": "FR24 flightId missing.", "cache": cacheStatusPayload()]
+        }
+        if let cached = cachedDownloadPayload(cacheKey: normalizedID, flight: flight) {
+            return cached
+        }
+        do {
+            let playback = try webGet(path: "/common/v1/flight-playback.json", params: [
+                ("flightId", flightID),
+                ("timestamp", String(Int(Date().timeIntervalSince1970)))
+            ])
+            let trackPoints = extractPlaybackTrackPoints(playback)
+            guard trackPoints.count >= 2 else {
+                return [
+                    "error": "FR24 web playback did not return enough trajectory points.",
+                    "cache": cacheStatusPayload(),
+                    "access": accessStatusPayload()
+                ]
+            }
+            return try cacheDownloadResponse(
+                flightID: flightID,
+                cacheKey: normalizedID,
+                flight: flight,
+                playback: playback,
+                trackPoints: trackPoints,
+                cacheHit: false
+            )
+        } catch {
+            return [
+                "error": error.localizedDescription,
+                "cache": cacheStatusPayload(),
+                "access": accessStatusPayload()
+            ]
+        }
+    }
+
+    private func cacheDownloadResponse(
+        flightID: String,
+        cacheKey: String,
+        flight: [String: Any],
+        playback: [String: Any],
+        trackPoints: [[String: Any]],
+        cacheHit: Bool
+    ) throws -> [String: Any] {
+        let jsonURL = rootDirectory.appendingPathComponent("\(cacheKey).json")
+        let metaURL = rootDirectory.appendingPathComponent("\(cacheKey).meta.json")
+        let gpxURL = rootDirectory.appendingPathComponent("\(cacheKey).gpx")
+        let payload: [String: Any] = [
+            "flight": flight,
+            "track_points": trackPoints,
+            "playback": playback
+        ]
+        if let payloadData = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted]) {
+            try? payloadData.write(to: jsonURL, options: [.atomic])
+        }
+        let gpxText = gpxDocument(
+            flightID: flightID,
+            flight: flight,
+            trackPoints: trackPoints
+        )
+        try gpxText.data(using: .utf8)?.write(to: gpxURL, options: [.atomic])
+        var publicFlight = flight
+        publicFlight["fr24_id"] = flightID
+        let meta: [String: Any] = [
+            "flight": publicFlight,
+            "track_points": trackPoints,
+            "gpx_filename": gpxURL.lastPathComponent,
+            "gpx_path": gpxURL.path,
+            "json_filename": jsonURL.lastPathComponent,
+            "downloaded_at": Int(Date().timeIntervalSince1970)
+        ]
+        if let metaData = try? JSONSerialization.data(withJSONObject: meta, options: [.prettyPrinted]) {
+            try? metaData.write(to: metaURL, options: [.atomic])
+        }
+        return downloadResponse(
+            cacheKey: cacheKey,
+            flight: publicFlight,
+            trackPoints: trackPoints,
+            cacheHit: cacheHit
+        )
+    }
+
+    private func routeFlights(
+        routeAirports: [String: Any],
+        limit: Int,
+        flightNumber: String,
+        callsign: String,
+        lookbackHours: Int
+    ) throws -> [[String: Any]] {
+        guard let departure = routeAirports["departure"] as? [String: Any],
+              let arrival = routeAirports["arrival"] as? [String: Any] else {
+            throw serviceError("Departure or arrival could not be resolved.")
+        }
+        let departureCodes = Set(Self.stringArray(departure["codes"]).map { $0.uppercased() })
+        let arrivalCodes = Set(Self.stringArray(arrival["codes"]).map { $0.uppercased() })
+        let flightFilter = normalizedFlightToken(flightNumber)
+        let callsignFilter = normalizedFlightToken(callsign)
+        let departureScheduleCode = scheduleCode(for: departure)
+        let arrivalScheduleCode = scheduleCode(for: arrival)
+        let now = Date()
+        let stepHours = 24
+        var flights: [[String: Any]] = []
+        var seen = Set<String>()
+
+        for offsetHours in stride(from: 0, through: max(1, lookbackHours), by: stepHours) {
+            let timestamp = Int(now.addingTimeInterval(TimeInterval(-offsetHours * 3600)).timeIntervalSince1970)
+            var offsetHadSuccess = false
+            var offsetHadHTTP400 = false
+            for modeInfo in [
+                (mode: "departures", airportCode: departureScheduleCode),
+                (mode: "arrivals", airportCode: arrivalScheduleCode)
+            ] {
+                var params = [
+                    ("code", modeInfo.airportCode),
+                    ("plugin[]", "schedule"),
+                    ("plugin-setting[schedule][mode]", modeInfo.mode)
+                ]
+                if offsetHours == 0 {
+                    params.append(("page", "1"))
+                    params.append(("limit", "100"))
+                } else {
+                    params.append(("plugin-setting[schedule][timestamp]", String(timestamp)))
+                }
+                let payload: [String: Any]
+                do {
+                    payload = try webGet(path: "/common/v1/airport.json", params: params)
+                    offsetHadSuccess = true
+                } catch {
+                    if error.localizedDescription.contains("HTTP 400") {
+                        offsetHadHTTP400 = true
+                    }
+                    if offsetHours == 0, flights.isEmpty {
+                        throw error
+                    }
+                    continue
+                }
+                let rawFlights = extractScheduleFlights(payload)
+                var appendedFromPayload = 0
+                for rawFlight in rawFlights {
+                    var flight = normalizeOfficialFlight(rawFlight, departure: departure, arrival: arrival)
+                    if modeInfo.mode == "departures" {
+                        if Self.stringValue(flight["origin_icao"]).isEmpty {
+                            flight["origin_icao"] = Self.stringValue(departure["icao"])
+                        }
+                        if Self.stringValue(flight["origin_iata"]).isEmpty {
+                            flight["origin_iata"] = Self.stringValue(departure["iata"])
+                        }
+                    } else {
+                        if Self.stringValue(flight["dest_icao"]).isEmpty {
+                            flight["dest_icao"] = Self.stringValue(arrival["icao"])
+                        }
+                        if Self.stringValue(flight["dest_iata"]).isEmpty {
+                            flight["dest_iata"] = Self.stringValue(arrival["iata"])
+                        }
+                    }
+                    guard flightMatchesRoute(flight, departureCodes: departureCodes, arrivalCodes: arrivalCodes) else {
+                        continue
+                    }
+                    if !flightFilter.isEmpty || !callsignFilter.isEmpty {
+                        let number = normalizedFlightToken(Self.stringValue(flight["flight"]))
+                        let call = normalizedFlightToken(Self.stringValue(flight["callsign"]))
+                        if !flightFilter.isEmpty, number != flightFilter {
+                            continue
+                        }
+                        if flightFilter.isEmpty, !callsignFilter.isEmpty, call != callsignFilter {
+                            continue
+                        }
+                    }
+                    let identifier = Self.stringValue(flight["fr24_id"])
+                    let dedupeKey = identifier.isEmpty
+                        ? "\(Self.stringValue(flight["flight"]))|\(Self.stringValue(flight["callsign"]))|\(Self.intValue(flight["timestamp"]) ?? flights.count)"
+                        : identifier
+                    if seen.contains(dedupeKey) {
+                        continue
+                    }
+                    seen.insert(dedupeKey)
+                    flights.append(flight)
+                    appendedFromPayload += 1
+                    if flights.count >= limit {
+                        NSLog(
+                            "NavPlanner FR24 schedule code=%@ mode=%@ offset=%d raw=%d appended=%d total=%d",
+                            modeInfo.airportCode,
+                            modeInfo.mode,
+                            offsetHours,
+                            rawFlights.count,
+                            appendedFromPayload,
+                            flights.count
+                        )
+                        return sortedFlights(flights)
+                    }
+                }
+                NSLog(
+                    "NavPlanner FR24 schedule code=%@ mode=%@ offset=%d raw=%d appended=%d total=%d",
+                    modeInfo.airportCode,
+                    modeInfo.mode,
+                    offsetHours,
+                    rawFlights.count,
+                    appendedFromPayload,
+                    flights.count
+                )
+            }
+            if offsetHours > 0, !offsetHadSuccess, offsetHadHTTP400 {
+                NSLog(
+                    "NavPlanner FR24 schedule stop offset=%d reason=http400 total=%d",
+                    offsetHours,
+                    flights.count
+                )
+                break
+            }
+        }
+        return sortedFlights(flights)
+    }
+
+    private func scheduleCode(for airport: [String: Any]) -> String {
+        let schedule = Self.stringValue(airport["schedule_code"])
+        if !schedule.isEmpty {
+            return schedule
+        }
+        let iata = Self.stringValue(airport["iata"])
+        if !iata.isEmpty {
+            return iata
+        }
+        let ident = Self.stringValue(airport["ident"])
+        if !ident.isEmpty {
+            return ident
+        }
+        return Self.stringValue(airport["icao"])
+    }
+
+    private func extractScheduleFlights(_ payload: [String: Any]) -> [[String: Any]] {
+        var flights: [[String: Any]] = []
+
+        func visit(_ item: Any) {
+            if let dictionary = item as? [String: Any] {
+                let flightID = Self.stringValue(Self.firstDeepValue(dictionary, paths: [
+                    ["flight", "identification", "id"],
+                    ["identification", "id"]
+                ]))
+                if !flightID.isEmpty {
+                    flights.append(dictionary)
+                }
+                dictionary.values.forEach(visit)
+            } else if let array = item as? [Any] {
+                array.forEach(visit)
+            }
+        }
+
+        visit(payload)
+        return flights
+    }
+
+    private func normalizeOfficialFlight(
+        _ rawFlight: [String: Any],
+        departure: [String: Any],
+        arrival: [String: Any]
+    ) -> [String: Any] {
+        let scheduledDeparture = Self.timestampValue(Self.firstDeepValue(rawFlight, paths: [
+            ["flight", "time", "scheduled", "departure"],
+            ["scheduled_out"],
+            ["scheduled_departure"],
+            ["scheduled_departure_time"],
+            ["datetime_scheduled_departure"],
+            ["time", "scheduled", "departure"]
+        ]))
+        let scheduledArrival = Self.timestampValue(Self.firstDeepValue(rawFlight, paths: [
+            ["flight", "time", "scheduled", "arrival"],
+            ["scheduled_in"],
+            ["scheduled_arrival"],
+            ["scheduled_arrival_time"],
+            ["datetime_scheduled_arrival"],
+            ["time", "scheduled", "arrival"]
+        ]))
+        let actualDeparture = Self.timestampValue(Self.firstDeepValue(rawFlight, paths: [
+            ["flight", "time", "real", "departure"],
+            ["actual_out"],
+            ["actual_off"],
+            ["actual_departure"],
+            ["actual_departure_time"],
+            ["datetime_takeoff"],
+            ["datetime_real_departure"],
+            ["time", "real", "departure"],
+            ["time", "actual", "departure"]
+        ]))
+        let actualArrival = Self.timestampValue(Self.firstDeepValue(rawFlight, paths: [
+            ["flight", "time", "real", "arrival"],
+            ["actual_on"],
+            ["actual_in"],
+            ["actual_arrival"],
+            ["actual_arrival_time"],
+            ["datetime_landed"],
+            ["datetime_real_arrival"],
+            ["time", "real", "arrival"],
+            ["time", "actual", "arrival"]
+        ]))
+        let estimatedDeparture = Self.timestampValue(Self.firstDeepValue(rawFlight, paths: [
+            ["flight", "time", "estimated", "departure"],
+            ["estimated_out"],
+            ["estimated_off"],
+            ["estimated_departure"],
+            ["estimated_departure_time"],
+            ["datetime_estimated_departure"],
+            ["time", "estimated", "departure"]
+        ]))
+        let estimatedArrival = Self.timestampValue(Self.firstDeepValue(rawFlight, paths: [
+            ["flight", "time", "estimated", "arrival"],
+            ["estimated_on"],
+            ["estimated_in"],
+            ["estimated_arrival"],
+            ["estimated_arrival_time"],
+            ["datetime_estimated_arrival"],
+            ["time", "estimated", "arrival"]
+        ]))
+        let originICAO = Self.stringValue(Self.firstDeepValue(rawFlight, paths: [
+            ["flight", "airport", "origin", "code", "icao"],
+            ["origin", "code"],
+            ["origin", "icao"],
+            ["orig_icao"],
+            ["origin_icao"],
+            ["departure_icao"],
+            ["airport", "origin", "code", "icao"]
+        ]))
+        let originIATA = Self.stringValue(Self.firstDeepValue(rawFlight, paths: [
+            ["flight", "airport", "origin", "code", "iata"],
+            ["origin", "alternate_ident"],
+            ["origin", "iata"],
+            ["orig_iata"],
+            ["origin_iata"],
+            ["departure_iata"],
+            ["airport", "origin", "code", "iata"]
+        ]))
+        let destICAO = Self.stringValue(Self.firstDeepValue(rawFlight, paths: [
+            ["flight", "airport", "destination", "code", "icao"],
+            ["destination", "code"],
+            ["destination", "icao"],
+            ["dest_icao"],
+            ["destination_icao"],
+            ["arrival_icao"],
+            ["airport", "destination", "code", "icao"]
+        ]))
+        let destIATA = Self.stringValue(Self.firstDeepValue(rawFlight, paths: [
+            ["flight", "airport", "destination", "code", "iata"],
+            ["destination", "alternate_ident"],
+            ["destination", "iata"],
+            ["dest_iata"],
+            ["destination_iata"],
+            ["arrival_iata"],
+            ["airport", "destination", "code", "iata"]
+        ]))
+        let duration = positiveDuration(
+            departure: actualDeparture ?? scheduledDeparture,
+            arrival: actualArrival ?? scheduledArrival
+        )
+        var publicFlight: [String: Any] = [
+            "fr24_id": Self.stringValue(Self.firstDeepValue(rawFlight, paths: [
+                ["flight", "identification", "id"],
+                ["identification", "id"],
+                ["fr24_id"],
+                ["flight_id"],
+                ["id"],
+                ["ident"]
+            ])),
+            "flight": Self.stringValue(Self.firstDeepValue(rawFlight, paths: [
+                ["flight", "identification", "number", "default"],
+                ["ident"],
+                ["flight"],
+                ["flight_number"],
+                ["number"],
+                ["identification", "number", "default"]
+            ])),
+            "callsign": Self.stringValue(Self.firstDeepValue(rawFlight, paths: [
+                ["flight", "identification", "callsign"],
+                ["ident"],
+                ["callsign"],
+                ["identification", "callsign"]
+            ])),
+            "airline": Self.stringValue(Self.firstDeepValue(rawFlight, paths: [
+                ["flight", "airline", "name"],
+                ["airline", "name"],
+                ["operator"],
+                ["operator_icao"],
+                ["operator_iata"],
+                ["airline"],
+                ["airline_name"],
+                ["flight", "airline", "name"]
+            ])),
+            "aircraft": Self.stringValue(Self.firstDeepValue(rawFlight, paths: [
+                ["flight", "aircraft", "model", "code"],
+                ["flight", "aircraft", "model", "text"],
+                ["aircraft_type"],
+                ["aircraft"],
+                ["aircraft_code"],
+                ["type"],
+                ["model"],
+                ["aircraft", "model", "code"]
+            ])),
+            "aircraft_registration": Self.stringValue(Self.firstDeepValue(rawFlight, paths: [
+                ["flight", "aircraft", "identification", "registration"],
+                ["flight", "aircraft", "registration"],
+                ["registration"],
+                ["reg"],
+                ["aircraft_registration"],
+                ["aircraft", "registration"]
+            ])),
+            "origin_icao": originICAO.isEmpty ? Self.stringValue(departure["icao"]) : originICAO,
+            "origin_iata": originIATA.isEmpty ? Self.stringValue(departure["iata"]) : originIATA,
+            "origin_name": Self.stringValue(Self.firstDeepValue(rawFlight, paths: [
+                ["flight", "airport", "origin", "name"],
+                ["origin", "name"],
+                ["origin_name"],
+                ["departure_name"],
+                ["airport", "origin", "name"]
+            ])),
+            "dest_icao": destICAO.isEmpty ? Self.stringValue(arrival["icao"]) : destICAO,
+            "dest_iata": destIATA.isEmpty ? Self.stringValue(arrival["iata"]) : destIATA,
+            "dest_name": Self.stringValue(Self.firstDeepValue(rawFlight, paths: [
+                ["flight", "airport", "destination", "name"],
+                ["destination", "name"],
+                ["dest_name"],
+                ["destination_name"],
+                ["arrival_name"],
+                ["airport", "destination", "name"]
+            ])),
+            "timestamp": actualDeparture ?? scheduledDeparture ?? actualArrival ?? scheduledArrival ?? 0,
+            "source_provider": "Flightradar24 web"
+        ]
+        publicFlight["scheduled_departure"] = scheduledDeparture ?? NSNull()
+        publicFlight["scheduled_arrival"] = scheduledArrival ?? NSNull()
+        publicFlight["actual_departure"] = actualDeparture ?? NSNull()
+        publicFlight["actual_arrival"] = actualArrival ?? NSNull()
+        publicFlight["estimated_departure"] = estimatedDeparture ?? NSNull()
+        publicFlight["estimated_arrival"] = estimatedArrival ?? NSNull()
+        publicFlight["duration_seconds"] = duration ?? NSNull()
+        return publicFlight
+    }
+
+    private func sortedFlights(_ flights: [[String: Any]]) -> [[String: Any]] {
+        flights.sorted {
+            (Self.intValue($0["timestamp"]) ?? 0) > (Self.intValue($1["timestamp"]) ?? 0)
+        }
+    }
+
+    private func serviceError(_ message: String) -> ServiceError {
+        ServiceError(message: message)
+    }
+
+    private func flightMatchesRoute(
+        _ flight: [String: Any],
+        departureCodes: Set<String>,
+        arrivalCodes: Set<String>
+    ) -> Bool {
+        let originCodes = [
+            Self.stringValue(flight["origin_icao"]).uppercased(),
+            Self.stringValue(flight["origin_iata"]).uppercased()
+        ].filter { !$0.isEmpty }
+        let destCodes = [
+            Self.stringValue(flight["dest_icao"]).uppercased(),
+            Self.stringValue(flight["dest_iata"]).uppercased()
+        ].filter { !$0.isEmpty }
+        return !departureCodes.intersection(originCodes).isEmpty
+            && !arrivalCodes.intersection(destCodes).isEmpty
+    }
+
+    private func webGet(path: String, params: [(String, String)]) throws -> [String: Any] {
+        do {
+            return try FR24BrowserFetch.shared.performJSONRequest(path: path, params: params)
+        } catch {
+            NSLog("NavPlanner FR24 browser request error path=%@ error=%@", path, error.localizedDescription)
+            if Self.shouldSurfaceBrowserRequestError(error.localizedDescription) {
+                throw serviceError(error.localizedDescription)
+            }
+        }
+
+        guard var components = URLComponents(string: "\(apiBaseURL)\(path)") else {
+            throw serviceError("FR24 web request failed.")
+        }
+        components.queryItems = params.map { URLQueryItem(name: $0.0, value: $0.1) }
+        guard let url = components.url else {
+            throw serviceError("FR24 web request failed.")
+        }
+        var request = URLRequest(url: url)
+        request.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
+        request.setValue("https://www.flightradar24.com", forHTTPHeaderField: "Origin")
+        request.setValue("https://www.flightradar24.com/", forHTTPHeaderField: "Referer")
+        request.setValue(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123 Safari/537.36",
+            forHTTPHeaderField: "User-Agent"
+        )
+        if let cookie = FR24SessionStore.requestCookieHeader(userDefaults: userDefaults), !cookie.isEmpty {
+            request.setValue(cookie, forHTTPHeaderField: "Cookie")
+        }
+        return try performJSONRequest(request)
+    }
+
+    private static func shouldSurfaceBrowserRequestError(_ message: String) -> Bool {
+        let lowercased = message.lowercased()
+        return lowercased.contains("blocked")
+            || lowercased.contains("cloudflare")
+            || lowercased.contains("html response")
+            || lowercased.contains("returned http")
+            || lowercased.contains("not valid json")
+    }
+
+    private func performJSONRequest(_ request: URLRequest) throws -> [String: Any] {
+        let semaphore = DispatchSemaphore(value: 0)
+        var outputData: Data?
+        var outputResponse: URLResponse?
+        var outputError: Error?
+        let task = session.dataTask(with: request) { data, response, error in
+            outputData = data
+            outputResponse = response
+            outputError = error
+            semaphore.signal()
+        }
+        task.resume()
+        if semaphore.wait(timeout: .now() + 22) == .timedOut {
+            task.cancel()
+            throw serviceError("FR24 web request timed out.")
+        }
+        if let outputError {
+            throw serviceError("FR24 web request failed: \(outputError.localizedDescription)")
+        }
+        let httpResponse = outputResponse as? HTTPURLResponse
+        let statusCode = httpResponse?.statusCode ?? 0
+        let data = outputData ?? Data()
+        if Self.isCloudflareChallenge(data: data, response: httpResponse) {
+            throw serviceError("FR24 web access was blocked by Cloudflare verification.")
+        }
+        if statusCode == 401 || statusCode == 403 {
+            throw serviceError(Self.fr24HTTPErrorMessage(statusCode: statusCode, data: data))
+        }
+        guard (200..<300).contains(statusCode) else {
+            throw serviceError(Self.fr24HTTPErrorMessage(statusCode: statusCode, data: data))
+        }
+        if let text = String(data: data.prefix(400), encoding: .utf8),
+           text.localizedCaseInsensitiveContains("just a moment")
+            || text.localizedCaseInsensitiveContains("cloudflare")
+            || text.localizedCaseInsensitiveContains("<html") {
+            throw serviceError("FR24 web returned an HTML response.")
+        }
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw serviceError("FR24 web response was not valid JSON.")
+        }
+        return object
+    }
+
+    private static func fr24HTTPErrorMessage(statusCode: Int, data: Data) -> String {
+        if statusCode == 401 || statusCode == 403 {
+            return "FR24 web access was blocked. Open FR24 verification in Query, complete verification, then sync the session."
+        }
+        let summary: String
+        if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            summary = stringValue(object["message"]).isEmpty
+                ? (stringValue(object["error"]).isEmpty ? stringValue(object["detail"]) : stringValue(object["error"]))
+                : stringValue(object["message"])
+        } else {
+            summary = String(data: data, encoding: .utf8)?
+                .replacingOccurrences(of: #"<[^>]+>"#, with: " ", options: .regularExpression)
+                .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        }
+        if summary.isEmpty {
+            return "FR24 web returned HTTP \(statusCode)."
+        }
+        return "FR24 web returned HTTP \(statusCode): \(String(summary.prefix(180)))."
+    }
+
+    private static func isCloudflareChallenge(data: Data, response: HTTPURLResponse?) -> Bool {
+        let mitigated = response?.value(forHTTPHeaderField: "cf-mitigated")?.lowercased() == "challenge"
+        guard let text = String(data: data.prefix(1200), encoding: .utf8) else {
+            return mitigated
+        }
+        return mitigated
+            || text.localizedCaseInsensitiveContains("cloudflare")
+            || text.localizedCaseInsensitiveContains("challenge-platform")
+            || text.localizedCaseInsensitiveContains("just a moment")
+    }
+
+    private func extractPlaybackTrackPoints(_ payload: [String: Any]) -> [[String: Any]] {
+        var candidateTracks: [[[String: Any]]] = []
+
+        func normalizedTrack(_ items: [Any]) -> [[String: Any]] {
+            items.compactMap { item in
+                if let dictionary = item as? [String: Any] {
+                    let lat = Self.doubleValue(dictionary["lat"])
+                        ?? Self.doubleValue(dictionary["latitude"])
+                        ?? Self.doubleValue(Self.deepValue(dictionary, path: ["position", "lat"]))
+                    let lon = Self.doubleValue(dictionary["lon"])
+                        ?? Self.doubleValue(dictionary["lng"])
+                        ?? Self.doubleValue(dictionary["longitude"])
+                        ?? Self.doubleValue(Self.deepValue(dictionary, path: ["position", "lng"]))
+                        ?? Self.doubleValue(Self.deepValue(dictionary, path: ["position", "lon"]))
+                    guard let lat, let lon, lat.isFinite, lon.isFinite else {
+                        return nil
+                    }
+                    var point: [String: Any] = [
+                        "lat": lat,
+                        "lon": lon
+                    ]
+                    if let timestamp = Self.timestampValue(dictionary["timestamp"])
+                        ?? Self.timestampValue(dictionary["ts"])
+                        ?? Self.timestampValue(dictionary["time"]) {
+                        point["timestamp"] = timestamp
+                    }
+                    if let altitude = Self.intValue(dictionary["altitude"])
+                        ?? Self.intValue(dictionary["alt"])
+                        ?? Self.intValue(Self.deepValue(dictionary, path: ["altitude", "feet"]))
+                        ?? Self.intValue(Self.deepValue(dictionary, path: ["altitude", "meters"])) {
+                        point["altitude"] = altitude
+                    }
+                    return point
+                }
+                if let array = item as? [Any], array.count >= 3 {
+                    let timestamp = Self.intValue(array[0])
+                    let lat = Self.doubleValue(array[1])
+                    let lon = Self.doubleValue(array[2])
+                    guard let lat, let lon, lat.isFinite, lon.isFinite, abs(lat) <= 90, abs(lon) <= 360 else {
+                        return nil
+                    }
+                    var point: [String: Any] = ["lat": lat, "lon": lon]
+                    if let timestamp {
+                        point["timestamp"] = timestamp
+                    }
+                    return point
+                }
+                return nil
+            }
+        }
+
+        func visit(_ item: Any) {
+            if let array = item as? [Any] {
+                let points = normalizedTrack(array)
+                if points.count >= 2 {
+                    candidateTracks.append(points)
+                }
+                array.forEach(visit)
+            } else if let dictionary = item as? [String: Any] {
+                dictionary.values.forEach(visit)
+            }
+        }
+
+        visit(payload)
+        return candidateTracks.max { $0.count < $1.count } ?? []
+    }
+
+    private func cachedDownloadPayload(cacheKey: String, flight: [String: Any]) -> [String: Any]? {
+        let metaURL = rootDirectory.appendingPathComponent("\(cacheKey).meta.json")
+        guard let data = try? Data(contentsOf: metaURL),
+              let meta = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let trackPoints = meta["track_points"] as? [[String: Any]],
+              trackPoints.count >= 2 else {
+            return nil
+        }
+        let cachedFlight = (meta["flight"] as? [String: Any]) ?? flight
+        return downloadResponse(
+            cacheKey: cacheKey,
+            flight: cachedFlight,
+            trackPoints: trackPoints,
+            cacheHit: true
+        )
+    }
+
+    private func downloadResponse(
+        cacheKey: String,
+        flight: [String: Any],
+        trackPoints: [[String: Any]],
+        cacheHit: Bool
+    ) -> [String: Any] {
+        let gpxURL = rootDirectory.appendingPathComponent("\(cacheKey).gpx")
+        return [
+            "flight": flight,
+            "track_points": trackPoints,
+            "track_point_count": trackPoints.count,
+            "cache_key": cacheKey,
+            "gpx_filename": gpxURL.lastPathComponent,
+            "gpx_path": gpxURL.path,
+            "cache_hit": cacheHit,
+            "cache": cacheStatusPayload(),
+            "access": accessStatusPayload(),
+            "message": cacheHit ? "已读取缓存的 FR24 GPX 轨迹。" : "已下载并缓存 FR24 GPX 轨迹。"
+        ]
+    }
+
+    private func gpxDocument(
+        flightID: String,
+        flight: [String: Any],
+        trackPoints: [[String: Any]]
+    ) -> String {
+        let title = [
+            Self.stringValue(flight["flight"]),
+            Self.stringValue(flight["origin_icao"]).isEmpty ? Self.stringValue(flight["origin_iata"]) : Self.stringValue(flight["origin_icao"]),
+            Self.stringValue(flight["dest_icao"]).isEmpty ? Self.stringValue(flight["dest_iata"]) : Self.stringValue(flight["dest_icao"])
+        ].filter { !$0.isEmpty }.joined(separator: " ")
+        let name = title.isEmpty ? "FR24 \(flightID)" : title
+        let body = trackPoints.map { point -> String in
+            let lat = Self.doubleValue(point["lat"]) ?? 0
+            let lon = Self.doubleValue(point["lon"]) ?? 0
+            let time = Self.intValue(point["timestamp"]).map { normalizedTimestamp($0) }
+            return """
+            <trkpt lat="\(lat)" lon="\(lon)">\(time.map { "<time>\(xmlEscape(isoFormatter.string(from: Date(timeIntervalSince1970: TimeInterval($0)))))</time>" } ?? "")</trkpt>
+            """
+        }.joined(separator: "\n")
+        return """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <gpx version="1.1" creator="NavPlanner" xmlns="http://www.topografix.com/GPX/1/1">
+          <trk>
+            <name>\(xmlEscape(name))</name>
+            <trkseg>
+        \(body)
+            </trkseg>
+          </trk>
+        </gpx>
+        """
+    }
+
+    private func diskUsage() -> (files: Int, bytes: Int64) {
+        guard let enumerator = fileManager.enumerator(
+            at: rootDirectory,
+            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return (0, 0)
+        }
+        var files = 0
+        var bytes: Int64 = 0
+        for case let url as URL in enumerator {
+            let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+            guard values?.isRegularFile == true else { continue }
+            files += 1
+            bytes += Int64(values?.fileSize ?? 0)
+        }
+        return (files, bytes)
+    }
+
+    private func sanitizeCacheKey(_ value: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+        var output = ""
+        for scalar in value.lowercased().unicodeScalars {
+            output += allowed.contains(scalar) ? String(scalar) : "-"
+        }
+        return output
+    }
+
+    private func normalizedFlightToken(_ value: String) -> String {
+        value.uppercased().filter { $0.isLetter || $0.isNumber }
+    }
+
+    private func positiveDuration(departure: Int?, arrival: Int?) -> Int? {
+        guard let departure, let arrival else { return nil }
+        let normalizedDeparture = normalizedTimestamp(departure)
+        let normalizedArrival = normalizedTimestamp(arrival)
+        let duration = normalizedArrival - normalizedDeparture
+        return duration > 0 && duration < 172800 ? duration : nil
+    }
+
+    private func normalizedTimestamp(_ value: Int) -> Int {
+        value > 1_000_000_000_000 ? value / 1000 : value
+    }
+
+    private func xmlEscape(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&apos;")
+    }
+
+    private static func firstDeepValue(_ dictionary: [String: Any], paths: [[String]]) -> Any? {
+        for path in paths {
+            if let value = deepValue(dictionary, path: path),
+               !stringValue(value).isEmpty || intValue(value) != nil || doubleValue(value) != nil {
+                return value
+            }
+        }
+        return nil
+    }
+
+    private static func deepValue(_ dictionary: [String: Any], path: [String]) -> Any? {
+        var cursor: Any? = dictionary
+        for key in path {
+            guard let object = cursor as? [String: Any], object.keys.contains(key) else {
+                return nil
+            }
+            cursor = object[key]
+        }
+        return cursor
+    }
+
+    private static func stringArray(_ value: Any?) -> [String] {
+        if let array = value as? [String] {
+            return array.filter { !$0.isEmpty }
+        }
+        if let array = value as? [Any] {
+            return array.map(stringValue).filter { !$0.isEmpty }
+        }
+        let single = stringValue(value)
+        return single.isEmpty ? [] : [single]
+    }
+
+    private static func urlPathComponent(_ value: String) -> String {
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._~")
+        return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
+    }
+
+    private static func stringValue(_ value: Any?) -> String {
+        switch value {
+        case let value as String:
+            return value.trimmingCharacters(in: .whitespacesAndNewlines)
+        case let value as NSNumber:
+            return value.stringValue
+        case let value as Int:
+            return String(value)
+        case let value as Double:
+            return String(value)
+        case is NSNull, nil:
+            return ""
+        default:
+            return String(describing: value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    private static func timestampValue(_ value: Any?) -> Int? {
+        if let number = intValue(value) {
+            return number > 1_000_000_000_000 ? number / 1000 : number
+        }
+        let text = stringValue(value)
+        guard !text.isEmpty else { return nil }
+        let iso = ISO8601DateFormatter()
+        if let date = iso.date(from: text) {
+            return Int(date.timeIntervalSince1970)
+        }
+        let fallback = DateFormatter()
+        fallback.locale = Locale(identifier: "en_US_POSIX")
+        fallback.timeZone = TimeZone(secondsFromGMT: 0)
+        for pattern in ["yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd'T'HH:mm:ss"] {
+            fallback.dateFormat = pattern
+            if let date = fallback.date(from: text) {
+                return Int(date.timeIntervalSince1970)
+            }
+        }
+        return nil
+    }
+
+    private static func intValue(_ value: Any?) -> Int? {
+        switch value {
+        case let value as Int:
+            return value
+        case let value as NSNumber:
+            return value.intValue
+        case let value as Double where value.isFinite:
+            return Int(value)
+        case let value as String:
+            guard let number = Double(value.trimmingCharacters(in: .whitespacesAndNewlines)),
+                  number.isFinite else {
+                return nil
+            }
+            return Int(number)
+        default:
+            return nil
+        }
+    }
+
+    private static func doubleValue(_ value: Any?) -> Double? {
+        switch value {
+        case let value as Double:
+            return value
+        case let value as Int:
+            return Double(value)
+        case let value as NSNumber:
+            return value.doubleValue
+        case let value as String:
+            return Double(value.trimmingCharacters(in: .whitespacesAndNewlines))
+        default:
+            return nil
+        }
     }
 }
 

@@ -45,7 +45,7 @@
     </script>
     <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
     <link rel="stylesheet" href="/vendor/maplibre-gl/maplibre-gl.css" />
-    <link rel="stylesheet" href="/styles.css?v=20260604-language-settings" />
+    <link rel="stylesheet" href="/styles.css?v=20260605-fr24-inapp-session" />
   </head>
   <body data-mobile-tab="plan">
     <div class="shell">
@@ -95,7 +95,6 @@
           <div class="button-row">
             <button id="planButton" class="primary-button" data-i18n="plan.buildRoute">生成航路</button>
             <button id="recalculateButton" class="ghost-button" data-i18n="plan.recalculate">重新计算</button>
-            <button id="fr24MatchButton" class="ghost-button" data-i18n="plan.matchTrack">匹配轨迹</button>
           </div>
           <button id="stopRequestButton" class="stop-button hidden" type="button" disabled data-i18n="plan.stopTask">停止当前任务</button>
           <div class="helper-text" data-i18n="plan.autoRouteHint">航路留空时，会从本地 `tbl_enroute_airways` 自动规划最近 IFR 航路。</div>
@@ -137,8 +136,9 @@
       </button>
 
       <aside class="panel detail-panel">
-        <div class="detail-mode-tabs" role="tablist" aria-label="详情与设置" data-i18n-aria-label="detail.tabsLabel">
+        <div class="detail-mode-tabs" role="tablist" aria-label="详情、查询与设置" data-i18n-aria-label="detail.tabsLabel">
           <button id="detailAirportTab" class="detail-mode-tab active" type="button" data-detail-tab="airport" data-i18n="nav.airport">机场</button>
+          <button id="detailQueryTab" class="detail-mode-tab" type="button" data-detail-tab="query" data-i18n="nav.query">查询</button>
           <button id="detailSettingsTab" class="detail-mode-tab" type="button" data-detail-tab="settings" data-i18n="nav.settings">设置</button>
         </div>
         <section id="airportDetailSection" class="detail-tab-panel" data-detail-panel="airport">
@@ -272,6 +272,71 @@
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </section>
+        <section id="querySection" class="detail-tab-panel query-section hidden" data-detail-panel="query">
+          <div class="section-label" data-i18n="nav.query">查询</div>
+          <div class="query-card query-action-card">
+            <div class="settings-row">
+              <div>
+                <strong id="fr24QueryTitle" data-i18n="query.title">FR24 航班查询</strong>
+                <span id="fr24QueryStatus" data-i18n="query.statusInitial">填好起飞和到达机场后，可查询该航线的最新 FR24 航班。</span>
+              </div>
+              <button id="fr24SearchButton" class="primary-button compact-button" type="button" data-i18n="query.search">查询</button>
+            </div>
+            <div class="helper-text" data-i18n="query.hint">FR24 是在线增强；查询或下载失败不会影响本地航路、Procedure、nav-overlay 和离线地图。</div>
+          </div>
+
+          <div class="query-card query-access-card">
+            <div class="settings-row">
+              <div>
+                <strong data-i18n="query.access">FR24 网络访问</strong>
+                <span id="fr24AccessSummary" data-i18n="query.accessInitial">未同步 FR24 Web 会话。</span>
+              </div>
+            </div>
+            <div class="settings-action-row query-access-actions">
+              <button id="fr24OpenBrowserButton" class="ghost-button compact-button" type="button" data-i18n="query.accessOpenBrowser">打开 FR24 验证页</button>
+              <button id="fr24SyncBrowserButton" class="ghost-button compact-button" type="button" data-i18n="query.accessSyncBrowser">同步内置浏览器会话</button>
+              <button id="fr24RefreshAccessButton" class="ghost-button compact-button" type="button" data-i18n="common.refreshStatus">刷新状态</button>
+              <button id="fr24ClearAccessButton" class="ghost-button compact-button" type="button" data-i18n="query.accessClear">清除会话配置</button>
+            </div>
+            <div class="helper-text" data-i18n="query.accessHint">在 App 内打开 FR24 验证页并正常完成验证，然后同步会话；无需手动查 Cookie。App 只复用你已完成验证的会话，不绕过 Cloudflare。失败不会影响本地航路、Procedure、nav-overlay 和离线地图。</div>
+            <details class="query-manual-access">
+              <summary data-i18n="query.accessManual">高级：手动会话配置（可选）</summary>
+              <div class="query-access-grid">
+                <label class="query-cookie-field">
+                  <span data-i18n="query.accessCookie">FR24 Web Cookie</span>
+                  <textarea id="fr24CookieInput" rows="3" autocomplete="off" spellcheck="false" placeholder="Cookie: ..."></textarea>
+                </label>
+                <label>
+                  <span data-i18n="query.accessFrPl">_frPl</span>
+                  <input id="fr24FrPlInput" type="password" autocomplete="off" spellcheck="false" placeholder="_frPl" />
+                </label>
+              </div>
+              <div class="settings-action-row query-access-actions query-manual-actions">
+                <button id="fr24SaveAccessButton" class="ghost-button compact-button" type="button" data-i18n="query.accessSave">保存手动配置</button>
+              </div>
+            </details>
+          </div>
+
+          <div id="fr24FlightList" class="query-flight-list" aria-live="polite">
+            <div class="query-empty" data-i18n="query.empty">暂无查询结果。</div>
+          </div>
+
+          <div class="query-card query-cache-card">
+            <div class="subheading" data-i18n="query.cache">FR24 轨迹缓存</div>
+            <div class="settings-row">
+              <div>
+                <strong id="fr24CacheTitle" data-i18n="query.cacheStatus">正在读取缓存...</strong>
+                <span id="fr24CacheSummary" data-i18n="query.cacheInitial">GPX、playback JSON 和 meta JSON 缓存在 App Caches 中。</span>
+              </div>
+            </div>
+            <div class="settings-action-row query-control-row">
+              <button id="fr24ClearTrackButton" class="ghost-button compact-button" type="button" data-i18n="query.clearTrack">清除轨迹绘制</button>
+              <button id="fr24RestoreMatchButton" class="ghost-button compact-button" type="button" data-i18n="query.restoreMatch">还原轨迹匹配</button>
+              <button id="fr24ClearCacheButton" class="ghost-button compact-button" type="button" data-i18n="query.clearCache">删除下载缓存</button>
+              <button id="fr24RefreshCacheButton" class="ghost-button compact-button" type="button" data-i18n="common.refreshStatus">刷新状态</button>
             </div>
           </div>
         </section>
@@ -410,6 +475,18 @@
           </span>
           <span class="mobile-tab-text" data-i18n="nav.airport">机场</span>
         </button>
+        <button class="mobile-bottom-tab" type="button" data-mobile-tab="query" aria-label="查询" data-i18n-aria-label="nav.query">
+          <span class="mobile-tab-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M4 6.5h10.5" />
+              <path d="M4 12h8" />
+              <path d="M4 17.5h5.5" />
+              <path d="m14.5 16.5 4 4" />
+              <circle cx="15.5" cy="13.5" r="3.5" />
+            </svg>
+          </span>
+          <span class="mobile-tab-text" data-i18n="nav.query">查询</span>
+        </button>
         <button class="mobile-bottom-tab" type="button" data-mobile-tab="settings" aria-label="设置" data-i18n-aria-label="nav.settings">
           <span class="mobile-tab-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24">
@@ -430,6 +507,6 @@
     <script src="/vendor/maplibre-gl/maplibre-gl.js"></script>
     <script src="/vendor/maplibre-contour/index.min.js"></script>
     <script src="/vendor/pmtiles/pmtiles.js"></script>
-    <script src="/app.js?v=20260604-language-settings" type="module"></script>
+    <script src="/app.js?v=20260605-fr24-inapp-session" type="module"></script>
   </body>
 </html>

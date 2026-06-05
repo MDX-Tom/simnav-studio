@@ -19,6 +19,14 @@ navplanner://api/nav-overlay?south=...&west=...&north=...&east=...&zoom=...
 navplanner://api/route/resolve?departure=...&arrival=...&route=...&departure_runway=...&arrival_runway=...
 navplanner://api/route/fr24-match?departure=...&arrival=...&flight_id=...
 navplanner://api/route/track-match
+navplanner://api/fr24/search?departure=...&arrival=...&limit=10
+navplanner://api/fr24/history?departure=...&arrival=...&flight=...&callsign=...&limit=10
+navplanner://api/fr24/download
+navplanner://api/fr24/cache/status
+navplanner://api/fr24/cache/clear
+navplanner://api/fr24/access/status
+navplanner://api/fr24/access/update
+navplanner://api/fr24/access/clear
 navplanner://api/map-cache/status
 navplanner://api/map-cache/clear
 navplanner://api/map-cache/{provider}/{z}/{x}/{y}.{ext}
@@ -71,7 +79,8 @@ Web 参考版代码中大量使用 `/api/...` 和 `/nav-icons/...` 绝对路径�
 - `route/resolve` 已接收起飞/到达跑道参数；Route 留空时会尝试返回 `selected_procedures` 和 `selected_runways`，让 Web 工作台自动加载 SID / STAR / APPROACH。
 - `route/resolve` 对手动 route 的错误处理已按 Web API 行为返回 400 JSON：未知 waypoint、起始 `DCT`、DCT 缺目标、airway 缺 exit、`***` 缺目标等不会再静默回退。
 - `route/track-match` 已接收 POST JSON `{ departure, arrival, track_points }`，在 Swift 本地 airway graph 上把导入轨迹点匹配为 route payload，并按 Web 参考逻辑执行同航路简化、轨迹误差约束、zigzag 平滑清理和匹配后 Procedure 自动挂接；`Tools/TrackParity` 已提供 7 个 Swift/Web 可重复对照 case。
-- `route/fr24-match` 当前不访问在线 FR24；离线错误文案包含 `FR24_API_TOKEN`，用于保持 Web 版 `Match FR24` 的粘贴轨迹降级入口可用。
+- `fr24/search`、`fr24/history`、`fr24/download`、`fr24/cache/*` 和 `fr24/access/*` 已接入 Swift 本地服务。查询 / 下载使用 FR24 Web 作为在线增强：Query 页可通过 JS bridge 打开 App 内 FR24 验证浏览器，用户正常完成 FR24 / Cloudflare 验证后由 Swift 自动同步内置浏览器 CookieStore 中的 Cookie / `_frPl`；后续 `/common/v1/airport.json` schedule 插件和 `/common/v1/flight-playback.json` 请求会优先由共享 WKWebView 浏览器上下文顶层导航到 FR24 API URL 并读取 JSON 文本，避免 WKWebView 跨域 `fetch` 的 `Load failed`。Swift `URLSession` 只在浏览器运行时失败时兜底；若浏览器上下文已明确返回 401 / 403、Cloudflare 或 HTML 响应，则直接向 Query 页暴露该原因。下载成功后会在 Caches 的 `NavPlanner/FR24` 中写入 GPX、playback JSON 和 meta JSON。会话缺失、Cloudflare 验证页、网络失败或 FR24 权限限制时返回可本地化错误，不阻塞本地核心 API。
+- `route/fr24-match` 保留 Web parity 入口：有 `flight_id` 时尝试下载该 FR24 playback 轨迹并匹配；无 `flight_id` 时先查最近航班再匹配。iOS UI 已将 FR24 操作集中到 `查询` Tab，不再在 Plan 中提供旧按钮。
 - 完整图搜索的 single-airway / mixed-route 权重细节、跨航路自动拼接和剩余错误提示仍需继续逐项对齐 Web `planner_routes.py`。
 - `offline-maps/pmtiles` Range 读取已实现，但仍需用真实 PMTiles 包做 MapLibre 离线矢量底图视觉回归。
 - POST body 已支持普通 JSON 和 body stream；下载、取消和状态轮询当前均由 Swift `MapStore` 本地任务处理，不启动 Python 或局域网服务。
