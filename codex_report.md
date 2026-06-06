@@ -10,6 +10,8 @@
 - Query 航班卡片增加历史页解析到的状态字段，保留航班号、起降机场、航司、机型、计划 / 实际时间和飞行时长显示。
 - iPhone 竖屏下部工作区新增上拉手柄：默认保持约 66% 地图 / 34% 工作区，最大上拉时地图保留 30%；切换 `计划 / 机场 / 查询 / 设置` 不重置位置，软键盘出现时隐藏手柄并继续走原有 `visualViewport` 自动上拉布局。
 - `map.html` 资源版本刷新为 `20260606-fr24-history-sheet`。
+- 根据用户反馈，已把手柄从地图和下方面板之间的较大胶囊，收敛为下方工作区面板内部顶部的 30px x 3px 灰色短条；普通状态面板顶部增加少量内部 padding，键盘态恢复原紧凑 padding。`map.html` 资源版本继续刷新为 `20260606-fr24-handle-compact`。
+- XcodeBuildMCP 再次 `build_run_sim` 在 iPhone 17 Pro Max 成功，构建、安装、启动无 warning / error；截图确认手柄已缩小并位于下方面板内部顶部，截图为 `/var/folders/7m/jzh_ftyn6_gfjz552yy612zr0000gn/T/screenshot_optimized_48ffd2c6-3cbc-4ffa-aaca-703dcc13108b.jpg`。
 
 初步验证：
 
