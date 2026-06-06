@@ -1,5 +1,49 @@
 # Codex 执行报告
 
+## 2026-06-06 banner 点击护栏与 FR24 缓存检索管理
+
+已完成：
+
+- 定位 iPhone 上拉 banner 轻点穿透根因：WKWebView / iOS 在 `pointerup` 后仍会补发兼容 click / focus，banner 轻点立即改变布局后，该合成事件会命中移动到手指下方的地图或“手动机场”输入框。
+- 为 banner 轻点切换增加短时捕获期点击护栏，拦截后续 `click` / `mousedown` / `mouseup` / `touchend` / `focusin`，并在误聚焦表单控件时立即 blur，避免额外触发地图弹窗或键盘。
+- Swift FR24 本地服务新增缓存检索、单项删除和收藏切换接口：`/api/fr24/cache/list`、`delete`、`favorite`；收藏状态写入同名 meta JSON。
+- FR24 一键删除下载缓存改为跳过收藏项，保留收藏轨迹的 GPX、playback JSON 和 meta JSON；单项删除仍可显式删除收藏文件。
+- Query 页 FR24 缓存卡片新增“检索已下载轨迹”，可按航班号、flightId、机场、航司、机型等字段过滤本机缓存；缓存结果按历史航班卡片展示基本信息、缓存时间和轨迹点数。
+- 缓存结果卡片提供“绘制路径 / 收藏或取消收藏 / 删除文件”操作；绘制路径复用已缓存轨迹，不要求重新联网。
+- `map.html` 中 `app.js` / `styles.css` 资源版本刷新为 `20260606-fr24-cache-banner-guard`。
+
+初步验证：
+
+- `node --check NavPlanner/Resources/Web/app.js` 成功；CSS 大括号配对检查成功；`swift -frontend -parse NavPlanner/Core/WebBridge/NavPlannerSchemeHandler.swift NavPlanner/Core/PlannerCore/PlannerService.swift` 成功。
+- HTML 本地化覆盖检查确认 136 个 `data-i18n*` 属性均有翻译键；`plutil -lint NavPlanner.xcodeproj/project.pbxproj NavPlanner/Support/PrivacyInfo.xcprivacy` 成功；`git diff --check` 成功。
+- `python3 Tools/Parity/run_all_parity.py` 成功；RouteParity 22、TrackParity 7、ProcedureParity 6 均无差异。
+- XcodeBuildMCP `build_run_sim` 在 iPhone 17 Pro Max 成功，构建、安装、启动无 warning / error；首屏截图确认地图、20px banner、Plan 表单和底部 `计划 / 机场 / 查询 / 设置` 四标签正常，截图为 `/var/folders/7m/jzh_ftyn6_gfjz552yy612zr0000gn/T/screenshot_optimized_f626a22c-d5d5-4eac-a1ca-997e489d8844.jpg`。
+- 扫描本轮 runtime / oslog，未发现 `TypeError`、`ReferenceError`、`SyntaxError`、`Exception`、`fatal`、FR24 或 WebBridge 相关错误。
+- ZULS/ZUAL FR24 无会话验证：直接探测 `LXA` schedule 返回 HTTP 403、`cf-mitigated: challenge` 和 Cloudflare HTML，符合 Query 页提示打开 FR24 验证页并同步会话的降级路径。
+- `git -C NavPlanner-web status --short` 无输出，参考项目保持未修改。
+
+## 2026-06-06 Procedure 高亮、FR24 手动历史与线宽优化
+
+已完成：
+
+- 主航路航点脉冲高亮扩展到 SID / STAR / APPROACH，Procedure 绘制后会突出显示全部可绘制航点，并在 Procedure hover 时保持高亮点位于线条上方。
+- FR24 轨迹断点规则更新：相邻点超过 10nm，或较长稀疏采样段两端出现明显航向突变、疑似把圆弧拉成直线时，该段使用黑色虚线绘制。
+- FR24 历史页解析会标注与预设航线不一致的实际 From / To，前端优先显示“实际起降”。
+- Query 页新增手动航班历史查询：航班号读取 FR24 数据页，纯 flightId 生成可下载 / 匹配的单条历史记录。
+- iPhone 上主航路、SID / STAR / APPROACH 和 FR24 轨迹可见线宽降为 iPad 的 80%，点击命中层保持原宽。
+- banner 拖动比例按 0.2% 量化并继续使用 `requestAnimationFrame` 节流，轻点切换在下一帧提交，以降低上划和点击时的布局压力。
+- `map.html` 中 `app.js` / `styles.css` 资源版本刷新为 `20260606-fr24-procedure-highlight`。
+
+验证记录：
+
+- `node --check NavPlanner/Resources/Web/app.js` 成功；CSS 大括号配对检查成功；HTML `data-i18n*` 覆盖检查 131 个属性均有翻译键。
+- `swift -frontend -parse NavPlanner/Core/WebBridge/NavPlannerSchemeHandler.swift NavPlanner/Core/PlannerCore/PlannerService.swift` 成功；`plutil -lint NavPlanner.xcodeproj/project.pbxproj NavPlanner/Support/PrivacyInfo.xcprivacy` 成功；`git diff --check` 成功。
+- `python3 Tools/Parity/run_all_parity.py` 成功；RouteParity 22、TrackParity 7、ProcedureParity 6 均无差异。
+- XcodeBuildMCP `build_run_sim` 在 iPhone 17 Pro Max 成功，构建、安装、启动无 warning / error；首屏截图确认 App 正常启动，截图为 `/var/folders/7m/jzh_ftyn6_gfjz552yy612zr0000gn/T/screenshot_optimized_f9170db4-233e-497a-a6ae-c4865eae297c.jpg`。
+- ZULS/ZUAL FR24 无会话验证：直接探测 `LXA` schedule 返回 HTTP 403、`cf-mitigated: challenge` 和 Cloudflare HTML，符合 Query 页提示打开 FR24 验证页并同步会话的降级路径。
+- 扫描本轮 runtime / oslog，未发现 `TypeError`、`ReferenceError`、`SyntaxError`、`Exception`、`fatal` 或 FR24 / WebBridge 相关错误；WKWebView 内部 Query 控件仍未暴露为可自动点击的 AX 目标，本轮未做页面内坐标点击自动化。
+- `git -C NavPlanner-web status --short` 无输出，参考项目保持未修改。
+
 ## 2026-06-06 banner 点击切换与阴影再校正
 
 已完成：

@@ -45,7 +45,7 @@
     </script>
     <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
     <link rel="stylesheet" href="/vendor/maplibre-gl/maplibre-gl.css" />
-    <link rel="stylesheet" href="/styles.css?v=20260606-banner-tap-toggle" />
+    <link rel="stylesheet" href="/styles.css?v=20260606-fr24-cache-banner-guard" />
   </head>
   <body data-mobile-tab="plan">
     <div class="shell">
@@ -288,6 +288,15 @@
             <div class="helper-text" data-i18n="query.hint">FR24 是在线增强；查询或下载失败不会影响本地航路、Procedure、nav-overlay 和离线地图。</div>
           </div>
 
+          <div class="query-card query-manual-flight-card">
+            <div class="subheading" data-i18n="query.manualHistoryTitle">手动航班历史</div>
+            <div class="query-manual-flight-grid">
+              <input id="fr24ManualHistoryInput" autocomplete="off" spellcheck="false" placeholder="航班号或 flightId，例如 TV9943" data-i18n-placeholder="query.manualHistoryPlaceholder" />
+              <button id="fr24ManualHistoryButton" class="ghost-button compact-button" type="button" data-i18n="query.manualHistorySearch">查历史</button>
+            </div>
+            <div class="helper-text" data-i18n="query.manualHistoryHint">可输入航班号查询 FR24 历史页，或输入 flightId 直接生成可下载 / 匹配的单条历史记录。</div>
+          </div>
+
           <div class="query-card query-access-card">
             <div class="settings-row">
               <div>
@@ -330,6 +339,17 @@
               <div>
                 <strong id="fr24CacheTitle" data-i18n="query.cacheStatus">正在读取缓存...</strong>
                 <span id="fr24CacheSummary" data-i18n="query.cacheInitial">GPX、playback JSON 和 meta JSON 缓存在 App Caches 中。</span>
+              </div>
+            </div>
+            <div class="query-cache-search">
+              <div class="subheading query-cache-search-title" data-i18n="query.cacheSearchTitle">检索已下载轨迹</div>
+              <div class="query-manual-flight-grid">
+                <input id="fr24CacheSearchInput" autocomplete="off" spellcheck="false" placeholder="航班号 / flightId / 机场 / 机型" data-i18n-placeholder="query.cacheSearchPlaceholder" />
+                <button id="fr24CacheSearchButton" class="ghost-button compact-button" type="button" data-i18n="query.cacheSearch">检索缓存</button>
+              </div>
+              <div class="helper-text" data-i18n="query.cacheSearchHint">只检索本机已下载的 FR24 GPX / playback 缓存；收藏文件不会被一键删除缓存清掉。</div>
+              <div id="fr24CacheList" class="query-flight-list query-cache-list" aria-live="polite">
+                <div class="query-empty" data-i18n="query.cacheEmpty">没有匹配的已下载轨迹。</div>
               </div>
             </div>
             <div class="settings-action-row query-control-row">
@@ -511,6 +531,6 @@
     <script src="/vendor/maplibre-gl/maplibre-gl.js"></script>
     <script src="/vendor/maplibre-contour/index.min.js"></script>
     <script src="/vendor/pmtiles/pmtiles.js"></script>
-    <script src="/app.js?v=20260606-banner-tap-toggle" type="module"></script>
+    <script src="/app.js?v=20260606-fr24-cache-banner-guard" type="module"></script>
   </body>
 </html>

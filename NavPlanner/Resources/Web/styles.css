@@ -1335,6 +1335,17 @@ body.left-panel-expanded .selection-table {
   min-width: 96px;
 }
 
+.query-manual-flight-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(88px, auto);
+  gap: 8px;
+  align-items: center;
+}
+
+.query-manual-flight-grid input {
+  margin: 0;
+}
+
 .query-access-grid {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(120px, 1fr);
@@ -1385,6 +1396,18 @@ body.left-panel-expanded .selection-table {
 
 .query-manual-actions {
   grid-template-columns: minmax(0, auto);
+}
+
+.query-cache-search {
+  border-top: 1px solid var(--surface-line);
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 9px;
+}
+
+.query-cache-search-title {
+  margin: 0;
 }
 
 .query-flight-list {
@@ -1441,6 +1464,17 @@ body.left-panel-expanded .selection-table {
   white-space: nowrap;
 }
 
+.query-flight-badges {
+  display: grid;
+  justify-items: end;
+  gap: 5px;
+}
+
+.query-flight-badge-favorite {
+  border-color: rgba(255, 209, 102, 0.46);
+  color: rgba(255, 228, 151, 0.96);
+}
+
 .query-flight-meta {
   display: grid;
   gap: 4px;
@@ -1454,11 +1488,25 @@ body.left-panel-expanded .selection-table {
   overflow-wrap: anywhere;
 }
 
+.query-flight-actual-route {
+  color: rgba(255, 209, 102, 0.95);
+  font-weight: 820;
+}
+
 .query-flight-actions,
 .query-control-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 7px;
+}
+
+.query-cache-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.danger-button {
+  border-color: rgba(255, 123, 123, 0.38);
+  color: rgba(255, 204, 204, 0.96);
 }
 
 .query-history {
@@ -1817,6 +1865,21 @@ html[data-theme="day"] .procedure-chip.active {
   background: rgba(23, 120, 168, 0.14);
   border-color: rgba(23, 120, 168, 0.42);
   color: #114968;
+}
+
+html[data-theme="day"] .query-flight-badge {
+  border-color: rgba(28, 128, 91, 0.32);
+  color: #1e7656;
+}
+
+html[data-theme="day"] .query-flight-badge-favorite {
+  border-color: rgba(159, 113, 22, 0.35);
+  color: #7a5711;
+}
+
+html[data-theme="day"] .danger-button {
+  border-color: rgba(172, 58, 58, 0.28);
+  color: #8b3030;
 }
 
 html[data-theme="day"] .manual-airport-hint {
@@ -4142,15 +4205,34 @@ html[data-theme="day"] .offline-progress {
     font-size: 6.8px;
   }
 
+  html:not([data-device="pad"]) .query-flight-badges {
+    gap: 3px;
+  }
+
   html:not([data-device="pad"]) .query-flight-actions,
   html:not([data-device="pad"]) .query-control-row {
     gap: 4px;
+  }
+
+  html:not([data-device="pad"]) .query-cache-search {
+    gap: 5px;
+    margin-top: 6px;
+    padding-top: 5px;
+  }
+
+  html:not([data-device="pad"]) .query-cache-actions {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   html:not([data-device="pad"]) .query-action-card .primary-button {
     justify-self: center;
     width: min(100%, 180px);
     min-width: 0;
+  }
+
+  html:not([data-device="pad"]) .query-manual-flight-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(58px, auto);
+    gap: 5px;
   }
 
   html:not([data-device="pad"]) .query-access-grid {

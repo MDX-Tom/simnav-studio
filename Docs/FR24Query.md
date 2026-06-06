@@ -15,19 +15,24 @@ FR24 Query 是在线增强功能，用于在已填写起飞机场和到达机场
   - 每个航班提供“航班历史”子菜单。
   - `/api/fr24/history` 按航班号访问 FR24 数据页，例如 `https://www.flightradar24.com/data/flights/tv9943`，通过已验证的 WKWebView 会话读取页面中能看到的全部历史记录；不再用同航线 schedule 窗口继续回扫来假装历史。
   - 历史页解析优先读取 DOM 表头 / 单元格字段，并兼容 FR24 div/grid 嵌套行；`Date / From / To / Aircraft / Flight Time / STD / ATD / STA / Status` 等列会映射到前端需要的航班字段。历史页显示时间按设备当前时区解析，避免把页面已展示的本地时间再当作 UTC 二次偏移；`Landed HH:mm` / `Departed HH:mm` 会分别进入实际到达 / 实际起飞字段。
+  - Query 页支持手动输入航班号或 flightId：航班号继续访问 `/data/flights/{flight}` 历史页，纯 flightId 会生成一条可直接下载 / 匹配 playback 的历史记录，不要求用户先填写起降机场。
+  - 如果历史记录中的实际 `From / To` 与计划页预设起降机场不一致，例如返航、备降后重新起飞，前端会优先显示并标注实际起降机场。
   - 历史子菜单只保留 1 条 `Scheduled` 状态记录，避免未来计划记录在免费页面上堆满列表；历史航班在 Query 页中以两列卡片显示。
   - 历史页中带 `Play` / `flightId` 的记录可以继续下载 playback 轨迹；免费页面中只有计划信息、没有 `flightId` 的记录仍会显示，但点击下载会按现有错误提示说明缺少 FR24 flightId。
 - 轨迹下载：
   - 每个航班和历史记录提供“下载并绘制轨迹”。
   - `/api/fr24/download` 调用 `/common/v1/flight-playback.json?flightId=...&timestamp=...`，提取 `flight.track` / playback JSON 中的轨迹点，写入 App Caches 下的 `NavPlanner/FR24/{flightId}.gpx`、playback JSON 和 meta JSON。
-  - 地图使用独立 `fr24TrackLayerGroup` 绘制黑色 GPX 轨迹线，并复用 route world-copy / 经度展开逻辑，避免跨日期变更线出现大直线。相邻轨迹点若大于 20nm，会把该跳点段绘制为黑色虚线，实体轨迹段仍保持黑色实线。
+  - 地图使用独立 `fr24TrackLayerGroup` 绘制黑色 GPX 轨迹线，并复用 route world-copy / 经度展开逻辑，避免跨日期变更线出现大直线。相邻轨迹点若大于 10nm，或较长稀疏采样段两端存在明显航向突变、疑似把圆弧拉成直线，会把该段绘制为黑色虚线，实体轨迹段仍保持黑色实线。
 - 轨迹匹配：
   - 每个航班和历史记录提供“匹配轨迹”。
   - 前端先确保轨迹已下载，然后 POST `/api/route/track-match`，继续使用 Swift 本地 airway graph、轨迹误差平滑 / zigzag 清理和 Procedure 自动挂接逻辑。
   - 匹配前会保存当前 route payload，`还原轨迹匹配` 可恢复匹配前航路；`清除轨迹绘制` 只清除黑色 GPX 线，不清除规划航路。
 - 缓存管理：
   - Query 页底部显示 FR24 缓存文件数和大小。
-  - `删除下载缓存` 调用 `/api/fr24/cache/clear`，只删除 FR24 GPX / playback JSON / meta 缓存，不影响在线地图缓存、离线地图包和导航数据库。
+  - Query 页可检索本机已下载的 FR24 轨迹缓存，按航班号、flightId、起降机场、航司、机型等字段过滤；缓存结果使用与历史航班一致的信息卡片展示航班号、实际起降、航司、机型、计划 / 实际时间、飞行时长、缓存时间和轨迹点数。
+  - 缓存卡片提供“绘制路径”和文件管理操作；“绘制路径”直接复用本地已保存的 GPX / playback meta，不要求重新联网。
+  - 文件管理支持删除单项缓存、收藏 / 取消收藏；收藏状态写入同名 meta JSON。
+  - `删除下载缓存` 调用 `/api/fr24/cache/clear`，只删除未收藏的 FR24 GPX / playback JSON / meta 缓存，不影响已收藏轨迹、在线地图缓存、离线地图包和导航数据库。
 - 网络访问配置：
   - Query 页可在 App 内打开 FR24 验证页，用户正常完成 FR24 / Cloudflare 验证后，点击“同步会话”即可由 Swift 自动读取内置浏览器 CookieStore 中的 FR24 Cookie / `_frPl` 并保存。
   - 手动粘贴 FR24 Web Cookie 与 `_frPl` 仅作为高级可选兜底，主流程不要求用户自己查 Cookie。
@@ -41,8 +46,12 @@ FR24 Query 是在线增强功能，用于在已填写起飞机场和到达机场
 ```text
 GET  /api/fr24/search?departure=...&arrival=...&limit=10
 GET  /api/fr24/history?departure=...&arrival=...&flight=...&callsign=...
+GET  /api/fr24/manual-history?query=...&departure=...&arrival=...
 POST /api/fr24/download
 GET  /api/fr24/cache/status
+GET  /api/fr24/cache/list?query=...&limit=120
+POST /api/fr24/cache/delete
+POST /api/fr24/cache/favorite
 POST /api/fr24/cache/clear
 GET  /api/fr24/access/status
 POST /api/fr24/access/update
@@ -71,6 +80,7 @@ GET  /api/route/fr24-match?departure=...&arrival=...&flight_id=...
 - 2026-06-05 模拟器验证：`ZULS -> ZUAL` 通过隐藏 WKWebView 顶层导航获取 FR24 JSON，`LXA departures offset=24` 命中 1-2 条航班，Query 页显示 `TV9723`、`TV9943` 等航班卡片；`offset=48` 返回 HTTP 400 后会停止扫描并返回已找到结果。
 - 2026-06-06 更新：历史查询改为读取 FR24 航班数据页；例如 `TV9943` 会访问 `/data/flights/tv9943` 并展示页面上可见的历史 / 计划记录，只有带 `flightId` 的记录才能继续下载 playback GPX；本轮已补强历史页字段解析、实际起降时间、机型提取、`Scheduled` 只保留 1 条和历史列表两列展示。
 - 离线 / 会话缺失 / Cloudflare 挑战 / FR24 请求失败时：Query 页显示错误，本地核心能力继续可用。
-- 下载成功时：黑色 GPX 轨迹显示在地图上，跨日期变更线不画大直线；两个轨迹点间距超过 20nm 的跳点段应显示为黑色虚线。
+- 下载成功时：黑色 GPX 轨迹显示在地图上，跨日期变更线不画大直线；两个轨迹点间距超过 10nm，或较长稀疏转弯段两端航向突变时，该段应显示为黑色虚线。
 - 匹配成功时：规划航路替换为本地 track-match 结果，并可通过“还原轨迹匹配”恢复。
-- 缓存清理只影响 `NavPlanner/FR24`，不影响 `MapCache`、`MapOffline` 和导航数据库。
+- 缓存检索只读取 `NavPlanner/FR24` 已下载文件；收藏项在一键清理时保留，单项删除仍可由用户显式删除。
+- 缓存清理只影响 `NavPlanner/FR24` 的未收藏文件，不影响 `MapCache`、`MapOffline` 和导航数据库。
