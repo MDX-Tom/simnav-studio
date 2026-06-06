@@ -1,5 +1,31 @@
 # Codex 执行报告
 
+## 2026-06-06 FR24 历史页与 iPhone 上拉工作区
+
+已完成：
+
+- 将 FR24 航班历史从“继续扫描同航线 schedule 窗口”改为按航班号读取 `www.flightradar24.com/data/flights/{flight}` 数据页；例如 `TV9943` 会访问 `/data/flights/tv9943`。
+- 扩展隐藏 WKWebView FR24 会话读取层：JSON API 仍顶层导航到 FR24 API 并读取 JSON 文本，历史页则顶层导航到 FR24 数据页，抽取可见 DOM 行和 `Play` / `flightId` 链接。
+- `/api/fr24/history` 现在返回页面上可见的全部历史 / 计划记录，不再默认限制 10 条；没有 `flightId` 的计划记录仍显示，下载时沿用“FR24 flightId missing”错误提示。
+- Query 航班卡片增加历史页解析到的状态字段，保留航班号、起降机场、航司、机型、计划 / 实际时间和飞行时长显示。
+- iPhone 竖屏下部工作区新增上拉手柄：默认保持约 66% 地图 / 34% 工作区，最大上拉时地图保留 30%；切换 `计划 / 机场 / 查询 / 设置` 不重置位置，软键盘出现时隐藏手柄并继续走原有 `visualViewport` 自动上拉布局。
+- `map.html` 资源版本刷新为 `20260606-fr24-history-sheet`。
+
+初步验证：
+
+- `swift -frontend -parse NavPlanner/Core/WebBridge/NavPlannerSchemeHandler.swift NavPlanner/Core/PlannerCore/PlannerService.swift` 成功。
+- `node --check NavPlanner/Resources/Web/app.js` 成功。
+- CSS 大括号配对检查成功。
+- `plutil -lint NavPlanner.xcodeproj/project.pbxproj NavPlanner/Support/PrivacyInfo.xcprivacy` 成功。
+- `python3 Tools/Parity/run_all_parity.py` 成功；RouteParity 22、TrackParity 7、ProcedureParity 6 均无差异。
+- `git diff --check` 成功；`git -C NavPlanner-web status --short` 无输出，参考项目保持未修改。
+- XcodeBuildMCP `build_run_sim` 在 iPhone 17 Pro Max 成功，构建、安装、启动无 warning / error；启动截图确认地图、Plan 表单、底部四标签和新的上拉手柄可见，截图为 `/var/folders/7m/jzh_ftyn6_gfjz552yy612zr0000gn/T/screenshot_optimized_cc80a54a-677d-4ed2-8547-6cd43904d5c1.jpg`。
+- 扫描本轮 XcodeBuildMCP runtime / oslog，未发现 `TypeError`、`ReferenceError`、`SyntaxError`、`Exception` 或 FR24 WebBridge 错误。
+
+待手动复验：
+
+- macOS 当前未授予 `osascript` 辅助功能权限，无法自动坐标点击 WKWebView 内输入框；模拟器已启动到新包，需手动在 Query 页用 `ZULS` / `ZUAL` 查询并打开 `TV9943` 航班历史，确认 FR24 会话有效时可从 `/data/flights/tv9943` 展示全部可见记录。
+
 ## 2026-05-30 第一阶段工程骨架
 
 已完成：

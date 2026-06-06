@@ -34,6 +34,8 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
   --mobile-visual-height: 100%;
   --mobile-keyboard-height: 0px;
+  --mobile-map-flex: 66fr;
+  --mobile-panel-flex: 34fr;
   --body-background:
     linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
     linear-gradient(180deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
@@ -1649,6 +1651,10 @@ body.left-panel-expanded .selection-table {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.mobile-panel-drag-handle {
+  display: none;
 }
 
 html[data-theme="day"] .panel {
@@ -3434,7 +3440,7 @@ html[data-theme="day"] .offline-progress {
     max-height: 100%;
     min-height: 0;
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 66fr) minmax(0, 34fr) minmax(19px, auto);
+    grid-template-rows: minmax(0, var(--mobile-map-flex)) minmax(0, var(--mobile-panel-flex)) minmax(19px, auto);
     grid-template-areas:
       "map"
       "planner"
@@ -3467,6 +3473,46 @@ html[data-theme="day"] .offline-progress {
 
   html:not([data-device="pad"]) .planner-panel {
     gap: 6px;
+  }
+
+  html:not([data-device="pad"]) .mobile-panel-drag-handle {
+    grid-area: planner;
+    align-self: start;
+    justify-self: center;
+    z-index: 92;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: min(92px, 28vw);
+    height: 20px;
+    margin-top: -9px;
+    border: 0;
+    border-radius: 999px;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.06)),
+      rgba(7, 13, 22, 0.22);
+    box-shadow:
+      0 7px 16px rgba(0, 0, 0, 0.16),
+      inset 0 1px 0 rgba(255, 255, 255, 0.16);
+    touch-action: none;
+    cursor: ns-resize;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html:not([data-device="pad"]) .mobile-panel-drag-handle span {
+    display: block;
+    width: 38px;
+    height: 5px;
+    border-radius: 999px;
+    background: rgba(186, 197, 207, 0.62);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  }
+
+  html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .shell {
+    transition:
+      height 0.12s linear,
+      max-height 0.12s linear,
+      padding 0.12s linear;
   }
 
   html:not([data-device="pad"]) button {
@@ -3551,6 +3597,10 @@ html[data-theme="day"] .offline-progress {
     pointer-events: none;
   }
 
+  html:not([data-device="pad"]) body[data-mobile-keyboard="open"] .mobile-panel-drag-handle {
+    display: none;
+  }
+
   html[data-theme="day"]:not([data-device="pad"]) .mobile-bottom-tabs {
     background:
       linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(232, 241, 246, 0.54)),
@@ -3560,6 +3610,19 @@ html[data-theme="day"] .offline-progress {
       0 7px 16px rgba(43, 67, 89, 0.13),
       inset 0 1px 0 rgba(255, 255, 255, 0.86),
       inset 0 -1px 0 rgba(36, 125, 162, 0.07);
+  }
+
+  html[data-theme="day"]:not([data-device="pad"]) .mobile-panel-drag-handle {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(231, 239, 243, 0.58)),
+      rgba(235, 242, 246, 0.66);
+    box-shadow:
+      0 7px 16px rgba(43, 67, 89, 0.12),
+      inset 0 1px 0 rgba(255, 255, 255, 0.86);
+  }
+
+  html[data-theme="day"]:not([data-device="pad"]) .mobile-panel-drag-handle span {
+    background: rgba(132, 145, 156, 0.42);
   }
 
   html:not([data-device="pad"]) .mobile-bottom-tab {
@@ -4847,6 +4910,10 @@ html[data-theme="day"] .offline-progress {
     display: none !important;
     opacity: 0;
     pointer-events: none;
+  }
+
+  html[data-device="phone"] .mobile-panel-drag-handle {
+    display: none !important;
   }
 
   html[data-device="phone"] .planner-panel .section-label,

@@ -26,7 +26,7 @@ NavPlanner 是一个 iPhone / iPad Universal App 项目，目标是做成本地�
 - 已将 Web 参考项目的静态工作台复制到 iOS 自有资源目录：`NavPlanner/Resources/Web/map.html`、`styles.css`、`app.js`、`nav-icons/`。
 - 已将 Leaflet、MapLibre GL、maplibre-contour、pmtiles 前端运行时打包到 `NavPlanner/Resources/Web/vendor/`，地图内核启动不依赖 CDN。
 - SwiftUI 当前提供全屏 WKWebView 容器和本地服务层，Plan、Airport、Settings、Selection、Offline Maps 等交互由本地 Web 工作台渲染，以优先满足 Web 行为复刻。
-- iPhone 下部工作区已拆分为中文图标标签 `计划`、`机场`、`查询`、`设置`，标签采用更薄的紧凑玻璃质感并独占底部一行，同时为 iOS Home Indicator 保留安全区距离；切换时顶部地图实例、视角和叠加层保持不变。
+- iPhone 下部工作区已拆分为中文图标标签 `计划`、`机场`、`查询`、`设置`，标签采用更薄的紧凑玻璃质感并独占底部一行，同时为 iOS Home Indicator 保留安全区距离；工作区顶部新增类似系统输入栏的上拉手柄，可把地图区域从默认约 66% 压缩到最小 30%，标签切换时保持上拉位置，软键盘出现时仍走原有 `visualViewport` 自动上拉逻辑；切换时顶部地图实例、视角和叠加层保持不变。
 - iPhone 横屏不显示底部四标签，改用 iPad 工作台的左右折叠栏与右侧 `机场 / 查询 / 设置` 详情切换；左右面板使用横屏专用窄列宽，刘海侧安全避让，非刘海侧尽量贴近机身圆角边缘，避免左右同时留出大空白。当前紧凑布局断点已扩展到 1024px，覆盖 iPhone 17 Pro Max 等更宽机型。
 - iPad 工作台新增 `Airport / Query / Settings` 详情切换，原有左侧计划栏、地图区和详情区布局保持不变；左右竖向折叠栏按钮已按日间 / 夜间主题分别使用浅蓝灰和深色玻璃配色，并在 WebView 首屏加载前预设主题，同时用显式日间样式兜底，避免日间模式短暂或持续显示深蓝长条。
 - Settings 页面支持从 Files 选择 `.s3db` / `.sqlite` / `.sqlite3` / `.db` 本地导航数据库，导入后 Swift 本地 SQLite 服务即时切库。
@@ -43,8 +43,8 @@ NavPlanner 是一个 iPhone / iPad Universal App 项目，目标是做成本地�
 - 已新增 `Tools/RouteParity/route_parity.py` 可重复回归工具，会编译 Swift 探针并与只读 Web 参考实现对比 22 个 `/api/route/resolve` case，覆盖典型自动航线、跨日期变更线自动 / 手动航线、手动航路、IATA/waypoint 查找优先级、点列几何摘要和错误语义。
 - 已新增 `Tools/TrackParity/track_parity.py` 可重复回归工具，会用 Web 参考 route resolve 生成离线合成轨迹点，再分别对比 Web `match_imported_track_route(...)` 与 Swift `trackMatchPayload(...)`，当前覆盖 7 个 `/api/route/track-match` case。
 - 已新增 Xcode `ParityChecks` Aggregate Target 和共享 scheme，统一运行 RouteParity / TrackParity / ProcedureParity；也可通过 `python3 Tools/Parity/run_all_parity.py` 在命令行直接运行。
-- `/api/route/track-match` 已支持导入轨迹点的本地 airway 匹配，并继续迁移 Web 版 FR24/导入轨迹的轨迹误差约束、单航路替换保护、zigzag 平滑清理和 Procedure 自动挂接；`查询` Tab 与 Swift 本地 `/api/fr24/search`、`history`、`download`、`cache`、`access` API 可按 FR24 Web schedule/playback 逻辑查询航线航班、下载并缓存 GPX / playback JSON、用黑色线绘制轨迹，并复用本地 `track-match` 匹配航路。FR24 仍是在线增强，失败、断网或会话缺失不会阻塞本地核心能力。
-- FR24 查询使用 Web 会话方式：Query 页可在 App 内打开 FR24 验证页，用户正常完成 FR24 / Cloudflare 验证后由 App 自动同步内置浏览器中的 FR24 Cookie / `_frPl`；FR24 schedule/playback 请求会优先通过共享 WKWebView 浏览器上下文顶层导航到 FR24 API URL，再读取页面 JSON 文本，避免跨域 `fetch` 在 WKWebView 中触发 `Load failed`。Swift `URLSession` 仅在浏览器运行时失败时兜底；若浏览器上下文已明确返回 401 / 403、Cloudflare 或 HTML 响应，则直接向 Query 页暴露该原因。App 不实现 Cloudflare 绕过、挑战破解或 CAPTCHA 自动化，只复用用户已完成验证的浏览器会话。
+- `/api/route/track-match` 已支持导入轨迹点的本地 airway 匹配，并继续迁移 Web 版 FR24/导入轨迹的轨迹误差约束、单航路替换保护、zigzag 平滑清理和 Procedure 自动挂接；`查询` Tab 与 Swift 本地 `/api/fr24/search`、`history`、`download`、`cache`、`access` API 可按 FR24 Web schedule/playback 逻辑查询航线航班、按 `https://www.flightradar24.com/data/flights/{flight}` 航班数据页显示可见历史、下载并缓存 GPX / playback JSON、用黑色线绘制轨迹，并复用本地 `track-match` 匹配航路。FR24 仍是在线增强，失败、断网或会话缺失不会阻塞本地核心能力。
+- FR24 查询使用 Web 会话方式：Query 页可在 App 内打开 FR24 验证页，用户正常完成 FR24 / Cloudflare 验证后由 App 自动同步内置浏览器中的 FR24 Cookie / `_frPl`；FR24 schedule/playback 请求会优先通过共享 WKWebView 浏览器上下文顶层导航到 FR24 API URL，再读取页面 JSON 文本，航班历史页会顶层导航到 FR24 数据页并抽取可见 DOM 行和链接，避免跨域 `fetch` 在 WKWebView 中触发 `Load failed`。Swift `URLSession` 仅在浏览器运行时失败时兜底；若浏览器上下文已明确返回 401 / 403、Cloudflare 或 HTML 响应，则直接向 Query 页暴露该原因。App 不实现 Cloudflare 绕过、挑战破解或 CAPTCHA 自动化，只复用用户已完成验证的浏览器会话。
 - `/api/procedure/...` 已按 Web `procedure_geometry` 迁移 RF / AF 弧线、复飞段分割和末端等待航线几何；`Tools/ProcedureParity` 已可重复比较 6 个 Procedure case，覆盖 RF 弧线、复飞 / holding、transition 合并、ZULS 复飞异常圆弧回归和空结果语义。
 - `/api/nav-overlay` 已按 Web `planner_overlay.py` 迁移本地缓存、世界副本边界过滤、空间分桶、航路标签预算、terminal waypoint / navaid、跑道和 ILS 输出；跨日期变更线视野的 payload 计数已与 Web 参考一致，前端刷新采用双缓冲图层替换，iPhone 使用 SVG renderer + 延迟移除旧层来降低缩放后灰色航路叠加层闪烁；矢量底图拖动/缩放期间改为 CSS 镜像并在结束后同步真实 MapLibre 相机，减少底图与航路层动画不同步。
 
@@ -109,6 +109,11 @@ xcodebuild -project NavPlanner.xcodeproj \
 
 最近一次验证：
 
+- `node --check NavPlanner/Resources/Web/app.js` 成功；CSS 大括号配对检查成功；`swift -frontend -parse NavPlanner/Core/WebBridge/NavPlannerSchemeHandler.swift NavPlanner/Core/PlannerCore/PlannerService.swift` 成功。
+- `plutil -lint NavPlanner.xcodeproj/project.pbxproj NavPlanner/Support/PrivacyInfo.xcprivacy` 成功；`git diff --check` 成功。
+- `python3 Tools/Parity/run_all_parity.py` 成功；RouteParity 22、TrackParity 7、ProcedureParity 6 均无差异。
+- XcodeBuildMCP `build_run_sim` 在 iPhone 17 Pro Max 成功，构建、安装、启动无 warning / error；首屏截图确认新上拉手柄、地图、Plan 表单和底部 `计划 / 机场 / 查询 / 设置` 四标签正常，截图为 `/var/folders/7m/jzh_ftyn6_gfjz552yy612zr0000gn/T/screenshot_optimized_cc80a54a-677d-4ed2-8547-6cd43904d5c1.jpg`。
+- 本轮 macOS 辅助功能权限未允许 `osascript` 自动点击 WKWebView 内控件，因此 `ZULS` / `ZUAL` 的 FR24 页面内查询和 `TV9943` 历史展开需在已启动模拟器中手动复验；App runtime / oslog 未发现 JS 语法错误或 FR24 WebBridge 错误。
 - `node --check NavPlanner/Resources/Web/app.js` 成功；CSS 大括号配对检查成功；HTML 本地化覆盖检查确认 126 个 `data-i18n*` 属性均有翻译键，402 个翻译键已被扫描。
 - FR24 Query 页已切换为 App 内 FR24 验证页 + 自动同步会话，手动 Cookie / `_frPl` 仅作为高级可选兜底；FR24 返回 Cloudflare 验证页、HTML 或 401 / 403 时显示可本地化提示，本地规划、Procedure、nav-overlay 和离线地图继续可用；`map.html` 资源版本刷新为 `20260605-fr24-inapp-session`。后续每次修改 FR24 相关功能时，固定使用 `ZULS` / `ZUAL` 做 FR24 路径验证。
 - ZULS/ZUAL FR24 验证：本地导航数据库解析 `ZULS -> LXA`、`ZUAL -> NGQ` 成功；无已同步 FR24 会话时，FR24 schedule 探测返回 403，Query 页应提示先打开 FR24 验证页并同步会话。
