@@ -1480,7 +1480,21 @@ body.left-panel-expanded .selection-table {
 
 .query-history-list {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 7px;
+}
+
+.query-history-list .query-flight-card.is-history {
+  min-width: 0;
+  margin-top: 0;
+}
+
+.query-history-list .query-flight-actions {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.query-history-list .query-empty-inline {
+  grid-column: 1 / -1;
 }
 
 .query-empty {
@@ -1496,6 +1510,49 @@ body.left-panel-expanded .selection-table {
 .query-empty-inline {
   margin-top: 7px;
   padding: 8px;
+}
+
+@keyframes waypointHighlightPulse {
+  0% {
+    fill-opacity: 0.34;
+    stroke-opacity: 0.98;
+    stroke-width: 3px;
+  }
+  68% {
+    fill-opacity: 0.07;
+    stroke-opacity: 0.18;
+    stroke-width: 8px;
+  }
+  100% {
+    fill-opacity: 0.04;
+    stroke-opacity: 0;
+    stroke-width: 9px;
+  }
+}
+
+@keyframes waypointHighlightCore {
+  0%,
+  100% {
+    fill-opacity: 0.9;
+    stroke-opacity: 0.95;
+  }
+  52% {
+    fill-opacity: 1;
+    stroke-opacity: 1;
+  }
+}
+
+.waypoint-highlight-pulse {
+  animation: waypointHighlightPulse 1.45s ease-out infinite;
+  pointer-events: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.waypoint-highlight-core {
+  animation: waypointHighlightCore 1.45s ease-in-out infinite;
+  filter: drop-shadow(0 0 4px rgba(255, 244, 181, 0.62));
+  pointer-events: none;
+  vector-effect: non-scaling-stroke;
 }
 
 .settings-action-row {
@@ -3465,7 +3522,7 @@ html[data-theme="day"] .offline-progress {
     grid-area: planner;
     min-height: 0;
     border-radius: 9px;
-    padding: 13px 6px 5px;
+    padding: 30px 6px 5px;
     overflow-y: auto;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
@@ -3476,6 +3533,7 @@ html[data-theme="day"] .offline-progress {
   }
 
   html:not([data-device="pad"]) .mobile-panel-drag-handle {
+    position: relative;
     grid-area: planner;
     align-self: start;
     justify-self: center;
@@ -3483,9 +3541,9 @@ html[data-theme="day"] .offline-progress {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 46px;
-    height: 10px;
-    margin-top: 3px;
+    width: min(148px, 46vw);
+    height: 34px;
+    margin-top: 0;
     border: 0;
     border-radius: 999px;
     background: transparent;
@@ -3495,20 +3553,54 @@ html[data-theme="day"] .offline-progress {
     -webkit-tap-highlight-color: transparent;
   }
 
+  html:not([data-device="pad"]) .mobile-panel-drag-handle::before {
+    position: absolute;
+    inset: 5px 0;
+    border-radius: 999px;
+    background: rgba(84, 189, 255, 0.08);
+    opacity: 0;
+    transform: scaleX(0.58) scaleY(0.72);
+    transition:
+      opacity 0.14s ease,
+      transform 0.14s ease;
+    content: "";
+  }
+
   html:not([data-device="pad"]) .mobile-panel-drag-handle span {
+    position: relative;
+    z-index: 1;
     display: block;
-    width: 30px;
+    width: 34px;
     height: 3px;
     border-radius: 999px;
     background: rgba(181, 190, 198, 0.58);
     box-shadow: none;
+    transition:
+      width 0.14s ease,
+      height 0.14s ease,
+      background-color 0.14s ease,
+      box-shadow 0.14s ease,
+      transform 0.14s ease;
+    will-change: width, height, transform;
+  }
+
+  html:not([data-device="pad"]) .mobile-panel-drag-handle:active::before,
+  html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .mobile-panel-drag-handle::before {
+    opacity: 1;
+    transform: scaleX(1) scaleY(1);
+  }
+
+  html:not([data-device="pad"]) .mobile-panel-drag-handle:active span,
+  html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .mobile-panel-drag-handle span {
+    width: 42px;
+    height: 4px;
+    background: rgba(84, 189, 255, 0.78);
+    box-shadow: 0 0 0 5px rgba(84, 189, 255, 0.08);
+    transform: translateY(1px);
   }
 
   html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .shell {
-    transition:
-      height 0.12s linear,
-      max-height 0.12s linear,
-      padding 0.12s linear;
+    transition: none;
   }
 
   html:not([data-device="pad"]) button {
@@ -3614,8 +3706,18 @@ html[data-theme="day"] .offline-progress {
     box-shadow: none;
   }
 
+  html[data-theme="day"]:not([data-device="pad"]) .mobile-panel-drag-handle::before {
+    background: rgba(36, 125, 162, 0.08);
+  }
+
   html[data-theme="day"]:not([data-device="pad"]) .mobile-panel-drag-handle span {
     background: rgba(137, 149, 158, 0.46);
+  }
+
+  html[data-theme="day"]:not([data-device="pad"]) .mobile-panel-drag-handle:active span,
+  html[data-theme="day"]:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .mobile-panel-drag-handle span {
+    background: rgba(36, 125, 162, 0.68);
+    box-shadow: 0 0 0 5px rgba(36, 125, 162, 0.09);
   }
 
   html:not([data-device="pad"]) .mobile-bottom-tab {
@@ -4003,8 +4105,17 @@ html[data-theme="day"] .offline-progress {
     gap: 5px;
   }
 
+  html:not([data-device="pad"]) .query-history-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+  }
+
   html:not([data-device="pad"]) .query-flight-card {
     gap: 5px;
+  }
+
+  html:not([data-device="pad"]) .query-flight-card.is-history {
+    padding: 5px;
   }
 
   html:not([data-device="pad"]) .query-flight-number {

@@ -1,5 +1,27 @@
 # Codex 执行报告
 
+## 2026-06-06 FR24 历史字段、轨迹断点与航路点高亮
+
+已完成：
+
+- 优化 iPhone 下部工作区上拉手柄：扩大透明触控热区，保留短灰色视觉条，增加按下 / 拖动光晕动画；拖动过程改为 `requestAnimationFrame` 帧节流更新面板比例，拖动结束后再同步 Leaflet / MapLibre 尺寸，减少上划掉帧。
+- 补强 FR24 历史页 DOM 抽取：隐藏 WKWebView 读取历史页时同时抽取表头、直接单元格和 div/grid 嵌套单元格，Swift 优先按结构化字段解析 `Date / From / To / Aircraft / Flight Time / STD / ATD / STA / Status`。
+- 修正 FR24 历史航班字段：历史页时间按设备当前时区解析，避免页面显示时间被当作 UTC 二次偏移；`Departed HH:mm` / `Landed HH:mm` 会进入实际起飞 / 实际到达字段；机型优先从 `Aircraft` 单元格提取。
+- 历史航班列表只保留 1 条 `Scheduled` 状态记录，并在 Query 页中以每行 2 个历史卡片展示。
+- FR24 GPX / playback 轨迹绘制增加断点识别：相邻轨迹点距离超过 20nm 时，该跳点段使用黑色虚线；正常轨迹段保持黑色实线。
+- 规划航路绘制增加全航点高亮：主世界副本中参与绘制的全部航点会使用和 Procedure 表格行点击相同的 SVG 脉冲高亮，便于检查 route payload 点列与地图绘制结果。
+- `map.html` 资源版本刷新为 `20260606-fr24-gap-highlight-history`。
+
+验证记录：
+
+- `node --check NavPlanner/Resources/Web/app.js` 成功；CSS 大括号配对检查成功；`swift -frontend -parse NavPlanner/Core/WebBridge/NavPlannerSchemeHandler.swift NavPlanner/Core/PlannerCore/PlannerService.swift` 成功。
+- `plutil -lint NavPlanner.xcodeproj/project.pbxproj NavPlanner/Support/PrivacyInfo.xcprivacy` 成功；`git diff --check` 成功。
+- `python3 Tools/Parity/run_all_parity.py` 成功；RouteParity 22、TrackParity 7、ProcedureParity 6 均无差异。
+- XcodeBuildMCP `build_run_sim` 在 iPhone 17 Pro Max 成功，构建、安装、启动无 warning / error；最终首屏截图确认手柄仍位于下方面板内部顶部，地图、Plan 表单和底部 `计划 / 机场 / 查询 / 设置` 四标签正常，截图为 `/var/folders/7m/jzh_ftyn6_gfjz552yy612zr0000gn/T/screenshot_optimized_12a22635-1a20-415a-88b8-e84fd0fdd16d.jpg`。
+- ZULS/ZUAL FR24 无会话验证：当前模拟器无已保存 `com.midaxia.navplanner` FR24 Cookie；直接探测 `LXA` schedule 返回 HTTP 403、`cf-mitigated: challenge` 和 Cloudflare HTML，符合 Query 页提示用户打开 FR24 验证页并同步会话的降级路径。本轮未自动点击 WKWebView 内 Query 控件。
+- 扫描本轮 XcodeBuildMCP runtime / oslog，未发现 `TypeError`、`ReferenceError`、`SyntaxError`、`Exception`、`fatal` 或 FR24 WebBridge 错误。
+- `git -C NavPlanner-web status --short` 无输出，参考项目保持未修改。
+
 ## 2026-06-06 FR24 历史页与 iPhone 上拉工作区
 
 已完成：

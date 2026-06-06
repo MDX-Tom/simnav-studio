@@ -46,6 +46,7 @@
 - [x] 将 iPhone 底部三标签再贴近底部，输入区比例收紧到约 36%，释放更多地图高度。
 - [x] 为 iPhone 底部三标签恢复 Home Indicator 安全区留白，避免标签贴到系统横条。
 - [x] 为 iPhone 下部工作区增加上拉手柄：默认保持当前约 66% 地图 / 34% 工作区，最大上拉时地图保留 30%；切换 `计划 / 机场 / 查询 / 设置` 不重置位置，软键盘出现时继续走原有自动上拉布局。
+- [x] 优化 iPhone 上拉手柄触控：扩大透明命中范围、增加按下/拖动动画，并用 `requestAnimationFrame` 节流拖动过程中的面板高度更新，减少上划掉帧。
 - [x] 略增 iPhone 地图 `+ / -` 缩放按钮之间的间距。
 - [x] 修复 iPhone 地图 `+ / -` 缩放按钮圆角覆盖问题，让每个按钮四角独立圆角。
 - [x] 缩小 iPhone 地图弹窗、弹窗字体、地图符号和地图标签。
@@ -108,6 +109,9 @@
 - [x] FR24 查询已切回 Web 逻辑：Query 页可在 App 内打开 FR24 验证页并自动同步内置浏览器 Cookie / `_frPl`，Swift 使用 `/common/v1/airport.json` schedule 插件和 `/common/v1/flight-playback.json` 查询 / 下载；手动 Cookie 输入只作为高级兜底。
 - [x] 修复 FR24 隐藏浏览器请求问题：先定位 `evaluateJavaScript(async...)` 未等待 Promise 和跨域 `fetch` 的 `Load failed`，再改为共享 WKWebView 顶层导航加载 FR24 API JSON；ZULS/ZUAL 查询已在模拟器显示航班卡片。
 - [x] 修正 FR24 航班历史来源：`航班历史` 不再继续扫描同航线 schedule 窗口，而是按航班号读取 `www.flightradar24.com/data/flights/{flight}` 数据页，展示页面中可见的全部历史 / 计划记录，并从 `Play` 链接提取可下载 playback 的 `flightId`。
+- [x] 补强 FR24 历史展示：历史页优先按 DOM 表头 / 单元格解析时间、机型、状态和起降机场；实际起飞 / 落地时间按页面展示时区解析，`Scheduled` 状态只保留 1 条，历史记录以每行 2 个卡片展示。
+- [x] 补强 FR24 轨迹绘制：相邻轨迹点距离超过 20nm 的跳点段使用黑色虚线，正常轨迹段保持黑色实线。
+- [x] 补强规划航路绘制：按航点绘制的主航路会突出显示全部参与绘制的航点，复用 Procedure 表格行点击的脉冲高亮动画。
 - [x] 修正 FR24 会话缺失、Cloudflare 验证页、HTML 响应、401 / 403、轨迹点不足和网络失败时的 Query 页降级文案，不再指向已移除的旧入口，并压缩小屏 Query 查询按钮视觉重量。
 - [x] 将 `ZULS` / `ZUAL` 固定为 FR24 相关改动的验证航线；无已同步 FR24 会话时至少验证该航线的会话缺失 / Cloudflare 降级路径。
 - [ ] 继续补齐 FR24 在线增强的真实样例回归：会话缺失、Cloudflare 验证、轨迹不足、飞行中航班、跨日期变更线航班、噪声/稀疏轨迹和剩余错误提示细节。

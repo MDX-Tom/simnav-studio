@@ -14,12 +14,13 @@
 - `/api/route/resolve` 已按 Web API 行为返回手动 route 错误：未知 waypoint、起始 `DCT`、DCT 缺目标、airway 缺 exit、`***` 缺目标等会返回 400 JSON。
 - `/api/route/resolve` 手动 route payload 已对齐 Web：终点机场仅进入 `points`，不额外生成 final direct leg；`***` 补航段后的 `route_display` 使用展开后的 legs。
 - `/api/route/track-match` 已迁移导入轨迹点的本地 airway graph 匹配、同航路简化、轨迹误差约束、单航路替换保护、zigzag 平滑清理，以及匹配后 SID / STAR / APPROACH 自动挂接；`Tools/TrackParity` 已可重复比较 7 个 track-match case，覆盖合成导入轨迹、Procedure 自动挂接、日期变更线和基础错误语义。
-- FR24 在线增强已从 Plan 旧按钮迁移到独立 `查询` Tab：Swift 本地 `/api/fr24/search` / `history` / `download` / `cache` / `access` 负责 FR24 Web 会话状态、App 内 FR24 验证浏览器 CookieStore 自动同步、航线航班查询、按 `www.flightradar24.com/data/flights/{flight}` 数据页读取历史子菜单、GPX / playback JSON 缓存和缓存清理；前端可将下载轨迹用黑色线绘制到地图，并继续 POST `/api/route/track-match` 执行本地匹配。`/api/route/fr24-match` 保留 Web parity 入口并改为在线尝试。
+- FR24 在线增强已从 Plan 旧按钮迁移到独立 `查询` Tab：Swift 本地 `/api/fr24/search` / `history` / `download` / `cache` / `access` 负责 FR24 Web 会话状态、App 内 FR24 验证浏览器 CookieStore 自动同步、航线航班查询、按 `www.flightradar24.com/data/flights/{flight}` 数据页读取历史子菜单、GPX / playback JSON 缓存和缓存清理；历史页优先按 DOM 表头 / 单元格解析机型、计划 / 实际起降时间和状态，并只保留 1 条 `Scheduled` 记录；前端可将下载轨迹用黑色线绘制到地图，超过 20nm 的轨迹跳点段显示为黑色虚线，并继续 POST `/api/route/track-match` 执行本地匹配。`/api/route/fr24-match` 保留 Web parity 入口并改为在线尝试。
 - WKWebView 已接入 JavaScript alert / confirm / prompt，保留给通用 Web 工作台弹窗使用；当前 FR24 主流程不再依赖旧的手动降级入口。
 - Procedure API 已按 Web `procedure_geometry` 迁移 RF / AF 弧线、复飞路径分段和末端等待航线几何；`Tools/ProcedureParity` 已可重复比较 6 个 Procedure geometry case，覆盖 RF 弧线、复飞 / holding、transition 合并、ZULS 复飞异常圆弧回归和空结果语义。
 - nav-overlay 已按 Web `planner_overlay.py` 迁移本地缓存、世界副本偏移、跨日期变更线边界判断、航路空间分桶、航路标签预算、terminal waypoint / navaid、跑道和 ILS 输出；典型跨日期变更线视野与 Web 参考 payload 计数一致。
 - `/api/map-cache/google_terrain/...`、`/api/terrain/terrarium/...` 已由 Swift 本地异步缓存承接；`google_terrain` 增加 Esri / OpenTopoMap / Google 顺序兜底，没有真实底图、下载失败或离线时不阻塞 nav-overlay。
 - nav-overlay 前端绘制采用双缓冲 layer group 替换，缩放后旧航路叠加层会保留到新叠加层绘制完成；iPhone 额外使用 SVG renderer 和延迟旧层移除减少闪烁。
+- 按航点绘制的规划航路会将主世界副本中参与绘制的全部航点加上与 Procedure 表格行点击相同的 SVG 脉冲高亮，便于对照 route payload 的点列和地图上实际航点。
 - iPhone 已按本地 App 需求调整为上部地图、下部 Plan / Airport / Settings 三标签；标签切换不重建地图。
 - iPad 保持既有 Web 工作台布局，并新增 Settings 切换页。
 - Settings 支持本地数据库选择、日间/夜间/系统自动外观模式、日间三档 / 夜间三档 App 图标选择、离线地图管理、在线地图缓存管理和版权说明。

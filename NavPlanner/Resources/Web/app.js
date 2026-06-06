@@ -574,6 +574,8 @@ const state = {
   mobileKeyboardResetTimer: 0,
   mobilePanelMapRatio: 66,
   mobilePanelDrag: null,
+  mobilePanelDragFrame: 0,
+  mobilePanelDragPendingRatio: null,
   mobilePanelResizeFrame: 0,
 };
 
@@ -664,6 +666,7 @@ const VECTOR_PAN_BUFFER_MIN_PX = 520;
 const VECTOR_PAN_BUFFER_MAX_PX = 1120;
 const ASYNC_CACHED_TILE_RETRY_DELAYS_MS = [350, 800, 1600, 3200, 6400, 10000];
 const ROUTE_WORLD_COPY_OFFSETS = [-720, -360, 0, 360, 720];
+const FR24_TRACK_GAP_NM = 20;
 const AIRPORT_SLOTS = ["departure", "arrival", "manual"];
 const AIRPORT_SLOT_LABELS = {
   departure: "airport.slot.departure",
@@ -1022,6 +1025,7 @@ const navRenderer = isPhoneWorkbench()
 const pointRenderer = isPhoneWorkbench()
   ? L.svg({ pane: "pointPane", padding: 0.42 })
   : L.canvas({ pane: "pointPane", padding: 0.35 });
+const waypointHighlightRenderer = L.svg({ pane: "routePane", padding: 0.48 });
 const markerLayerGroup = L.layerGroup().addTo(map);
 const selectionHighlightLayerGroup = L.layerGroup().addTo(map);
 const labelLayerGroup = L.layerGroup().addTo(map);
@@ -3965,7 +3969,9 @@ function applyMobilePanelMapRatio(value, options = {}) {
   } else {
     delete document.body.dataset.mobilePanelDragging;
   }
-  scheduleMobilePanelMapResize();
+  if (!options.dragging) {
+    scheduleMobilePanelMapResize();
+  }
 }
 
 function installMobilePanelDragHandle() {
@@ -3975,13 +3981,40 @@ function installMobilePanelDragHandle() {
   }
   applyMobilePanelMapRatio(state.mobilePanelMapRatio);
   const isPortraitPhone = () => !window.matchMedia || window.matchMedia("(orientation: portrait)").matches;
+  const cancelPendingDragFrame = () => {
+    if (state.mobilePanelDragFrame) {
+      window.cancelAnimationFrame(state.mobilePanelDragFrame);
+      state.mobilePanelDragFrame = 0;
+    }
+    state.mobilePanelDragPendingRatio = null;
+  };
+  const scheduleDragRatio = (ratio) => {
+    state.mobilePanelDragPendingRatio = ratio;
+    if (state.mobilePanelDragFrame) {
+      return;
+    }
+    state.mobilePanelDragFrame = window.requestAnimationFrame(() => {
+      state.mobilePanelDragFrame = 0;
+      const pendingRatio = state.mobilePanelDragPendingRatio;
+      state.mobilePanelDragPendingRatio = null;
+      if (pendingRatio !== null && state.mobilePanelDrag) {
+        applyMobilePanelMapRatio(pendingRatio, { dragging: true });
+      }
+    });
+  };
   const finishDrag = () => {
     if (!state.mobilePanelDrag) {
       return;
     }
+    const finalRatio = state.mobilePanelDragPendingRatio;
+    cancelPendingDragFrame();
+    if (finalRatio !== null) {
+      applyMobilePanelMapRatio(finalRatio, { dragging: true });
+    }
     state.mobilePanelDrag = null;
     delete document.body.dataset.mobilePanelDragging;
     scheduleMobilePanelMapResize();
+    scheduleVectorMapResizeSync();
     window.setTimeout(() => map.invalidateSize({ animate: false, pan: false }), 140);
   };
 
@@ -4008,7 +4041,7 @@ function installMobilePanelDragHandle() {
     }
     event.preventDefault();
     const deltaRatio = ((event.clientY - drag.startY) / drag.shellHeight) * 100;
-    applyMobilePanelMapRatio(drag.startRatio + deltaRatio, { dragging: true });
+    scheduleDragRatio(drag.startRatio + deltaRatio);
   });
 
   handle.addEventListener("pointerup", finishDrag);
@@ -5042,6 +5075,36 @@ function clearSelectionWaypointHighlight() {
     .forEach((row) => row.classList.remove("active"));
 }
 
+function addWaypointHighlightMarker(latlng, layerGroup, options = {}) {
+  const color = options.color || "#fff4b5";
+  const fillColor = options.fillColor || MAP_COLORS.approach;
+  const outer = L.circleMarker(latlng, {
+    pane: "routePane",
+    radius: options.outerRadius || 10,
+    color,
+    weight: options.weight || 3,
+    opacity: 0.98,
+    fillColor,
+    fillOpacity: options.fillOpacity ?? 0.34,
+    interactive: false,
+    className: "waypoint-highlight-pulse",
+    renderer: waypointHighlightRenderer,
+  }).addTo(layerGroup);
+  const inner = L.circleMarker(latlng, {
+    pane: "routePane",
+    radius: options.innerRadius || 4,
+    color: "#ffffff",
+    weight: 1.5,
+    opacity: 0.95,
+    fillColor: options.innerFillColor || "#17243a",
+    fillOpacity: 0.9,
+    interactive: false,
+    className: "waypoint-highlight-core",
+    renderer: waypointHighlightRenderer,
+  }).addTo(layerGroup);
+  return { outer, inner };
+}
+
 /**
  * 功能：执行 `highlightSelectionWaypoint` 对应的业务逻辑。
  * 输入：item、rowElement。
@@ -5054,26 +5117,7 @@ function highlightSelectionWaypoint(item, rowElement) {
     return;
   }
   rowElement?.classList.add("active");
-  state.selectionHighlightLayer = L.circleMarker(latlng, {
-    pane: "routePane",
-    radius: 10,
-    color: "#fff4b5",
-    weight: 3,
-    opacity: 0.98,
-    fillColor: MAP_COLORS.approach,
-    fillOpacity: 0.34,
-    interactive: false,
-  }).addTo(selectionHighlightLayerGroup);
-  L.circleMarker(latlng, {
-    pane: "routePane",
-    radius: 4,
-    color: "#ffffff",
-    weight: 1.5,
-    opacity: 0.95,
-    fillColor: "#17243a",
-    fillOpacity: 0.9,
-    interactive: false,
-  }).addTo(selectionHighlightLayerGroup);
+  state.selectionHighlightLayer = addWaypointHighlightMarker(latlng, selectionHighlightLayerGroup).outer;
   if (!map.getBounds().pad(-0.08).contains(latlng)) {
     map.panTo(latlng, { animate: true, duration: 0.35 });
   }
@@ -5297,6 +5341,47 @@ function routeWorldCopy(points, longitudeOffset) {
     ...point,
     lon: point.lon + longitudeOffset,
   }));
+}
+
+function greatCircleDistanceNm(pointA, pointB) {
+  const lat1 = Number(pointA?.lat);
+  const lat2 = Number(pointB?.lat);
+  const lon1 = Number.isFinite(pointA?.originalLon) ? Number(pointA.originalLon) : Number(pointA?.lon);
+  const lon2 = Number.isFinite(pointB?.originalLon) ? Number(pointB.originalLon) : Number(pointB?.lon);
+  if (![lat1, lat2, lon1, lon2].every(Number.isFinite)) {
+    return 0;
+  }
+  const toRad = (value) => (value * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(normalizeLongitude(lon2 - lon1));
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 3440.065 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(Math.max(0, 1 - a)));
+}
+
+function splitFR24TrackSegments(points) {
+  if (!Array.isArray(points) || points.length < 2) {
+    return [];
+  }
+  const segments = [];
+  let solidRun = [points[0]];
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1];
+    const current = points[index];
+    if (greatCircleDistanceNm(previous, current) > FR24_TRACK_GAP_NM) {
+      if (solidRun.length >= 2) {
+        segments.push({ points: solidRun, dashed: false });
+      }
+      segments.push({ points: [previous, current], dashed: true });
+      solidRun = [current];
+    } else {
+      solidRun.push(current);
+    }
+  }
+  if (solidRun.length >= 2) {
+    segments.push({ points: solidRun, dashed: false });
+  }
+  return segments;
 }
 
 /**
@@ -7151,6 +7236,20 @@ function drawRouteCopy(points, payload, routeAssociations, longitudeOffset, fitB
       }
     });
 
+  if (!longitudeOffset) {
+    visiblePoints.forEach((point, index) => {
+      const isEndpoint = index === 0 || index === visiblePoints.length - 1;
+      addWaypointHighlightMarker(latLngForPoint(point), routeLayerGroup, {
+        outerRadius: compactPhoneValue(isEndpoint ? 8.5 : 7, 0.72, isEndpoint ? 5.6 : 4.8),
+        innerRadius: compactPhoneValue(isEndpoint ? 3.3 : 2.7, 0.72, isEndpoint ? 2.5 : 2.1),
+        color: "#fff4b5",
+        fillColor: MAP_COLORS.route,
+        fillOpacity: isEndpoint ? 0.24 : 0.18,
+        innerFillColor: "#071928",
+      });
+    });
+  }
+
   visiblePoints.forEach((point) => addRoutePointHitTarget(point, routeAssociations));
 
   drawPointMarker({ ...points[0], kind: "departure" }, true, {
@@ -8361,18 +8460,22 @@ function drawFR24TrackPoints(trackPoints, { fitBounds = true } = {}) {
   if (basePoints.length < 2) {
     return 0;
   }
+  const segments = splitFR24TrackSegments(basePoints);
   ROUTE_WORLD_COPY_OFFSETS.forEach((longitudeOffset) => {
-    const latlngs = routeWorldCopy(basePoints, longitudeOffset).map(latLngForPoint);
-    const layer = L.polyline(latlngs, {
-      pane: "routePane",
-      color: "#050505",
-      weight: 3.4,
-      opacity: 0.92,
-      interactive: false,
-      lineCap: "round",
-      lineJoin: "round",
-    }).addTo(fr24TrackLayerGroup);
-    layer.bringToFront();
+    segments.forEach((segment) => {
+      const latlngs = routeWorldCopy(segment.points, longitudeOffset).map(latLngForPoint);
+      const layer = L.polyline(latlngs, {
+        pane: "routePane",
+        color: "#050505",
+        weight: segment.dashed ? 2.8 : 3.4,
+        opacity: segment.dashed ? 0.82 : 0.92,
+        interactive: false,
+        lineCap: "round",
+        lineJoin: "round",
+        dashArray: segment.dashed ? "7 8" : null,
+      }).addTo(fr24TrackLayerGroup);
+      layer.bringToFront();
+    });
   });
   state.fr24TrackPayload = { track_points: basePoints };
   if (fitBounds) {

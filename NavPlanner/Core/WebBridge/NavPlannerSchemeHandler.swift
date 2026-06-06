@@ -912,6 +912,19 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
           href: hrefValue(anchor),
         }))
         .filter((item) => item.href || item.text || item.title);
+      const cellsFor = (node) => {
+        const direct = Array.from(node.querySelectorAll(":scope > td, :scope > th, :scope > [role='cell'], :scope > [role='gridcell'], :scope > [role='columnheader']"));
+        const nested = direct.length ? direct : Array.from(node.querySelectorAll("td, th, [role='cell'], [role='gridcell'], [role='columnheader'], [class*='cell'], [class*='Cell']"));
+        return nested
+          .map((cell) => clean(cell.innerText || cell.textContent || ""))
+          .filter(Boolean);
+      };
+      const headersFor = (node) => {
+        const table = node.closest("table, [role='table'], [role='grid']");
+        return Array.from(table?.querySelectorAll("thead th, thead [role='columnheader'], [role='rowgroup']:first-child [role='columnheader']") || [])
+          .map((cell) => clean(cell.innerText || cell.textContent || ""))
+          .filter(Boolean);
+      };
       const rows = [];
       const seen = new Set();
       const rowNodes = Array.from(document.querySelectorAll("tr, [role='row'], li, article, [class*='flight'], [class*='history'], [class*='row']"));
@@ -935,7 +948,7 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
           continue;
         }
         seen.add(key);
-        rows.push({ text, hrefs });
+        rows.push({ text, hrefs, cells: cellsFor(node), headers: headersFor(node) });
         if (rows.length >= 120) {
           break;
         }
@@ -1215,15 +1228,47 @@ private final class FR24Service {
             }
             let flightID = row.hrefs.compactMap(Self.extractFlightID(from:)).first
                 ?? Self.extractFlightID(from: text)
-            let scheduledDeparture = labeledTime("STD", in: text, preferredDate: firstHistoryDate(in: text))
-            let actualDeparture = labeledTime("ATD", in: text, preferredDate: firstHistoryDate(in: text))
-                ?? labeledTime("DEP", in: text, preferredDate: firstHistoryDate(in: text))
-            let scheduledArrival = labeledTime("STA", in: text, preferredDate: firstHistoryDate(in: text), rollAfter: scheduledDeparture ?? actualDeparture)
-            let estimatedArrival = labeledTime("ETA", in: text, preferredDate: firstHistoryDate(in: text), rollAfter: scheduledDeparture ?? actualDeparture)
-            let dateTimestamp = firstHistoryDate(in: text)
-            let duration = durationFromHistoryText(text)
-                ?? positiveDuration(departure: actualDeparture ?? scheduledDeparture, arrival: estimatedArrival ?? scheduledArrival)
-            let aircraftInfo = aircraftFromHistoryText(text)
+            let fieldMap = historyFieldMap(headers: row.headers, cells: row.cells)
+            let dateTimestamp = firstHistoryDate(in: Self.stringValue(fieldMap["date"])) ?? firstHistoryDate(in: text)
+            let scheduledDeparture = timeFromHistoryCell(Self.stringValue(fieldMap["std"]), preferredDate: dateTimestamp)
+                ?? labeledTime("STD", in: text, preferredDate: dateTimestamp)
+            let actualDeparture = timeFromHistoryCell(Self.stringValue(fieldMap["atd"]), preferredDate: dateTimestamp)
+                ?? labeledTime("ATD", in: text, preferredDate: dateTimestamp)
+                ?? labeledTime("DEP", in: text, preferredDate: dateTimestamp)
+                ?? statusTimeFromHistoryCell(Self.stringValue(fieldMap["status"]), statusWords: ["Departed"], preferredDate: dateTimestamp)
+                ?? statusTimeFromHistoryCell(text, statusWords: ["Departed"], preferredDate: dateTimestamp)
+            let scheduledArrival = timeFromHistoryCell(
+                Self.stringValue(fieldMap["sta"]),
+                preferredDate: dateTimestamp,
+                rollAfter: scheduledDeparture ?? actualDeparture
+            ) ?? labeledTime("STA", in: text, preferredDate: dateTimestamp, rollAfter: scheduledDeparture ?? actualDeparture)
+            let actualArrival = statusTimeFromHistoryCell(
+                Self.stringValue(fieldMap["status"]),
+                statusWords: ["Landed", "Arrived"],
+                preferredDate: dateTimestamp,
+                rollAfter: actualDeparture ?? scheduledDeparture
+            ) ?? labeledTime("ATA", in: text, preferredDate: dateTimestamp, rollAfter: actualDeparture ?? scheduledDeparture)
+                ?? statusTimeFromHistoryCell(text, statusWords: ["Landed", "Arrived"], preferredDate: dateTimestamp, rollAfter: actualDeparture ?? scheduledDeparture)
+            let estimatedArrival = timeFromHistoryCell(
+                Self.stringValue(fieldMap["eta"]),
+                preferredDate: dateTimestamp,
+                rollAfter: scheduledDeparture ?? actualDeparture
+            ) ?? statusTimeFromHistoryCell(
+                Self.stringValue(fieldMap["status"]),
+                statusWords: ["Estimated", "ETA"],
+                preferredDate: dateTimestamp,
+                rollAfter: actualDeparture ?? scheduledDeparture
+            ) ?? labeledTime("ETA", in: text, preferredDate: dateTimestamp, rollAfter: scheduledDeparture ?? actualDeparture)
+            let duration = durationFromHistoryCell(Self.stringValue(fieldMap["flight_time"]))
+                ?? durationFromHistoryText(text)
+                ?? positiveDuration(departure: actualDeparture ?? scheduledDeparture, arrival: actualArrival ?? estimatedArrival ?? scheduledArrival)
+            let aircraftInfo = aircraftFromHistoryText(Self.stringValue(fieldMap["aircraft"]))
+                ?? aircraftFromHistoryText(text)
+                ?? ("", "")
+            let originCode = airportCodeFromHistoryCell(Self.stringValue(fieldMap["from"]))
+            let destinationCode = airportCodeFromHistoryCell(Self.stringValue(fieldMap["to"]))
+            let statusFromCell = statusFromHistoryText(Self.stringValue(fieldMap["status"]))
+            let status = statusFromCell.isEmpty ? statusFromHistoryText(text) : statusFromCell
             var publicFlight: [String: Any] = [
                 "fr24_id": flightID ?? "",
                 "flight": flightToken,
@@ -1232,12 +1277,12 @@ private final class FR24Service {
                 "aircraft": aircraftInfo.type,
                 "aircraft_registration": aircraftInfo.registration,
                 "origin_icao": Self.stringValue(departure["icao"]),
-                "origin_iata": Self.stringValue(departure["iata"]),
+                "origin_iata": originCode.isEmpty ? Self.stringValue(departure["iata"]) : originCode,
                 "origin_name": Self.stringValue(departure["name"]),
                 "dest_icao": Self.stringValue(arrival["icao"]),
-                "dest_iata": Self.stringValue(arrival["iata"]),
+                "dest_iata": destinationCode.isEmpty ? Self.stringValue(arrival["iata"]) : destinationCode,
                 "dest_name": Self.stringValue(arrival["name"]),
-                "status": statusFromHistoryText(text),
+                "status": status,
                 "history_url": pageURL,
                 "raw_history": text,
                 "timestamp": actualDeparture ?? scheduledDeparture ?? dateTimestamp ?? 0,
@@ -1246,7 +1291,7 @@ private final class FR24Service {
             publicFlight["scheduled_departure"] = scheduledDeparture ?? NSNull()
             publicFlight["scheduled_arrival"] = scheduledArrival ?? NSNull()
             publicFlight["actual_departure"] = actualDeparture ?? NSNull()
-            publicFlight["actual_arrival"] = NSNull()
+            publicFlight["actual_arrival"] = actualArrival ?? NSNull()
             publicFlight["estimated_departure"] = NSNull()
             publicFlight["estimated_arrival"] = estimatedArrival ?? NSNull()
             publicFlight["duration_seconds"] = duration ?? NSNull()
@@ -1261,17 +1306,19 @@ private final class FR24Service {
                 break
             }
         }
-        return sortedFlights(flights)
+        return limitScheduledHistory(sortedFlights(flights))
     }
 
-    private func historyRows(from payload: [String: Any]) -> [(text: String, hrefs: [String])] {
-        var rows: [(text: String, hrefs: [String])] = []
+    private func historyRows(from payload: [String: Any]) -> [(text: String, hrefs: [String], cells: [String], headers: [String])] {
+        var rows: [(text: String, hrefs: [String], cells: [String], headers: [String])] = []
         if let rawRows = payload["rows"] as? [[String: Any]] {
             for rawRow in rawRows {
                 let text = Self.stringValue(rawRow["text"])
                 let hrefs = hrefs(from: rawRow["hrefs"])
+                let cells = Self.stringArray(rawRow["cells"])
+                let headers = Self.stringArray(rawRow["headers"])
                 if !text.isEmpty {
-                    rows.append((text, hrefs))
+                    rows.append((text, hrefs, cells, headers))
                 }
             }
         }
@@ -1280,11 +1327,144 @@ private final class FR24Service {
                 let rowText = Self.stringValue(link["rowText"])
                 let href = Self.stringValue(link["href"])
                 if !rowText.isEmpty {
-                    rows.append((rowText, href.isEmpty ? [] : [href]))
+                    rows.append((rowText, href.isEmpty ? [] : [href], [], []))
                 }
             }
         }
         return rows
+    }
+
+    private func historyFieldMap(headers: [String], cells: [String]) -> [String: String] {
+        var fields: [String: String] = [:]
+
+        func normalizedHeader(_ value: String) -> String {
+            let lowercased = value.lowercased()
+            if lowercased.contains("date") { return "date" }
+            if lowercased == "flight" || lowercased.contains("flight no") || lowercased.contains("flight number") { return "flight" }
+            if lowercased == "from" || lowercased.contains("origin") || lowercased.contains("from") { return "from" }
+            if lowercased == "to" || lowercased.contains("destination") || lowercased.contains("arrival airport") { return "to" }
+            if lowercased.contains("aircraft") { return "aircraft" }
+            if lowercased.contains("flight time") || lowercased.contains("duration") { return "flight_time" }
+            if lowercased.contains("std") { return "std" }
+            if lowercased.contains("atd") { return "atd" }
+            if lowercased.contains("sta") { return "sta" }
+            if lowercased.contains("ata") { return "ata" }
+            if lowercased.contains("eta") { return "eta" }
+            if lowercased.contains("status") { return "status" }
+            return ""
+        }
+
+        func assign(_ key: String, _ value: String) {
+            let cleaned = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !key.isEmpty, !cleaned.isEmpty, fields[key, default: ""].isEmpty {
+                fields[key] = cleaned
+            }
+        }
+
+        func labeledCell(_ cell: String) -> (String, String)? {
+            let labels: [(String, String)] = [
+                ("flight time", "flight_time"),
+                ("duration", "flight_time"),
+                ("aircraft", "aircraft"),
+                ("status", "status"),
+                ("date", "date"),
+                ("from", "from"),
+                ("origin", "from"),
+                ("to", "to"),
+                ("destination", "to"),
+                ("std", "std"),
+                ("atd", "atd"),
+                ("sta", "sta"),
+                ("ata", "ata"),
+                ("eta", "eta")
+            ]
+            let cleaned = cell
+                .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let lowercased = cleaned.lowercased()
+            for (label, key) in labels {
+                if lowercased == label {
+                    return nil
+                }
+                if lowercased.hasPrefix(label) {
+                    let suffix = lowercased.dropFirst(label.count)
+                    if let first = suffix.first,
+                       !first.isWhitespace,
+                       first != ":",
+                       first != "-",
+                       first != "–" {
+                        continue
+                    }
+                    var value = String(cleaned.dropFirst(label.count))
+                        .trimmingCharacters(in: CharacterSet(charactersIn: " :\n\t-"))
+                    if value.isEmpty,
+                       let range = cleaned.range(of: #"\b"# + NSRegularExpression.escapedPattern(for: label) + #"\b\s*[:\-]?\s*(.+)$"#, options: [.regularExpression, .caseInsensitive]) {
+                        value = String(cleaned[range]).replacingOccurrences(
+                            of: #"\b"# + NSRegularExpression.escapedPattern(for: label) + #"\b\s*[:\-]?\s*"#,
+                            with: "",
+                            options: [.regularExpression, .caseInsensitive]
+                        )
+                    }
+                    return value.isEmpty ? nil : (key, value)
+                }
+            }
+            return nil
+        }
+
+        func cellLooksLikeFlightNumber(_ cell: String) -> Bool {
+            let cleaned = cell
+                .replacingOccurrences(of: #"\s+"#, with: "", options: .regularExpression)
+                .uppercased()
+            guard let regex = try? NSRegularExpression(pattern: #"^[A-Z]{1,3}\d{1,4}[A-Z]?$"#) else {
+                return false
+            }
+            return regex.firstMatch(in: cleaned, range: NSRange(cleaned.startIndex..., in: cleaned)) != nil
+        }
+
+        func cellLooksLikeDate(_ cell: String) -> Bool {
+            firstHistoryDate(in: cell) != nil
+        }
+
+        for (index, header) in headers.enumerated() where index < cells.count {
+            let key = normalizedHeader(header)
+            assign(key, cells[index])
+        }
+
+        for cell in cells {
+            if let (key, value) = labeledCell(cell) {
+                assign(key, value)
+            }
+        }
+
+        if cells.count >= 8 {
+            let fallbackKeys = ["date", "from", "to", "aircraft", "flight_time", "std", "atd", "sta", "status"]
+            let fallbackWithFlightKeys = ["date", "flight", "from", "to", "aircraft", "flight_time", "std", "atd", "sta", "status"]
+            let startIndex = cells.firstIndex(where: cellLooksLikeDate) ?? 0
+            let remaining = Array(cells.dropFirst(startIndex))
+            let keys = remaining.count >= fallbackWithFlightKeys.count || (remaining.count >= 9 && remaining.indices.contains(1) && cellLooksLikeFlightNumber(remaining[1]))
+                ? fallbackWithFlightKeys
+                : fallbackKeys
+            for (index, key) in keys.enumerated() where index < remaining.count {
+                assign(key, remaining[index])
+            }
+        }
+        return fields
+    }
+
+    private func limitScheduledHistory(_ flights: [[String: Any]]) -> [[String: Any]] {
+        var didKeepScheduled = false
+        var output: [[String: Any]] = []
+        for flight in flights {
+            let isScheduled = Self.stringValue(flight["status"]).localizedCaseInsensitiveContains("scheduled")
+            if isScheduled {
+                if didKeepScheduled {
+                    continue
+                }
+                didKeepScheduled = true
+            }
+            output.append(flight)
+        }
+        return output
     }
 
     private func hrefs(from value: Any?) -> [String] {
@@ -1334,12 +1514,29 @@ private final class FR24Service {
         let dateText = "\(text[dayRange]) \(text[monthRange]) \(text[yearRange])"
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.timeZone = .current
         formatter.dateFormat = "d MMM yyyy"
         guard let date = formatter.date(from: dateText) else {
             return nil
         }
         return Int(date.timeIntervalSince1970)
+    }
+
+    private func timeFromHistoryCell(_ text: String, preferredDate: Int?, rollAfter: Int? = nil) -> Int? {
+        guard let dateStart = preferredDate,
+              let regex = try? NSRegularExpression(pattern: #"\b([0-2]?\d):([0-5]\d)\b"#),
+              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let hourRange = Range(match.range(at: 1), in: text),
+              let minuteRange = Range(match.range(at: 2), in: text),
+              let hours = Int(text[hourRange]),
+              let minutes = Int(text[minuteRange]) else {
+            return nil
+        }
+        var timestamp = dateStart + hours * 3600 + minutes * 60
+        if let rollAfter, timestamp + 6 * 3600 < rollAfter {
+            timestamp += 24 * 3600
+        }
+        return timestamp
     }
 
     private func labeledTime(_ label: String, in text: String, preferredDate: Int?, rollAfter: Int? = nil) -> Int? {
@@ -1361,6 +1558,28 @@ private final class FR24Service {
         return timestamp
     }
 
+    private func statusTimeFromHistoryCell(
+        _ text: String,
+        statusWords: [String],
+        preferredDate: Int?,
+        rollAfter: Int? = nil
+    ) -> Int? {
+        guard let preferredDate,
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        let words = statusWords
+            .map { NSRegularExpression.escapedPattern(for: $0) }
+            .joined(separator: "|")
+        let pattern = #"\b(?:"# + words + #")\b[^\d]{0,24}([0-2]?\d:[0-5]\d)\b"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let timeRange = Range(match.range(at: 1), in: text) else {
+            return nil
+        }
+        return timeFromHistoryCell(String(text[timeRange]), preferredDate: preferredDate, rollAfter: rollAfter)
+    }
+
     private func durationFromHistoryText(_ text: String) -> Int? {
         guard let regex = try? NSRegularExpression(pattern: #"\b(?:Landed|Arrived|Flight time|Duration)\s+(\d{1,2}):([0-5]\d)\b"#, options: [.caseInsensitive]),
               let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
@@ -1373,14 +1592,40 @@ private final class FR24Service {
         return hours * 3600 + minutes * 60
     }
 
-    private func aircraftFromHistoryText(_ text: String) -> (type: String, registration: String) {
-        guard let regex = try? NSRegularExpression(pattern: #"\b([A-Z0-9]{3,5})\s*\(([A-Z0-9-]{3,12})\)"#),
+    private func durationFromHistoryCell(_ text: String) -> Int? {
+        guard let regex = try? NSRegularExpression(pattern: #"^\s*(\d{1,2}):([0-5]\d)\s*$"#),
               let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
-              let typeRange = Range(match.range(at: 1), in: text),
-              let registrationRange = Range(match.range(at: 2), in: text) else {
-            return ("", "")
+              let hourRange = Range(match.range(at: 1), in: text),
+              let minuteRange = Range(match.range(at: 2), in: text),
+              let hours = Int(text[hourRange]),
+              let minutes = Int(text[minuteRange]) else {
+            return nil
         }
-        return (String(text[typeRange]), String(text[registrationRange]))
+        return hours * 3600 + minutes * 60
+    }
+
+    private func aircraftFromHistoryText(_ text: String) -> (type: String, registration: String)? {
+        if let regex = try? NSRegularExpression(pattern: #"\b([A-Z0-9]{3,5})\s*\(([A-Z0-9-]{3,12})\)"#),
+           let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+           let typeRange = Range(match.range(at: 1), in: text),
+           let registrationRange = Range(match.range(at: 2), in: text) {
+            return (String(text[typeRange]), String(text[registrationRange]))
+        }
+        if let regex = try? NSRegularExpression(pattern: #"\b(A[0-9][A-Z0-9]{2}|B[0-9][A-Z0-9]{2}|E[0-9]{3}|CRJ[0-9]{1,3}|AT[0-9]{2}|DH[0-9A-Z]{2}|C[0-9]{3})\b"#),
+           let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+           let typeRange = Range(match.range(at: 1), in: text) {
+            return (String(text[typeRange]), "")
+        }
+        return nil
+    }
+
+    private func airportCodeFromHistoryCell(_ text: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: #"\(([A-Z0-9]{3,4})\)"#),
+              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let range = Range(match.range(at: 1), in: text) else {
+            return ""
+        }
+        return String(text[range]).uppercased()
     }
 
     private func statusFromHistoryText(_ text: String) -> String {
