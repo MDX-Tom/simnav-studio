@@ -433,7 +433,7 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
                 routeAirports: routeAirports,
                 flightNumber: queryValue("flight", ""),
                 callsign: queryValue("callsign", ""),
-                limit: Int(queryValue("limit", "10")) ?? 10
+                limit: Int(queryValue("limit", "0")) ?? 0
             )
             return jsonResponse(payload, statusCode: payload["error"] == nil ? 200 : 503)
         }
@@ -674,6 +674,8 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
     private var pendingPageURL: URL?
     private var pendingPageStatus = 0
     private var pendingPageContentType = ""
+    private var pendingPageReadScript = ""
+    private var pendingPageReadDelay: TimeInterval = 0
 
     func performJSONRequest(path: String, params: [(String, String)]) throws -> [String: Any] {
         guard var components = URLComponents(string: "https://api.flightradar24.com\(path)") else {
@@ -712,7 +714,63 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
         }
     }
 
+    func performFlightHistoryPageRequest(flightToken: String) throws -> [String: Any] {
+        let token = flightToken.lowercased().filter { $0.isLetter || $0.isNumber }
+        guard !token.isEmpty,
+              let url = URL(string: "https://www.flightradar24.com/data/flights/\(token)") else {
+            throw BrowserError(message: "FR24 flight number missing.")
+        }
+
+        let semaphore = DispatchSemaphore(value: 0)
+        var output: Result<[String: Any], Error>?
+        DispatchQueue.main.async { [weak self] in
+            guard let self else {
+                output = .failure(BrowserError(message: "FR24 web request failed."))
+                semaphore.signal()
+                return
+            }
+            self.loadPage(
+                url: url,
+                acceptHeader: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                readScript: Self.flightHistoryExtractionScript,
+                readDelay: 1.2
+            ) { result in
+                output = result.flatMap { page in
+                    Self.decodeFlightHistoryPageResponse(page, requestURL: url)
+                }
+                semaphore.signal()
+            }
+        }
+        if semaphore.wait(timeout: .now() + 30) == .timedOut {
+            throw BrowserError(message: "FR24 web request timed out.")
+        }
+        switch output {
+        case let .success(payload):
+            return payload
+        case let .failure(error):
+            throw error
+        case .none:
+            throw BrowserError(message: "FR24 web request failed.")
+        }
+    }
+
     private func loadJSONPage(url: URL, completion: @escaping (Result<PageResponse, Error>) -> Void) {
+        loadPage(
+            url: url,
+            acceptHeader: "application/json, text/plain, */*",
+            readScript: "document.body ? (document.body.innerText || document.body.textContent || '') : (document.documentElement ? document.documentElement.innerText || document.documentElement.textContent || '' : '')",
+            readDelay: 0,
+            completion: completion
+        )
+    }
+
+    private func loadPage(
+        url: URL,
+        acceptHeader: String,
+        readScript: String,
+        readDelay: TimeInterval,
+        completion: @escaping (Result<PageResponse, Error>) -> Void
+    ) {
         guard pendingPageCompletion == nil else {
             completion(.failure(BrowserError(message: "FR24 browser is already handling a web request.")))
             return
@@ -722,8 +780,10 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
         pendingPageURL = url
         pendingPageStatus = 0
         pendingPageContentType = ""
+        pendingPageReadScript = readScript
+        pendingPageReadDelay = readDelay
         var request = URLRequest(url: url)
-        request.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
+        request.setValue(acceptHeader, forHTTPHeaderField: "Accept")
         request.setValue("https://www.flightradar24.com/", forHTTPHeaderField: "Referer")
         webView.load(request)
         DispatchQueue.main.asyncAfter(deadline: .now() + 24) { [weak self] in
@@ -800,6 +860,105 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
         return "text"
     }
 
+    private static func decodeFlightHistoryPageResponse(_ page: PageResponse, requestURL: URL) -> Result<[String: Any], Error> {
+        NSLog(
+            "NavPlanner FR24 browser history path=%@ status=%d type=%@ body=%@",
+            requestURL.path,
+            page.status,
+            page.contentType,
+            bodyKind(page.text)
+        )
+        if page.status == 401 || page.status == 403 {
+            return .failure(BrowserError(message: "FR24 web access was blocked. Open FR24 verification in Query, complete verification, then sync the session."))
+        }
+        guard page.status == 0 || (200..<300).contains(page.status) else {
+            return .failure(BrowserError(message: "FR24 web returned HTTP \(page.status)."))
+        }
+        guard let bodyData = page.text.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any] else {
+            return .failure(BrowserError(message: "FR24 web response was not valid JSON."))
+        }
+        let bodyText = Self.stringValue(object["bodyText"])
+        let combined = "\(page.text)\n\(bodyText)"
+        if combined.localizedCaseInsensitiveContains("cloudflare")
+            || combined.localizedCaseInsensitiveContains("challenge-platform")
+            || combined.localizedCaseInsensitiveContains("just a moment") {
+            return .failure(BrowserError(message: "FR24 web returned an HTML response."))
+        }
+        return .success(object)
+    }
+
+    private static func stringValue(_ value: Any?) -> String {
+        switch value {
+        case let value as String:
+            return value.trimmingCharacters(in: .whitespacesAndNewlines)
+        case let value as NSNumber:
+            return value.stringValue
+        case is NSNull, nil:
+            return ""
+        default:
+            return String(describing: value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    private static let flightHistoryExtractionScript = #"""
+    (() => {
+      const clean = (value) => String(value || "").replace(/\s+/g, " ").trim();
+      const hrefValue = (anchor) => anchor.href || anchor.getAttribute("href") || "";
+      const linksFor = (node) => Array.from(node.querySelectorAll("a"))
+        .map((anchor) => ({
+          text: clean(anchor.textContent),
+          title: clean(anchor.getAttribute("title") || anchor.getAttribute("aria-label") || ""),
+          href: hrefValue(anchor),
+        }))
+        .filter((item) => item.href || item.text || item.title);
+      const rows = [];
+      const seen = new Set();
+      const rowNodes = Array.from(document.querySelectorAll("tr, [role='row'], li, article, [class*='flight'], [class*='history'], [class*='row']"));
+      for (const node of rowNodes) {
+        const text = clean(node.innerText || node.textContent || "");
+        if (text.length < 18 || text.length > 1800) {
+          continue;
+        }
+        const hrefs = linksFor(node);
+        const hasDate = /\b\d{1,2}\s+[A-Za-z]{3}\s+20\d{2}\b/.test(text);
+        const hasFlightStatus = /\b(STD|ATD|STA|ETA|Landed|Scheduled|Cancelled|Canceled|Diverted|Unknown|KML|CSV|Play)\b/i.test(text);
+        const hasFlightLink = hrefs.some((link) => /(?:flightId=|\/flight\/|\/data\/flights\/|#[0-9a-f]{6,12}\b)/i.test(link.href));
+        if (!hasDate && !hasFlightLink) {
+          continue;
+        }
+        if (!hasFlightStatus && !hasFlightLink) {
+          continue;
+        }
+        const key = text.slice(0, 240);
+        if (seen.has(key)) {
+          continue;
+        }
+        seen.add(key);
+        rows.push({ text, hrefs });
+        if (rows.length >= 120) {
+          break;
+        }
+      }
+      const links = Array.from(document.querySelectorAll("a"))
+        .map((anchor) => ({
+          text: clean(anchor.textContent),
+          title: clean(anchor.getAttribute("title") || anchor.getAttribute("aria-label") || ""),
+          href: hrefValue(anchor),
+          rowText: clean((anchor.closest("tr, [role='row'], li, article, [class*='flight'], [class*='history'], [class*='row']") || anchor.parentElement || anchor).innerText || ""),
+        }))
+        .filter((item) => item.href || item.text || item.title)
+        .slice(0, 240);
+      return JSON.stringify({
+        title: clean(document.title),
+        url: window.location.href,
+        bodyText: clean(document.body ? document.body.innerText : ""),
+        rows,
+        links,
+      });
+    })()
+    """#
+
     func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
         if pendingPageCompletion != nil,
            let response = navigationResponse.response as? HTTPURLResponse {
@@ -811,18 +970,26 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         if pendingPageCompletion != nil {
-            let script = "document.body ? (document.body.innerText || document.body.textContent || '') : (document.documentElement ? document.documentElement.innerText || document.documentElement.textContent || '' : '')"
-            webView.evaluateJavaScript(script) { [weak self] result, error in
+            let script = pendingPageReadScript
+            let delay = pendingPageReadDelay
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak webView] in
                 guard let self else { return }
-                if let error {
-                    self.finishPendingPage(.failure(BrowserError(message: "FR24 web response could not be read: \(error.localizedDescription)")))
+                guard let webView else {
+                    self.finishPendingPage(.failure(BrowserError(message: "FR24 web request failed.")))
                     return
                 }
-                self.finishPendingPage(.success(PageResponse(
-                    status: self.pendingPageStatus,
-                    contentType: self.pendingPageContentType,
-                    text: result as? String ?? ""
-                )))
+                webView.evaluateJavaScript(script) { [weak self] result, error in
+                    guard let self else { return }
+                    if let error {
+                        self.finishPendingPage(.failure(BrowserError(message: "FR24 web response could not be read: \(error.localizedDescription)")))
+                        return
+                    }
+                    self.finishPendingPage(.success(PageResponse(
+                        status: self.pendingPageStatus,
+                        contentType: self.pendingPageContentType,
+                        text: result as? String ?? ""
+                    )))
+                }
             }
             return
         }
@@ -846,6 +1013,8 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
         pendingPageURL = nil
         pendingPageStatus = 0
         pendingPageContentType = ""
+        pendingPageReadScript = ""
+        pendingPageReadDelay = 0
         completion?(result)
     }
 }
@@ -886,8 +1055,10 @@ private final class FR24Service {
         guard !value.isEmpty else { return nil }
         for pattern in [
             #"flightId=([0-9a-fA-F]{6,12})"#,
+            #"/data/flights/[^/#?\s]+#([0-9a-fA-F]{6,12})"#,
             #"/flight/[^/#?\s]+#([0-9a-fA-F]{6,12})"#,
             #"FR24[:\s]+([0-9a-fA-F]{6,12})"#,
+            #"#([0-9a-fA-F]{6,12})(?:$|[?&\s])"#,
             #"^([0-9a-fA-F]{6,12})$"#
         ] {
             if let regex = try? NSRegularExpression(pattern: pattern),
@@ -982,18 +1153,30 @@ private final class FR24Service {
         callsign: String,
         limit: Int
     ) -> [String: Any] {
-        let clampedLimit = max(1, min(limit, 12))
+        let token = normalizedFlightToken(flightNumber).isEmpty
+            ? normalizedFlightToken(callsign)
+            : normalizedFlightToken(flightNumber)
+        guard !token.isEmpty else {
+            return [
+                "error": "FR24 flight number missing.",
+                "flights": [],
+                "cache": cacheStatusPayload(),
+                "access": accessStatusPayload()
+            ]
+        }
+        let clampedLimit = limit <= 0 ? 0 : max(1, min(limit, 100))
         do {
-            let flights = try routeFlights(
+            let page = try FR24BrowserFetch.shared.performFlightHistoryPageRequest(flightToken: token)
+            let flights = parseFlightHistoryPage(
+                page,
+                flightToken: token,
                 routeAirports: routeAirports,
-                limit: clampedLimit,
-                flightNumber: flightNumber,
-                callsign: callsign,
-                lookbackHours: 1440
+                limit: clampedLimit
             )
             return [
                 "route": routeAirports,
                 "flights": flights,
+                "history_url": "https://www.flightradar24.com/data/flights/\(token.lowercased())",
                 "cache": cacheStatusPayload(),
                 "access": accessStatusPayload(),
                 "message": flights.isEmpty ? "未找到该航班号的 FR24 历史记录。" : "已读取 FR24 航班历史。"
@@ -1006,6 +1189,207 @@ private final class FR24Service {
                 "access": accessStatusPayload()
             ]
         }
+    }
+
+    private func parseFlightHistoryPage(
+        _ payload: [String: Any],
+        flightToken: String,
+        routeAirports: [String: Any],
+        limit: Int
+    ) -> [[String: Any]] {
+        let departure = routeAirports["departure"] as? [String: Any] ?? [:]
+        let arrival = routeAirports["arrival"] as? [String: Any] ?? [:]
+        let pageTitle = Self.stringValue(payload["title"])
+        let pageURL = Self.stringValue(payload["url"]).isEmpty
+            ? "https://www.flightradar24.com/data/flights/\(flightToken.lowercased())"
+            : Self.stringValue(payload["url"])
+        let airline = airlineName(from: pageTitle, flightToken: flightToken)
+        let rows = historyRows(from: payload)
+        var flights: [[String: Any]] = []
+        var seen = Set<String>()
+
+        for row in rows {
+            let text = row.text
+            if !historyRowLooksLikeFlight(text, hrefs: row.hrefs, flightToken: flightToken) {
+                continue
+            }
+            let flightID = row.hrefs.compactMap(Self.extractFlightID(from:)).first
+                ?? Self.extractFlightID(from: text)
+            let scheduledDeparture = labeledTime("STD", in: text, preferredDate: firstHistoryDate(in: text))
+            let actualDeparture = labeledTime("ATD", in: text, preferredDate: firstHistoryDate(in: text))
+                ?? labeledTime("DEP", in: text, preferredDate: firstHistoryDate(in: text))
+            let scheduledArrival = labeledTime("STA", in: text, preferredDate: firstHistoryDate(in: text), rollAfter: scheduledDeparture ?? actualDeparture)
+            let estimatedArrival = labeledTime("ETA", in: text, preferredDate: firstHistoryDate(in: text), rollAfter: scheduledDeparture ?? actualDeparture)
+            let dateTimestamp = firstHistoryDate(in: text)
+            let duration = durationFromHistoryText(text)
+                ?? positiveDuration(departure: actualDeparture ?? scheduledDeparture, arrival: estimatedArrival ?? scheduledArrival)
+            let aircraftInfo = aircraftFromHistoryText(text)
+            var publicFlight: [String: Any] = [
+                "fr24_id": flightID ?? "",
+                "flight": flightToken,
+                "callsign": flightToken,
+                "airline": airline,
+                "aircraft": aircraftInfo.type,
+                "aircraft_registration": aircraftInfo.registration,
+                "origin_icao": Self.stringValue(departure["icao"]),
+                "origin_iata": Self.stringValue(departure["iata"]),
+                "origin_name": Self.stringValue(departure["name"]),
+                "dest_icao": Self.stringValue(arrival["icao"]),
+                "dest_iata": Self.stringValue(arrival["iata"]),
+                "dest_name": Self.stringValue(arrival["name"]),
+                "status": statusFromHistoryText(text),
+                "history_url": pageURL,
+                "raw_history": text,
+                "timestamp": actualDeparture ?? scheduledDeparture ?? dateTimestamp ?? 0,
+                "source_provider": "Flightradar24 data page"
+            ]
+            publicFlight["scheduled_departure"] = scheduledDeparture ?? NSNull()
+            publicFlight["scheduled_arrival"] = scheduledArrival ?? NSNull()
+            publicFlight["actual_departure"] = actualDeparture ?? NSNull()
+            publicFlight["actual_arrival"] = NSNull()
+            publicFlight["estimated_departure"] = NSNull()
+            publicFlight["estimated_arrival"] = estimatedArrival ?? NSNull()
+            publicFlight["duration_seconds"] = duration ?? NSNull()
+
+            let dedupeKey = (flightID?.isEmpty == false ? flightID! : "\(flightToken)|\(Self.stringValue(publicFlight["timestamp"]))|\(text.prefix(160))").lowercased()
+            if seen.contains(dedupeKey) {
+                continue
+            }
+            seen.insert(dedupeKey)
+            flights.append(publicFlight)
+            if limit > 0, flights.count >= limit {
+                break
+            }
+        }
+        return sortedFlights(flights)
+    }
+
+    private func historyRows(from payload: [String: Any]) -> [(text: String, hrefs: [String])] {
+        var rows: [(text: String, hrefs: [String])] = []
+        if let rawRows = payload["rows"] as? [[String: Any]] {
+            for rawRow in rawRows {
+                let text = Self.stringValue(rawRow["text"])
+                let hrefs = hrefs(from: rawRow["hrefs"])
+                if !text.isEmpty {
+                    rows.append((text, hrefs))
+                }
+            }
+        }
+        if rows.isEmpty, let links = payload["links"] as? [[String: Any]] {
+            for link in links {
+                let rowText = Self.stringValue(link["rowText"])
+                let href = Self.stringValue(link["href"])
+                if !rowText.isEmpty {
+                    rows.append((rowText, href.isEmpty ? [] : [href]))
+                }
+            }
+        }
+        return rows
+    }
+
+    private func hrefs(from value: Any?) -> [String] {
+        if let strings = value as? [String] {
+            return strings.filter { !$0.isEmpty }
+        }
+        guard let items = value as? [[String: Any]] else {
+            return []
+        }
+        return items.flatMap { item in
+            [Self.stringValue(item["href"]), Self.stringValue(item["text"]), Self.stringValue(item["title"])]
+        }.filter { !$0.isEmpty }
+    }
+
+    private func historyRowLooksLikeFlight(_ text: String, hrefs: [String], flightToken: String) -> Bool {
+        let lowercased = text.lowercased()
+        let hasDate = firstHistoryDate(in: text) != nil
+        let hasFlightID = hrefs.contains { Self.extractFlightID(from: $0) != nil }
+        let statusTerms = [
+            "std", "atd", "sta", "eta", "landed", "scheduled", "cancelled", "canceled",
+            "diverted", "unknown", "kml", "csv", "play"
+        ]
+        let hasStatus = statusTerms.contains { lowercased.contains($0) }
+        let hasToken = normalizedFlightToken(text).contains(flightToken)
+        return (hasDate || hasFlightID) && (hasStatus || hasFlightID || hasToken)
+    }
+
+    private func airlineName(from pageTitle: String, flightToken: String) -> String {
+        let cleaned = pageTitle
+            .replacingOccurrences(of: "| Flightradar24", with: "", options: [.caseInsensitive])
+            .replacingOccurrences(of: "Flightradar24", with: "", options: [.caseInsensitive])
+            .replacingOccurrences(of: "Flight Tracker", with: "", options: [.caseInsensitive])
+            .replacingOccurrences(of: flightToken, with: "", options: [.caseInsensitive])
+            .replacingOccurrences(of: " - ", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? "" : cleaned
+    }
+
+    private func firstHistoryDate(in text: String) -> Int? {
+        guard let regex = try? NSRegularExpression(pattern: #"\b(\d{1,2})\s+([A-Za-z]{3})\s+(20\d{2})\b"#),
+              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let dayRange = Range(match.range(at: 1), in: text),
+              let monthRange = Range(match.range(at: 2), in: text),
+              let yearRange = Range(match.range(at: 3), in: text) else {
+            return nil
+        }
+        let dateText = "\(text[dayRange]) \(text[monthRange]) \(text[yearRange])"
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "d MMM yyyy"
+        guard let date = formatter.date(from: dateText) else {
+            return nil
+        }
+        return Int(date.timeIntervalSince1970)
+    }
+
+    private func labeledTime(_ label: String, in text: String, preferredDate: Int?, rollAfter: Int? = nil) -> Int? {
+        let pattern = #"\b"# + NSRegularExpression.escapedPattern(for: label) + #"\s+([0-2]?\d:[0-5]\d)\b"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let timeRange = Range(match.range(at: 1), in: text),
+              let dateStart = preferredDate else {
+            return nil
+        }
+        let parts = text[timeRange].split(separator: ":").compactMap { Int($0) }
+        guard parts.count == 2 else {
+            return nil
+        }
+        var timestamp = dateStart + parts[0] * 3600 + parts[1] * 60
+        if let rollAfter, timestamp + 6 * 3600 < rollAfter {
+            timestamp += 24 * 3600
+        }
+        return timestamp
+    }
+
+    private func durationFromHistoryText(_ text: String) -> Int? {
+        guard let regex = try? NSRegularExpression(pattern: #"\b(?:Landed|Arrived|Flight time|Duration)\s+(\d{1,2}):([0-5]\d)\b"#, options: [.caseInsensitive]),
+              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let hourRange = Range(match.range(at: 1), in: text),
+              let minuteRange = Range(match.range(at: 2), in: text),
+              let hours = Int(text[hourRange]),
+              let minutes = Int(text[minuteRange]) else {
+            return nil
+        }
+        return hours * 3600 + minutes * 60
+    }
+
+    private func aircraftFromHistoryText(_ text: String) -> (type: String, registration: String) {
+        guard let regex = try? NSRegularExpression(pattern: #"\b([A-Z0-9]{3,5})\s*\(([A-Z0-9-]{3,12})\)"#),
+              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let typeRange = Range(match.range(at: 1), in: text),
+              let registrationRange = Range(match.range(at: 2), in: text) else {
+            return ("", "")
+        }
+        return (String(text[typeRange]), String(text[registrationRange]))
+    }
+
+    private func statusFromHistoryText(_ text: String) -> String {
+        for status in ["Landed", "Scheduled", "Cancelled", "Canceled", "Diverted", "Unknown", "Estimated"] {
+            if text.range(of: status, options: [.caseInsensitive]) != nil {
+                return status
+            }
+        }
+        return ""
     }
 
     func downloadPayload(flightID: String, flight: [String: Any]) -> [String: Any] {

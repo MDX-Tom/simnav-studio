@@ -39,6 +39,7 @@ const TRANSLATIONS = {
   "layout.restoreMap": { "zh-Hans": "恢复地图布局", en: "Restore map layout" },
   "detail.tabsLabel": { "zh-Hans": "详情、查询与设置", en: "Details, query, and settings" },
   "mobile.tabsLabel": { "zh-Hans": "iPhone 下部页面", en: "iPhone lower pages" },
+  "mobile.dragHandle": { "zh-Hans": "调整下方面板高度", en: "Resize lower panel" },
   "airport.detailTabs": { "zh-Hans": "机场详情", en: "Airport details" },
   "airport.departureAirport": { "zh-Hans": "起飞机场", en: "Departure Airport" },
   "airport.arrivalAirport": { "zh-Hans": "到达机场", en: "Arrival Airport" },
@@ -571,6 +572,9 @@ const state = {
   mobileVisualHeight: 0,
   mobileKeyboardFrame: 0,
   mobileKeyboardResetTimer: 0,
+  mobilePanelMapRatio: 66,
+  mobilePanelDrag: null,
+  mobilePanelResizeFrame: 0,
 };
 
 const MAP_ZOOM = {
@@ -581,6 +585,8 @@ const MAP_ZOOM = {
 const DOUBLE_TAP_ZOOM_GUARD_MS = 320;
 const MOBILE_KEYBOARD_MIN_OVERLAP_PX = 80;
 const MOBILE_KEYBOARD_MARGIN_PX = 14;
+const MOBILE_PANEL_DEFAULT_MAP_RATIO = 66;
+const MOBILE_PANEL_MIN_MAP_RATIO = 30;
 const NAV_OVERLAY_REFRESH_DELAY_MS = 110;
 const NAV_OVERLAY_FETCH_PADDING_RATIO = 0.16;
 const NAV_OVERLAY_DRAW_PADDING_RATIO = 0.12;
@@ -733,6 +739,7 @@ const elements = {
   detailModeTabButtons: document.querySelectorAll("[data-detail-tab]"),
   detailTabPanels: document.querySelectorAll("[data-detail-panel]"),
   mobileBottomTabButtons: document.querySelectorAll("[data-mobile-tab]"),
+  mobilePanelDragHandle: document.querySelector("#mobilePanelDragHandle"),
   databaseNameText: document.querySelector("#databaseNameText"),
   databaseStatusText: document.querySelector("#databaseStatusText"),
   selectDatabaseButton: document.querySelector("#selectDatabaseButton"),
@@ -1001,6 +1008,7 @@ installSmoothWheelZoom(map);
 disableDoubleTapZoom(map);
 installPageDoubleTapZoomGuard();
 installMobileViewportLock();
+installMobilePanelDragHandle();
 installMobileInputTouchFocus();
 installPhoneLandscapeSafeAreaTuning();
 
@@ -3921,6 +3929,96 @@ function installMobileViewportLock() {
     true,
   );
   scheduleReset();
+}
+
+function clampMobilePanelMapRatio(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return MOBILE_PANEL_DEFAULT_MAP_RATIO;
+  }
+  return Math.max(MOBILE_PANEL_MIN_MAP_RATIO, Math.min(MOBILE_PANEL_DEFAULT_MAP_RATIO, numeric));
+}
+
+function scheduleMobilePanelMapResize() {
+  if (state.mobilePanelResizeFrame) {
+    return;
+  }
+  state.mobilePanelResizeFrame = window.requestAnimationFrame(() => {
+    state.mobilePanelResizeFrame = 0;
+    map.invalidateSize({ animate: false, pan: false });
+    scheduleVectorMapResizeSync();
+  });
+}
+
+function applyMobilePanelMapRatio(value, options = {}) {
+  const ratio = clampMobilePanelMapRatio(value);
+  state.mobilePanelMapRatio = ratio;
+  const panelRatio = Math.max(100 - ratio, 100 - MOBILE_PANEL_DEFAULT_MAP_RATIO);
+  document.documentElement.style.setProperty("--mobile-map-flex", `${ratio}fr`);
+  document.documentElement.style.setProperty("--mobile-panel-flex", `${panelRatio}fr`);
+  document.body.dataset.mobilePanel = ratio <= MOBILE_PANEL_MIN_MAP_RATIO + 0.5 ? "expanded" : "custom";
+  if (Math.abs(ratio - MOBILE_PANEL_DEFAULT_MAP_RATIO) < 0.5) {
+    delete document.body.dataset.mobilePanel;
+  }
+  if (options.dragging) {
+    document.body.dataset.mobilePanelDragging = "true";
+  } else {
+    delete document.body.dataset.mobilePanelDragging;
+  }
+  scheduleMobilePanelMapResize();
+}
+
+function installMobilePanelDragHandle() {
+  const handle = elements.mobilePanelDragHandle;
+  if (!handle || !isPhoneWorkbench()) {
+    return;
+  }
+  applyMobilePanelMapRatio(state.mobilePanelMapRatio);
+  const isPortraitPhone = () => !window.matchMedia || window.matchMedia("(orientation: portrait)").matches;
+  const finishDrag = () => {
+    if (!state.mobilePanelDrag) {
+      return;
+    }
+    state.mobilePanelDrag = null;
+    delete document.body.dataset.mobilePanelDragging;
+    scheduleMobilePanelMapResize();
+    window.setTimeout(() => map.invalidateSize({ animate: false, pan: false }), 140);
+  };
+
+  handle.addEventListener("pointerdown", (event) => {
+    if (document.body.dataset.mobileKeyboard === "open" || !isPortraitPhone()) {
+      return;
+    }
+    event.preventDefault();
+    handle.setPointerCapture?.(event.pointerId);
+    const shellRect = document.querySelector(".shell")?.getBoundingClientRect();
+    state.mobilePanelDrag = {
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      startRatio: state.mobilePanelMapRatio,
+      shellHeight: Math.max(1, shellRect?.height || window.innerHeight || 1),
+    };
+    document.body.dataset.mobilePanelDragging = "true";
+  });
+
+  handle.addEventListener("pointermove", (event) => {
+    const drag = state.mobilePanelDrag;
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return;
+    }
+    event.preventDefault();
+    const deltaRatio = ((event.clientY - drag.startY) / drag.shellHeight) * 100;
+    applyMobilePanelMapRatio(drag.startRatio + deltaRatio, { dragging: true });
+  });
+
+  handle.addEventListener("pointerup", finishDrag);
+  handle.addEventListener("pointercancel", finishDrag);
+  handle.addEventListener("lostpointercapture", finishDrag);
+  window.addEventListener("resize", () => applyMobilePanelMapRatio(state.mobilePanelMapRatio));
+  window.addEventListener("orientationchange", () => {
+    finishDrag();
+    window.setTimeout(() => applyMobilePanelMapRatio(state.mobilePanelMapRatio), 180);
+  });
 }
 
 /**
@@ -8007,6 +8105,7 @@ function renderFR24FlightCard(flight, key, { history = false } = {}) {
   const route = `${flightAirportCode(flight, "origin")} → ${flightAirportCode(flight, "dest")}`;
   const airline = flight.airline || t("query.airlineUnknown");
   const aircraft = [flight.aircraft, flight.aircraft_registration].filter(Boolean).join(" / ") || t("query.aircraftUnknown");
+  const status = flight.status ? `<span>${escapeHtml(flight.status)}</span>` : "";
   const cacheBadge = flight.cache_hit === true
     ? `<span class="query-flight-badge">${escapeHtml(t("query.cacheHit"))}</span>`
     : "";
@@ -8022,6 +8121,7 @@ function renderFR24FlightCard(flight, key, { history = false } = {}) {
       <div class="query-flight-meta">
         <span>${escapeHtml(airline)}</span>
         <span>${escapeHtml(aircraft)}</span>
+        ${status}
         <span>${escapeHtml(formatFlightTimes(flight))}</span>
         <span>${escapeHtml(t("query.duration", { duration: formatFlightDuration(flight.duration_seconds) }))}</span>
       </div>
@@ -8223,7 +8323,7 @@ async function loadFR24History(key) {
   setFR24QueryStatus(t("query.historyLoading"));
   try {
     const payload = await fetchJson(
-      `/api/fr24/history?departure=${encodeURIComponent(route.departure)}&arrival=${encodeURIComponent(route.arrival)}&flight=${encodeURIComponent(flight.flight || "")}&callsign=${encodeURIComponent(flight.callsign || "")}&limit=10`,
+      `/api/fr24/history?departure=${encodeURIComponent(route.departure)}&arrival=${encodeURIComponent(route.arrival)}&flight=${encodeURIComponent(flight.flight || "")}&callsign=${encodeURIComponent(flight.callsign || "")}`,
     );
     const histories = payload.flights || [];
     state.fr24HistoryByKey.set(key, histories);

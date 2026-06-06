@@ -13,7 +13,8 @@ FR24 Query 是在线增强功能，用于在已填写起飞机场和到达机场
   - 每个航班展示航班号、起降机场、航司、机型 / 注册号、计划 / 实际时间和飞行时长。
 - 航班历史：
   - 每个航班提供“航班历史”子菜单。
-  - `/api/fr24/history` 按同航线和同航班号 / callsign 继续扫描更长历史窗口，返回最多 10 条记录。
+  - `/api/fr24/history` 按航班号访问 FR24 数据页，例如 `https://www.flightradar24.com/data/flights/tv9943`，通过已验证的 WKWebView 会话读取页面中能看到的全部历史记录；不再用同航线 schedule 窗口继续回扫来假装历史。
+  - 历史页中带 `Play` / `flightId` 的记录可以继续下载 playback 轨迹；免费页面中只有计划信息、没有 `flightId` 的记录仍会显示，但点击下载会按现有错误提示说明缺少 FR24 flightId。
 - 轨迹下载：
   - 每个航班和历史记录提供“下载并绘制轨迹”。
   - `/api/fr24/download` 调用 `/common/v1/flight-playback.json?flightId=...&timestamp=...`，提取 `flight.track` / playback JSON 中的轨迹点，写入 App Caches 下的 `NavPlanner/FR24/{flightId}.gpx`、playback JSON 和 meta JSON。
@@ -30,14 +31,14 @@ FR24 Query 是在线增强功能，用于在已填写起飞机场和到达机场
   - 手动粘贴 FR24 Web Cookie 与 `_frPl` 仅作为高级可选兜底，主流程不要求用户自己查 Cookie。
   - Swift 使用 UserDefaults 保存配置，只向前端回传是否已配置，不回显敏感值；清除配置不会删除 GPX / JSON 下载缓存。
   - 若 Cookie 中已包含 `_frPl`，Swift 会自动提取；也可通过内置浏览器同步或高级输入单独保存 `_frPl`。
-  - schedule/playback 请求优先通过共享的 WKWebView 浏览器上下文执行，复用用户已验证的浏览器会话；Swift 会让隐藏 WKWebView 顶层导航到 FR24 API URL，再读取页面 JSON 文本，避免从 `www.flightradar24.com` 跨域 `fetch api.flightradar24.com` 在 WKWebView 中触发 `Load failed`。`URLSession` 只在浏览器运行时失败时兜底；若浏览器上下文已明确返回 401 / 403、Cloudflare 或 HTML 响应，则直接向 Query 页暴露该原因。调试中已确认仅把 Cookie 搬到 `URLSession` 仍可能被 FR24 返回 403。
+  - schedule/playback 请求优先通过共享的 WKWebView 浏览器上下文执行，复用用户已验证的浏览器会话；Swift 会让隐藏 WKWebView 顶层导航到 FR24 API URL，再读取页面 JSON 文本，避免从 `www.flightradar24.com` 跨域 `fetch api.flightradar24.com` 在 WKWebView 中触发 `Load failed`。航班历史页则顶层导航到 `www.flightradar24.com/data/flights/{flight}`，抽取可见 DOM 行和链接。`URLSession` 只在浏览器运行时失败时兜底；若浏览器上下文已明确返回 401 / 403、Cloudflare 或 HTML 响应，则直接向 Query 页暴露该原因。调试中已确认仅把 Cookie 搬到 `URLSession` 仍可能被 FR24 返回 403。
   - FR24 对过早的 schedule timestamp 可能返回 HTTP 400 JSON；如果较新的窗口已经找到航班，Swift 会停止继续向前扫描并返回已找到的最新航班，避免 Query 页长时间等待。
 
 ## 本地 API
 
 ```text
 GET  /api/fr24/search?departure=...&arrival=...&limit=10
-GET  /api/fr24/history?departure=...&arrival=...&flight=...&callsign=...&limit=10
+GET  /api/fr24/history?departure=...&arrival=...&flight=...&callsign=...
 POST /api/fr24/download
 GET  /api/fr24/cache/status
 POST /api/fr24/cache/clear
@@ -66,6 +67,7 @@ GET  /api/route/fr24-match?departure=...&arrival=...&flight_id=...
 
 - 每次修改 FR24 相关功能时，固定使用 `ZULS` / `ZUAL` 作为 FR24 查询验证航线；没有已同步会话时，至少验证该航线会走到会话缺失 / Cloudflare 降级提示，不阻塞本地核心能力。
 - 2026-06-05 模拟器验证：`ZULS -> ZUAL` 通过隐藏 WKWebView 顶层导航获取 FR24 JSON，`LXA departures offset=24` 命中 1-2 条航班，Query 页显示 `TV9723`、`TV9943` 等航班卡片；`offset=48` 返回 HTTP 400 后会停止扫描并返回已找到结果。
+- 2026-06-06 更新：历史查询改为读取 FR24 航班数据页；例如 `TV9943` 会访问 `/data/flights/tv9943` 并展示页面上可见的全部历史 / 计划记录，只有带 `flightId` 的记录才能继续下载 playback GPX。
 - 离线 / 会话缺失 / Cloudflare 挑战 / FR24 请求失败时：Query 页显示错误，本地核心能力继续可用。
 - 下载成功时：黑色 GPX 轨迹显示在地图上，跨日期变更线不画大直线。
 - 匹配成功时：规划航路替换为本地 track-match 结果，并可通过“还原轨迹匹配”恢复。

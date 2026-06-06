@@ -14,7 +14,7 @@
 - `/api/route/resolve` 已按 Web API 行为返回手动 route 错误：未知 waypoint、起始 `DCT`、DCT 缺目标、airway 缺 exit、`***` 缺目标等会返回 400 JSON。
 - `/api/route/resolve` 手动 route payload 已对齐 Web：终点机场仅进入 `points`，不额外生成 final direct leg；`***` 补航段后的 `route_display` 使用展开后的 legs。
 - `/api/route/track-match` 已迁移导入轨迹点的本地 airway graph 匹配、同航路简化、轨迹误差约束、单航路替换保护、zigzag 平滑清理，以及匹配后 SID / STAR / APPROACH 自动挂接；`Tools/TrackParity` 已可重复比较 7 个 track-match case，覆盖合成导入轨迹、Procedure 自动挂接、日期变更线和基础错误语义。
-- FR24 在线增强已从 Plan 旧按钮迁移到独立 `查询` Tab：Swift 本地 `/api/fr24/search` / `history` / `download` / `cache` / `access` 负责 FR24 Web 会话状态、App 内 FR24 验证浏览器 CookieStore 自动同步、航线航班查询、历史子菜单、GPX / playback JSON 缓存和缓存清理；前端可将下载轨迹用黑色线绘制到地图，并继续 POST `/api/route/track-match` 执行本地匹配。`/api/route/fr24-match` 保留 Web parity 入口并改为在线尝试。
+- FR24 在线增强已从 Plan 旧按钮迁移到独立 `查询` Tab：Swift 本地 `/api/fr24/search` / `history` / `download` / `cache` / `access` 负责 FR24 Web 会话状态、App 内 FR24 验证浏览器 CookieStore 自动同步、航线航班查询、按 `www.flightradar24.com/data/flights/{flight}` 数据页读取历史子菜单、GPX / playback JSON 缓存和缓存清理；前端可将下载轨迹用黑色线绘制到地图，并继续 POST `/api/route/track-match` 执行本地匹配。`/api/route/fr24-match` 保留 Web parity 入口并改为在线尝试。
 - WKWebView 已接入 JavaScript alert / confirm / prompt，保留给通用 Web 工作台弹窗使用；当前 FR24 主流程不再依赖旧的手动降级入口。
 - Procedure API 已按 Web `procedure_geometry` 迁移 RF / AF 弧线、复飞路径分段和末端等待航线几何；`Tools/ProcedureParity` 已可重复比较 6 个 Procedure geometry case，覆盖 RF 弧线、复飞 / holding、transition 合并、ZULS 复飞异常圆弧回归和空结果语义。
 - nav-overlay 已按 Web `planner_overlay.py` 迁移本地缓存、世界副本偏移、跨日期变更线边界判断、航路空间分桶、航路标签预算、terminal waypoint / navaid、跑道和 ILS 输出；典型跨日期变更线视野与 Web 参考 payload 计数一致。
@@ -34,7 +34,7 @@
 ## 部分对齐
 
 - `/api/route/resolve` 当前返回本地手动解析和自动规划 payload，支持 DCT、普通航点串、基础“航路名 + 退出点”展开、`***` 自动补航段、自动规划连续 / 重复 airway 合并，以及 Route 留空时的 SID / STAR / APPROACH 自动接入；22 个 RouteParity case 已无差异，仍需继续扩展更多数据库样例并把工具沉淀为常规测试目标。
-- `/api/route/track-match` 已能离线匹配导入轨迹，并对齐 Web 版轨迹误差平滑、zigzag 清理和 Procedure 自动挂接；7 个 TrackParity case 已无差异。FR24 查询、历史、下载、绘制和匹配 UI 已接入，并已切回 FR24 Web schedule/playback；仍需补充真实 FR24 噪声轨迹、飞行中航班、轨迹缺点和更多异常样例。
+- `/api/route/track-match` 已能离线匹配导入轨迹，并对齐 Web 版轨迹误差平滑、zigzag 清理和 Procedure 自动挂接；7 个 TrackParity case 已无差异。FR24 查询、数据页历史、下载、绘制和匹配 UI 已接入，并已切回 FR24 Web schedule/playback；仍需补充真实 FR24 噪声轨迹、飞行中航班、轨迹缺点和更多异常样例。
 - 离线地图管理 UI 已能打开并收到本地状态，入口从 Settings 的“管理离线地图”进入，弹窗日间/夜间主题已跟主界面同步；本地瓦片读取、PMTiles Range 和 Web 同形态并发下载任务已接入，真实 PMTiles 包视觉显示以及大范围下载性能仍需在模拟器 / 真机验证。
 - iOS 当前优先全屏 Web 工作台以贴近 Web 行为；原生 SwiftUI Plan / Airport / Selection 面板保留在代码中，后续再按复刻结果决定是否原生化重接。
 
