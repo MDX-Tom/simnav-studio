@@ -3465,7 +3465,7 @@ html[data-theme="day"] .offline-progress {
     grid-area: planner;
     min-height: 0;
     border-radius: 9px;
-    padding: 6px 6px 5px;
+    padding: 13px 6px 5px;
     overflow-y: auto;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
@@ -3483,17 +3483,13 @@ html[data-theme="day"] .offline-progress {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: min(92px, 28vw);
-    height: 20px;
-    margin-top: -9px;
+    width: 46px;
+    height: 10px;
+    margin-top: 3px;
     border: 0;
     border-radius: 999px;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.06)),
-      rgba(7, 13, 22, 0.22);
-    box-shadow:
-      0 7px 16px rgba(0, 0, 0, 0.16),
-      inset 0 1px 0 rgba(255, 255, 255, 0.16);
+    background: transparent;
+    box-shadow: none;
     touch-action: none;
     cursor: ns-resize;
     -webkit-tap-highlight-color: transparent;
@@ -3501,11 +3497,11 @@ html[data-theme="day"] .offline-progress {
 
   html:not([data-device="pad"]) .mobile-panel-drag-handle span {
     display: block;
-    width: 38px;
-    height: 5px;
+    width: 30px;
+    height: 3px;
     border-radius: 999px;
-    background: rgba(186, 197, 207, 0.62);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+    background: rgba(181, 190, 198, 0.58);
+    box-shadow: none;
   }
 
   html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .shell {
@@ -3583,6 +3579,7 @@ html[data-theme="day"] .offline-progress {
 
   html:not([data-device="pad"]) body[data-mobile-keyboard="open"] .planner-panel,
   html:not([data-device="pad"]) body[data-mobile-keyboard="open"] .detail-panel {
+    padding-top: 6px;
     scroll-padding-top: 10px;
     scroll-padding-bottom: 14px;
     border-radius: 9px 9px 10px 10px;
@@ -3613,16 +3610,12 @@ html[data-theme="day"] .offline-progress {
   }
 
   html[data-theme="day"]:not([data-device="pad"]) .mobile-panel-drag-handle {
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(231, 239, 243, 0.58)),
-      rgba(235, 242, 246, 0.66);
-    box-shadow:
-      0 7px 16px rgba(43, 67, 89, 0.12),
-      inset 0 1px 0 rgba(255, 255, 255, 0.86);
+    background: transparent;
+    box-shadow: none;
   }
 
   html[data-theme="day"]:not([data-device="pad"]) .mobile-panel-drag-handle span {
-    background: rgba(132, 145, 156, 0.42);
+    background: rgba(137, 149, 158, 0.46);
   }
 
   html:not([data-device="pad"]) .mobile-bottom-tab {
