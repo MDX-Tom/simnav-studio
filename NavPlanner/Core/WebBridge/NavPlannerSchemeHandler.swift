@@ -391,6 +391,27 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
         if path == "/fr24/cache/status" {
             return jsonResponse(fr24Service.cacheStatusPayload())
         }
+        if path == "/fr24/cache/list" {
+            return jsonResponse(fr24Service.cacheListPayload(
+                query: queryValue("query", ""),
+                limit: Int(queryValue("limit", "120")) ?? 120
+            ))
+        }
+        if path == "/fr24/cache/delete", request.httpMethod == "POST" {
+            let body = jsonBody(from: request)
+            let cacheKey = body["cache_key"] as? String ?? body["cacheKey"] as? String ?? ""
+            let payload = fr24Service.deleteCacheItemPayload(cacheKey: cacheKey)
+            return jsonResponse(payload, statusCode: payload["error"] == nil ? 200 : 404)
+        }
+        if path == "/fr24/cache/favorite", request.httpMethod == "POST" {
+            let body = jsonBody(from: request)
+            let cacheKey = body["cache_key"] as? String ?? body["cacheKey"] as? String ?? ""
+            let favorite = (body["favorite"] as? Bool)
+                ?? (body["favorite"] as? NSNumber)?.boolValue
+                ?? false
+            let payload = fr24Service.updateCacheFavoritePayload(cacheKey: cacheKey, favorite: favorite)
+            return jsonResponse(payload, statusCode: payload["error"] == nil ? 200 : 404)
+        }
         if path == "/fr24/cache/clear", request.httpMethod == "POST" {
             return jsonResponse(fr24Service.clearCachePayload())
         }
@@ -433,6 +454,24 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
                 routeAirports: routeAirports,
                 flightNumber: queryValue("flight", ""),
                 callsign: queryValue("callsign", ""),
+                limit: Int(queryValue("limit", "0")) ?? 0
+            )
+            return jsonResponse(payload, statusCode: payload["error"] == nil ? 200 : 503)
+        }
+        if path == "/fr24/manual-history" {
+            let departure = queryValue("departure", "")
+            let arrival = queryValue("arrival", "")
+            var routeAirports: [String: Any] = ["departure": [String: Any](), "arrival": [String: Any]()]
+            if !departure.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               !arrival.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let resolved = plannerService.fr24RouteAirportsPayload(departure: departure, arrival: arrival)
+                if resolved["error"] == nil {
+                    routeAirports = resolved
+                }
+            }
+            let payload = fr24Service.manualHistoryPayload(
+                routeAirports: routeAirports,
+                query: queryValue("query", ""),
                 limit: Int(queryValue("limit", "0")) ?? 0
             )
             return jsonResponse(payload, statusCode: payload["error"] == nil ? 200 : 503)
@@ -1083,6 +1122,23 @@ private final class FR24Service {
         return nil
     }
 
+    static func extractFlightNumber(from text: String) -> String? {
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return nil }
+        for pattern in [
+            #"/data/flights/([A-Za-z0-9]{2,8})"#,
+            #"^([A-Za-z]{1,3}\d{1,4}[A-Za-z]?)$"#
+        ] {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+               let match = regex.firstMatch(in: value, range: NSRange(value.startIndex..., in: value)),
+               let range = Range(match.range(at: 1), in: value) {
+                let token = String(value[range]).uppercased().filter { $0.isLetter || $0.isNumber }
+                return token.isEmpty ? nil : token
+            }
+        }
+        return nil
+    }
+
     func cacheStatusPayload() -> [String: Any] {
         let usage = diskUsage()
         return [
@@ -1090,6 +1146,42 @@ private final class FR24Service {
             "file_count": usage.files,
             "size_bytes": usage.bytes,
             "message": "FR24 轨迹缓存状态已读取。"
+        ]
+    }
+
+    func cacheListPayload(query: String, limit: Int) -> [String: Any] {
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let loweredQuery = trimmedQuery.lowercased()
+        let normalizedQuery = normalizedFlightToken(trimmedQuery).lowercased()
+        let clampedLimit = max(1, min(limit, 300))
+        let items = cachedFlightItems()
+            .filter { item in
+                guard !loweredQuery.isEmpty || !normalizedQuery.isEmpty else { return true }
+                let searchable = [
+                    Self.stringValue(item["cache_key"]),
+                    Self.stringValue(item["fr24_id"]),
+                    Self.stringValue(item["flight"]),
+                    Self.stringValue(item["callsign"]),
+                    Self.stringValue(item["airline"]),
+                    Self.stringValue(item["aircraft"]),
+                    Self.stringValue(item["aircraft_registration"]),
+                    Self.stringValue(item["origin_icao"]),
+                    Self.stringValue(item["origin_iata"]),
+                    Self.stringValue(item["origin_actual_code"]),
+                    Self.stringValue(item["dest_icao"]),
+                    Self.stringValue(item["dest_iata"]),
+                    Self.stringValue(item["dest_actual_code"]),
+                    Self.stringValue(item["gpx_filename"])
+                ].joined(separator: " ").lowercased()
+                let normalizedSearchable = normalizedFlightToken(searchable).lowercased()
+                return (!loweredQuery.isEmpty && searchable.contains(loweredQuery))
+                    || (!normalizedQuery.isEmpty && normalizedSearchable.contains(normalizedQuery))
+            }
+            .prefix(clampedLimit)
+        return [
+            "items": Array(items),
+            "cache": cacheStatusPayload(),
+            "message": "已读取 FR24 下载缓存。"
         ]
     }
 
@@ -1110,19 +1202,74 @@ private final class FR24Service {
     }
 
     func clearCachePayload() -> [String: Any] {
+        let favoriteKeys = Set(cachedFlightItems()
+            .filter { ($0["favorite"] as? Bool) == true }
+            .map { Self.stringValue($0["cache_key"]) }
+            .filter { !$0.isEmpty })
+        var preservedFavorites = 0
         if let items = try? fileManager.contentsOfDirectory(
             at: rootDirectory,
             includingPropertiesForKeys: nil,
             options: []
         ) {
             for item in items {
+                let filename = item.deletingPathExtension().lastPathComponent
+                let cacheKey = filename.replacingOccurrences(of: ".meta", with: "")
+                if favoriteKeys.contains(cacheKey) {
+                    preservedFavorites += 1
+                    continue
+                }
                 try? fileManager.removeItem(at: item)
             }
         }
         try? fileManager.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
         var payload = cacheStatusPayload()
+        payload["preserved_favorite_file_count"] = preservedFavorites
+        payload["favorite_count"] = favoriteKeys.count
         payload["message"] = "已清理 FR24 轨迹缓存。"
         return payload
+    }
+
+    func deleteCacheItemPayload(cacheKey: String) -> [String: Any] {
+        let normalizedKey = sanitizeCacheKey(cacheKey)
+        guard !normalizedKey.isEmpty else {
+            return ["error": "FR24 cache key missing.", "cache": cacheStatusPayload()]
+        }
+        var removed = 0
+        for url in cacheFileURLs(cacheKey: normalizedKey) where fileManager.fileExists(atPath: url.path) {
+            if (try? fileManager.removeItem(at: url)) != nil {
+                removed += 1
+            }
+        }
+        guard removed > 0 else {
+            return ["error": "FR24 cache item not found.", "cache": cacheStatusPayload()]
+        }
+        return [
+            "cache_key": normalizedKey,
+            "removed_file_count": removed,
+            "cache": cacheStatusPayload(),
+            "message": "已删除 FR24 缓存文件。"
+        ]
+    }
+
+    func updateCacheFavoritePayload(cacheKey: String, favorite: Bool) -> [String: Any] {
+        let normalizedKey = sanitizeCacheKey(cacheKey)
+        guard !normalizedKey.isEmpty else {
+            return ["error": "FR24 cache key missing.", "cache": cacheStatusPayload()]
+        }
+        guard var meta = readCacheMeta(cacheKey: normalizedKey) else {
+            return ["error": "FR24 cache item not found.", "cache": cacheStatusPayload()]
+        }
+        meta["favorite"] = favorite
+        writeCacheMeta(meta, cacheKey: normalizedKey)
+        guard let item = cacheItem(cacheKey: normalizedKey, meta: meta) else {
+            return ["error": "FR24 cache item not found.", "cache": cacheStatusPayload()]
+        }
+        return [
+            "item": item,
+            "cache": cacheStatusPayload(),
+            "message": favorite ? "已收藏 FR24 缓存文件。" : "已取消收藏 FR24 缓存文件。"
+        ]
     }
 
     func searchPayload(routeAirports: [String: Any], limit: Int) -> [String: Any] {
@@ -1204,6 +1351,65 @@ private final class FR24Service {
         }
     }
 
+    func manualHistoryPayload(
+        routeAirports: [String: Any],
+        query: String,
+        limit: Int
+    ) -> [String: Any] {
+        let rawQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !rawQuery.isEmpty else {
+            return [
+                "error": "FR24 flight number missing.",
+                "flights": [],
+                "cache": cacheStatusPayload(),
+                "access": accessStatusPayload()
+            ]
+        }
+        if let tokenFromURL = Self.extractFlightNumber(from: rawQuery) {
+            return historyPayload(routeAirports: routeAirports, flightNumber: tokenFromURL, callsign: "", limit: limit)
+        }
+        if let flightID = Self.extractFlightID(from: rawQuery),
+           normalizedFlightToken(rawQuery).lowercased() == flightID.lowercased() {
+            return [
+                "route": routeAirports,
+                "flights": [manualFlightIDPayload(flightID: flightID)],
+                "cache": cacheStatusPayload(),
+                "access": accessStatusPayload(),
+                "message": "已按 FR24 flightId 生成单条历史记录。"
+            ]
+        }
+        return historyPayload(routeAirports: routeAirports, flightNumber: rawQuery, callsign: "", limit: limit)
+    }
+
+    private func manualFlightIDPayload(flightID: String) -> [String: Any] {
+        [
+            "fr24_id": flightID,
+            "flight": "",
+            "callsign": "",
+            "airline": "",
+            "aircraft": "",
+            "aircraft_registration": "",
+            "origin_icao": "",
+            "origin_iata": "",
+            "origin_actual_code": "",
+            "origin_name": "",
+            "dest_icao": "",
+            "dest_iata": "",
+            "dest_actual_code": "",
+            "dest_name": "",
+            "status": "flightId",
+            "timestamp": 0,
+            "scheduled_departure": NSNull(),
+            "scheduled_arrival": NSNull(),
+            "actual_departure": NSNull(),
+            "actual_arrival": NSNull(),
+            "estimated_departure": NSNull(),
+            "estimated_arrival": NSNull(),
+            "duration_seconds": NSNull(),
+            "source_provider": "Flightradar24 flightId"
+        ]
+    }
+
     private func parseFlightHistoryPage(
         _ payload: [String: Any],
         flightToken: String,
@@ -1277,10 +1483,10 @@ private final class FR24Service {
                 "aircraft": aircraftInfo.type,
                 "aircraft_registration": aircraftInfo.registration,
                 "origin_icao": Self.stringValue(departure["icao"]),
-                "origin_iata": originCode.isEmpty ? Self.stringValue(departure["iata"]) : originCode,
+                "origin_iata": Self.stringValue(departure["iata"]),
                 "origin_name": Self.stringValue(departure["name"]),
                 "dest_icao": Self.stringValue(arrival["icao"]),
-                "dest_iata": destinationCode.isEmpty ? Self.stringValue(arrival["iata"]) : destinationCode,
+                "dest_iata": Self.stringValue(arrival["iata"]),
                 "dest_name": Self.stringValue(arrival["name"]),
                 "status": status,
                 "history_url": pageURL,
@@ -1288,6 +1494,13 @@ private final class FR24Service {
                 "timestamp": actualDeparture ?? scheduledDeparture ?? dateTimestamp ?? 0,
                 "source_provider": "Flightradar24 data page"
             ]
+            annotateActualAirports(
+                &publicFlight,
+                expectedDeparture: departure,
+                expectedArrival: arrival,
+                parsedOriginCode: originCode,
+                parsedDestinationCode: destinationCode
+            )
             publicFlight["scheduled_departure"] = scheduledDeparture ?? NSNull()
             publicFlight["scheduled_arrival"] = scheduledArrival ?? NSNull()
             publicFlight["actual_departure"] = actualDeparture ?? NSNull()
@@ -1307,6 +1520,42 @@ private final class FR24Service {
             }
         }
         return limitScheduledHistory(sortedFlights(flights))
+    }
+
+    private func airportCodeSet(_ airport: [String: Any]) -> Set<String> {
+        [
+            Self.stringValue(airport["icao"]),
+            Self.stringValue(airport["iata"]),
+            Self.stringValue(airport["schedule_code"])
+        ]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() }
+            .filter { !$0.isEmpty }
+            .reduce(into: Set<String>()) { result, code in result.insert(code) }
+    }
+
+    private func annotateActualAirports(
+        _ flight: inout [String: Any],
+        expectedDeparture: [String: Any],
+        expectedArrival: [String: Any],
+        parsedOriginCode: String,
+        parsedDestinationCode: String
+    ) {
+        let departureCodes = airportCodeSet(expectedDeparture)
+        let arrivalCodes = airportCodeSet(expectedArrival)
+        let actualOrigin = parsedOriginCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let actualDestination = parsedDestinationCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        var mismatch = false
+        if !actualOrigin.isEmpty, !departureCodes.contains(actualOrigin) {
+            flight["origin_actual_code"] = actualOrigin
+            mismatch = true
+        }
+        if !actualDestination.isEmpty, !arrivalCodes.contains(actualDestination) {
+            flight["dest_actual_code"] = actualDestination
+            mismatch = true
+        }
+        if mismatch {
+            flight["actual_route_mismatch"] = true
+        }
     }
 
     private func historyRows(from payload: [String: Any]) -> [(text: String, hrefs: [String], cells: [String], headers: [String])] {
@@ -1684,7 +1933,6 @@ private final class FR24Service {
         cacheHit: Bool
     ) throws -> [String: Any] {
         let jsonURL = rootDirectory.appendingPathComponent("\(cacheKey).json")
-        let metaURL = rootDirectory.appendingPathComponent("\(cacheKey).meta.json")
         let gpxURL = rootDirectory.appendingPathComponent("\(cacheKey).gpx")
         let payload: [String: Any] = [
             "flight": flight,
@@ -1702,17 +1950,21 @@ private final class FR24Service {
         try gpxText.data(using: .utf8)?.write(to: gpxURL, options: [.atomic])
         var publicFlight = flight
         publicFlight["fr24_id"] = flightID
+        publicFlight["cache_key"] = cacheKey
+        let existingFavorite = readCacheMeta(cacheKey: cacheKey).flatMap { meta -> Bool? in
+            (meta["favorite"] as? Bool) ?? (meta["favorite"] as? NSNumber)?.boolValue
+        } ?? false
+        publicFlight["favorite"] = existingFavorite
         let meta: [String: Any] = [
             "flight": publicFlight,
             "track_points": trackPoints,
             "gpx_filename": gpxURL.lastPathComponent,
             "gpx_path": gpxURL.path,
             "json_filename": jsonURL.lastPathComponent,
-            "downloaded_at": Int(Date().timeIntervalSince1970)
+            "downloaded_at": Int(Date().timeIntervalSince1970),
+            "favorite": existingFavorite
         ]
-        if let metaData = try? JSONSerialization.data(withJSONObject: meta, options: [.prettyPrinted]) {
-            try? metaData.write(to: metaURL, options: [.atomic])
-        }
+        writeCacheMeta(meta, cacheKey: cacheKey)
         return downloadResponse(
             cacheKey: cacheKey,
             flight: publicFlight,
@@ -2283,15 +2535,86 @@ private final class FR24Service {
         return candidateTracks.max { $0.count < $1.count } ?? []
     }
 
-    private func cachedDownloadPayload(cacheKey: String, flight: [String: Any]) -> [String: Any]? {
+    private func cacheFileURLs(cacheKey: String) -> [URL] {
+        [
+            rootDirectory.appendingPathComponent("\(cacheKey).gpx"),
+            rootDirectory.appendingPathComponent("\(cacheKey).json"),
+            rootDirectory.appendingPathComponent("\(cacheKey).meta.json")
+        ]
+    }
+
+    private func readCacheMeta(cacheKey: String) -> [String: Any]? {
         let metaURL = rootDirectory.appendingPathComponent("\(cacheKey).meta.json")
         guard let data = try? Data(contentsOf: metaURL),
-              let meta = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let meta = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+        return meta
+    }
+
+    private func writeCacheMeta(_ meta: [String: Any], cacheKey: String) {
+        let metaURL = rootDirectory.appendingPathComponent("\(cacheKey).meta.json")
+        if let metaData = try? JSONSerialization.data(withJSONObject: meta, options: [.prettyPrinted]) {
+            try? metaData.write(to: metaURL, options: [.atomic])
+        }
+    }
+
+    private func cachedFlightItems() -> [[String: Any]] {
+        guard let metaURLs = try? fileManager.contentsOfDirectory(
+            at: rootDirectory,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+        return metaURLs
+            .filter { $0.lastPathComponent.hasSuffix(".meta.json") }
+            .compactMap { url -> [String: Any]? in
+                let cacheKey = url.lastPathComponent.replacingOccurrences(of: ".meta.json", with: "")
+                guard let meta = readCacheMeta(cacheKey: cacheKey) else { return nil }
+                return cacheItem(cacheKey: cacheKey, meta: meta)
+            }
+            .sorted { left, right in
+                let leftTime = Self.intValue(left["downloaded_at"]) ?? Self.intValue(left["timestamp"]) ?? 0
+                let rightTime = Self.intValue(right["downloaded_at"]) ?? Self.intValue(right["timestamp"]) ?? 0
+                if leftTime != rightTime {
+                    return leftTime > rightTime
+                }
+                return Self.stringValue(left["cache_key"]) < Self.stringValue(right["cache_key"])
+            }
+    }
+
+    private func cacheItem(cacheKey: String, meta: [String: Any]) -> [String: Any]? {
+        let trackPoints = meta["track_points"] as? [[String: Any]] ?? []
+        let gpxURL = rootDirectory.appendingPathComponent("\(cacheKey).gpx")
+        let jsonURL = rootDirectory.appendingPathComponent("\(cacheKey).json")
+        guard fileManager.fileExists(atPath: gpxURL.path) || fileManager.fileExists(atPath: jsonURL.path) || !trackPoints.isEmpty else {
+            return nil
+        }
+        var item = (meta["flight"] as? [String: Any]) ?? [:]
+        if Self.stringValue(item["fr24_id"]).isEmpty {
+            item["fr24_id"] = cacheKey
+        }
+        item["cache_key"] = cacheKey
+        item["cache_hit"] = true
+        item["favorite"] = (meta["favorite"] as? Bool) ?? (meta["favorite"] as? NSNumber)?.boolValue ?? false
+        item["downloaded_at"] = Self.intValue(meta["downloaded_at"]) ?? NSNull()
+        item["track_point_count"] = trackPoints.count
+        item["gpx_filename"] = Self.stringValue(meta["gpx_filename"]).isEmpty ? gpxURL.lastPathComponent : Self.stringValue(meta["gpx_filename"])
+        item["gpx_path"] = Self.stringValue(meta["gpx_path"]).isEmpty ? gpxURL.path : Self.stringValue(meta["gpx_path"])
+        item["json_filename"] = Self.stringValue(meta["json_filename"]).isEmpty ? jsonURL.lastPathComponent : Self.stringValue(meta["json_filename"])
+        return item
+    }
+
+    private func cachedDownloadPayload(cacheKey: String, flight: [String: Any]) -> [String: Any]? {
+        guard let meta = readCacheMeta(cacheKey: cacheKey),
               let trackPoints = meta["track_points"] as? [[String: Any]],
               trackPoints.count >= 2 else {
             return nil
         }
-        let cachedFlight = (meta["flight"] as? [String: Any]) ?? flight
+        var cachedFlight = (meta["flight"] as? [String: Any]) ?? flight
+        cachedFlight["favorite"] = (meta["favorite"] as? Bool) ?? (meta["favorite"] as? NSNumber)?.boolValue ?? false
+        cachedFlight["cache_key"] = cacheKey
         return downloadResponse(
             cacheKey: cacheKey,
             flight: cachedFlight,

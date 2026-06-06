@@ -325,6 +325,13 @@ const TRANSLATIONS = {
   "query.search": { "zh-Hans": "查询", en: "Search" },
   "query.hint": { "zh-Hans": "FR24 是在线增强；查询或下载失败不会影响本地航路、Procedure、nav-overlay 和离线地图。", en: "FR24 is an online enhancement. Query or download failures do not affect local routes, Procedure, nav-overlay, or offline maps." },
   "query.statusInitial": { "zh-Hans": "填好起飞和到达机场后，可查询该航线的最新 FR24 航班。", en: "Enter departure and arrival first, then search recent FR24 flights on this route." },
+  "query.manualHistoryTitle": { "zh-Hans": "手动航班历史", en: "Manual Flight History" },
+  "query.manualHistoryHint": { "zh-Hans": "可输入航班号查询 FR24 历史页，或输入 flightId 直接生成可下载 / 匹配的单条历史记录。", en: "Enter a flight number to query its FR24 history page, or a flightId to create a downloadable/matchable single history record." },
+  "query.manualHistoryPlaceholder": { "zh-Hans": "航班号或 flightId，例如 TV9943", en: "Flight number or flightId, e.g. TV9943" },
+  "query.manualHistorySearch": { "zh-Hans": "查历史", en: "Search History" },
+  "query.manualHistoryMissing": { "zh-Hans": "请输入航班号或 flightId。", en: "Enter a flight number or flightId." },
+  "query.manualHistoryLoading": { "zh-Hans": "正在查询手动航班历史...", en: "Searching manual flight history..." },
+  "query.manualHistoryLoaded": { "zh-Hans": "已加载 {count} 条手动航班历史。", en: "Loaded {count} manual history records." },
   "query.empty": { "zh-Hans": "暂无查询结果。", en: "No query results yet." },
   "query.loading": { "zh-Hans": "正在查询 FR24 航班...", en: "Searching FR24 flights..." },
   "query.loaded": { "zh-Hans": "已找到 {count} 个 FR24 航班。", en: "Found {count} FR24 flights." },
@@ -344,6 +351,24 @@ const TRANSLATIONS = {
   "query.cacheStatus": { "zh-Hans": "正在读取缓存...", en: "Reading cache..." },
   "query.cacheInitial": { "zh-Hans": "GPX、playback JSON 和 meta JSON 缓存在 App Caches 中。", en: "GPX, playback JSON, and meta JSON are stored in App Caches." },
   "query.cacheSummary": { "zh-Hans": "FR24 缓存：{size}，{count} 个文件。", en: "FR24 cache: {size}, {count} files." },
+  "query.cacheSearchTitle": { "zh-Hans": "检索已下载轨迹", en: "Search Downloaded Tracks" },
+  "query.cacheSearchPlaceholder": { "zh-Hans": "航班号 / flightId / 机场 / 机型", en: "Flight / flightId / airport / aircraft" },
+  "query.cacheSearch": { "zh-Hans": "检索缓存", en: "Search Cache" },
+  "query.cacheSearchHint": { "zh-Hans": "只检索本机已下载的 FR24 GPX / playback 缓存；收藏文件不会被一键删除缓存清掉。", en: "Search only locally downloaded FR24 GPX / playback cache. Favorited files are protected from one-click cache clearing." },
+  "query.cacheLoading": { "zh-Hans": "正在检索 FR24 下载缓存...", en: "Searching FR24 download cache..." },
+  "query.cacheLoaded": { "zh-Hans": "已找到 {count} 条已下载轨迹。", en: "Found {count} downloaded tracks." },
+  "query.cacheEmpty": { "zh-Hans": "没有匹配的已下载轨迹。", en: "No matching downloaded tracks." },
+  "query.cacheDraw": { "zh-Hans": "绘制路径", en: "Draw Track" },
+  "query.cacheDelete": { "zh-Hans": "删除文件", en: "Delete File" },
+  "query.cacheFavorite": { "zh-Hans": "收藏", en: "Favorite" },
+  "query.cacheUnfavorite": { "zh-Hans": "取消收藏", en: "Unfavorite" },
+  "query.cacheFavoriteBadge": { "zh-Hans": "已收藏", en: "Favorited" },
+  "query.cacheDownloaded": { "zh-Hans": "缓存 {time} / {count} 点", en: "Cached {time} / {count} pts" },
+  "query.cacheDeleteConfirm": { "zh-Hans": "确认删除 {flight} 的 FR24 缓存文件？", en: "Delete FR24 cached files for {flight}?" },
+  "query.cacheDeleted": { "zh-Hans": "已删除 FR24 缓存文件。", en: "FR24 cached files deleted." },
+  "query.cacheFavorited": { "zh-Hans": "已收藏 FR24 缓存文件。", en: "FR24 cached files favorited." },
+  "query.cacheUnfavorited": { "zh-Hans": "已取消收藏 FR24 缓存文件。", en: "FR24 cached files unfavorited." },
+  "query.cacheClearedWithFavorites": { "zh-Hans": "已删除未收藏的 FR24 缓存，保留 {count} 个收藏。", en: "Deleted non-favorited FR24 cache and kept {count} favorites." },
   "query.access": { "zh-Hans": "FR24 网络访问", en: "FR24 Network Access" },
   "query.accessInitial": { "zh-Hans": "未同步 FR24 Web 会话。", en: "No FR24 Web session synced." },
   "query.accessSummary": { "zh-Hans": "Cookie {cookie}，_frPl {frpl}。", en: "Cookie {cookie}, _frPl {frpl}." },
@@ -366,8 +391,8 @@ const TRANSLATIONS = {
   "query.clearTrack": { "zh-Hans": "清除轨迹绘制", en: "Clear Track Drawing" },
   "query.restoreMatch": { "zh-Hans": "还原轨迹匹配", en: "Restore Match" },
   "query.clearCache": { "zh-Hans": "删除下载缓存", en: "Delete Download Cache" },
-  "query.clearCacheConfirm": { "zh-Hans": "确认删除 FR24 下载缓存？这会删除已缓存的 GPX、playback JSON 和 meta JSON。", en: "Delete the FR24 download cache? This removes cached GPX, playback JSON, and meta JSON." },
-  "query.cacheCleared": { "zh-Hans": "已删除 FR24 下载缓存。", en: "FR24 download cache deleted." },
+  "query.clearCacheConfirm": { "zh-Hans": "确认删除未收藏的 FR24 下载缓存？已收藏的 GPX、playback JSON 和 meta JSON 会保留。", en: "Delete non-favorited FR24 download cache? Favorited GPX, playback JSON, and meta JSON files will be kept." },
+  "query.cacheCleared": { "zh-Hans": "已删除未收藏的 FR24 下载缓存。", en: "Non-favorited FR24 download cache deleted." },
   "query.trackCleared": { "zh-Hans": "已清除 FR24 轨迹绘制。", en: "FR24 track drawing cleared." },
   "query.noTrack": { "zh-Hans": "当前没有已绘制的 FR24 轨迹。", en: "No FR24 track is currently drawn." },
   "query.noRestore": { "zh-Hans": "没有可还原的轨迹匹配航路。", en: "No matched route to restore." },
@@ -379,6 +404,7 @@ const TRANSLATIONS = {
   "query.duration": { "zh-Hans": "时长 {duration}", en: "Duration {duration}" },
   "query.cacheHit": { "zh-Hans": "使用缓存", en: "Cache hit" },
   "query.cacheMiss": { "zh-Hans": "新下载", en: "Downloaded" },
+  "query.actualRoute": { "zh-Hans": "实际起降 {route}", en: "Actual route {route}" },
   "error.requestFailed": { "zh-Hans": "请求失败。", en: "Request failed." },
   "error.invalidJson": { "zh-Hans": "响应不是有效的 JSON。", en: "Response is not valid JSON." },
   "error.http": { "zh-Hans": "请求失败：HTTP {code}。", en: "Request failed: HTTP {code}." },
@@ -539,7 +565,10 @@ const state = {
   mapCacheStatus: null,
   mapCacheTileVersion: Date.now(),
   fr24Flights: new Map(),
+  fr24CacheFlights: new Map(),
   fr24SearchFlights: [],
+  fr24SearchRenderOptions: {},
+  fr24CacheItems: [],
   fr24HistoryByKey: new Map(),
   fr24CacheStatus: null,
   fr24AccessStatus: null,
@@ -576,6 +605,7 @@ const state = {
   mobilePanelDrag: null,
   mobilePanelDragFrame: 0,
   mobilePanelDragPendingRatio: null,
+  mobilePanelTapGuard: null,
   mobilePanelResizeFrame: 0,
 };
 
@@ -589,6 +619,7 @@ const MOBILE_KEYBOARD_MIN_OVERLAP_PX = 80;
 const MOBILE_KEYBOARD_MARGIN_PX = 14;
 const MOBILE_PANEL_DEFAULT_MAP_RATIO = 66;
 const MOBILE_PANEL_MIN_MAP_RATIO = 30;
+const MOBILE_PANEL_RATIO_STEP = 0.2;
 const NAV_OVERLAY_REFRESH_DELAY_MS = 110;
 const NAV_OVERLAY_FETCH_PADDING_RATIO = 0.16;
 const NAV_OVERLAY_DRAW_PADDING_RATIO = 0.12;
@@ -614,6 +645,10 @@ function isCompactPhoneMap() {
 
 function compactPhoneValue(value, scale = 0.72, minimum = 0) {
   return isCompactPhoneMap() ? Math.max(minimum, value * scale) : value;
+}
+
+function routeStrokeWeight(value) {
+  return isPhoneWorkbench() ? value * 0.8 : value;
 }
 
 function compactPhoneSize(size) {
@@ -666,7 +701,9 @@ const VECTOR_PAN_BUFFER_MIN_PX = 520;
 const VECTOR_PAN_BUFFER_MAX_PX = 1120;
 const ASYNC_CACHED_TILE_RETRY_DELAYS_MS = [350, 800, 1600, 3200, 6400, 10000];
 const ROUTE_WORLD_COPY_OFFSETS = [-720, -360, 0, 360, 720];
-const FR24_TRACK_GAP_NM = 20;
+const FR24_TRACK_GAP_NM = 10;
+const FR24_TRACK_CURVE_MIN_NM = 4;
+const FR24_TRACK_CURVE_TURN_DEG = 38;
 const AIRPORT_SLOTS = ["departure", "arrival", "manual"];
 const AIRPORT_SLOT_LABELS = {
   departure: "airport.slot.departure",
@@ -758,8 +795,13 @@ const elements = {
   refreshMapCacheButton: document.querySelector("#refreshMapCacheButton"),
   clearMapCacheButton: document.querySelector("#clearMapCacheButton"),
   fr24SearchButton: document.querySelector("#fr24SearchButton"),
+  fr24ManualHistoryInput: document.querySelector("#fr24ManualHistoryInput"),
+  fr24ManualHistoryButton: document.querySelector("#fr24ManualHistoryButton"),
   fr24QueryStatus: document.querySelector("#fr24QueryStatus"),
   fr24FlightList: document.querySelector("#fr24FlightList"),
+  fr24CacheSearchInput: document.querySelector("#fr24CacheSearchInput"),
+  fr24CacheSearchButton: document.querySelector("#fr24CacheSearchButton"),
+  fr24CacheList: document.querySelector("#fr24CacheList"),
   fr24CacheTitle: document.querySelector("#fr24CacheTitle"),
   fr24CacheSummary: document.querySelector("#fr24CacheSummary"),
   fr24AccessSummary: document.querySelector("#fr24AccessSummary"),
@@ -3940,7 +3982,14 @@ function clampMobilePanelMapRatio(value) {
   if (!Number.isFinite(numeric)) {
     return MOBILE_PANEL_DEFAULT_MAP_RATIO;
   }
-  return Math.max(MOBILE_PANEL_MIN_MAP_RATIO, Math.min(MOBILE_PANEL_DEFAULT_MAP_RATIO, numeric));
+  const clamped = Math.max(MOBILE_PANEL_MIN_MAP_RATIO, Math.min(MOBILE_PANEL_DEFAULT_MAP_RATIO, numeric));
+  if (Math.abs(clamped - MOBILE_PANEL_DEFAULT_MAP_RATIO) < MOBILE_PANEL_RATIO_STEP) {
+    return MOBILE_PANEL_DEFAULT_MAP_RATIO;
+  }
+  if (Math.abs(clamped - MOBILE_PANEL_MIN_MAP_RATIO) < MOBILE_PANEL_RATIO_STEP) {
+    return MOBILE_PANEL_MIN_MAP_RATIO;
+  }
+  return Math.round(clamped / MOBILE_PANEL_RATIO_STEP) * MOBILE_PANEL_RATIO_STEP;
 }
 
 function scheduleMobilePanelMapResize() {
@@ -3981,11 +4030,39 @@ function installMobilePanelDragHandle() {
   }
   applyMobilePanelMapRatio(state.mobilePanelMapRatio);
   const isPortraitPhone = () => !window.matchMedia || window.matchMedia("(orientation: portrait)").matches;
+  const armTapGuard = (drag) => {
+    state.mobilePanelTapGuard = {
+      until: performance.now() + 460,
+      x: drag?.lastX ?? drag?.startX ?? 0,
+      y: drag?.lastY ?? drag?.startY ?? 0,
+    };
+  };
+  const suppressGuardedTapEvent = (event) => {
+    const guard = state.mobilePanelTapGuard;
+    if (!guard) {
+      return;
+    }
+    if (performance.now() > guard.until) {
+      state.mobilePanelTapGuard = null;
+      return;
+    }
+    if (event.type === "focusin" && event.target && typeof event.target.blur === "function") {
+      event.target.blur();
+    }
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    event.stopImmediatePropagation?.();
+  };
+  ["click", "auxclick", "mouseup", "mousedown", "touchend", "focusin"].forEach((type) => {
+    document.addEventListener(type, suppressGuardedTapEvent, { capture: true, passive: false });
+  });
   const togglePanelByTap = () => {
     const isExpanded = state.mobilePanelMapRatio <= MOBILE_PANEL_MIN_MAP_RATIO + 0.5;
     const targetRatio = isExpanded ? MOBILE_PANEL_DEFAULT_MAP_RATIO : MOBILE_PANEL_MIN_MAP_RATIO;
-    applyMobilePanelMapRatio(targetRatio);
-    window.setTimeout(() => map.invalidateSize({ animate: false, pan: false }), 180);
+    window.requestAnimationFrame(() => {
+      applyMobilePanelMapRatio(targetRatio);
+      window.setTimeout(() => map.invalidateSize({ animate: false, pan: false }), 180);
+    });
   };
   const cancelPendingDragFrame = () => {
     if (state.mobilePanelDragFrame) {
@@ -3995,7 +4072,20 @@ function installMobilePanelDragHandle() {
     state.mobilePanelDragPendingRatio = null;
   };
   const scheduleDragRatio = (ratio) => {
-    state.mobilePanelDragPendingRatio = ratio;
+    const nextRatio = clampMobilePanelMapRatio(ratio);
+    if (
+      state.mobilePanelDragPendingRatio !== null
+      && Math.abs(state.mobilePanelDragPendingRatio - nextRatio) < 0.01
+    ) {
+      return;
+    }
+    if (
+      state.mobilePanelDragPendingRatio === null
+      && Math.abs(state.mobilePanelMapRatio - nextRatio) < 0.01
+    ) {
+      return;
+    }
+    state.mobilePanelDragPendingRatio = nextRatio;
     if (state.mobilePanelDragFrame) {
       return;
     }
@@ -4008,10 +4098,17 @@ function installMobilePanelDragHandle() {
       }
     });
   };
-  const finishDrag = () => {
+  const finishDrag = (event) => {
     const drag = state.mobilePanelDrag;
     if (!drag) {
       return;
+    }
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    event?.stopImmediatePropagation?.();
+    if (event && Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
+      drag.lastX = event.clientX;
+      drag.lastY = event.clientY;
     }
     const finalRatio = state.mobilePanelDragPendingRatio;
     cancelPendingDragFrame();
@@ -4021,6 +4118,7 @@ function installMobilePanelDragHandle() {
     state.mobilePanelDrag = null;
     delete document.body.dataset.mobilePanelDragging;
     if (!drag.moved) {
+      armTapGuard(drag);
       togglePanelByTap();
       return;
     }
@@ -4038,7 +4136,10 @@ function installMobilePanelDragHandle() {
     const shellRect = document.querySelector(".shell")?.getBoundingClientRect();
     state.mobilePanelDrag = {
       pointerId: event.pointerId,
+      startX: event.clientX,
       startY: event.clientY,
+      lastX: event.clientX,
+      lastY: event.clientY,
       startRatio: state.mobilePanelMapRatio,
       shellHeight: Math.max(1, shellRect?.height || window.innerHeight || 1),
       moved: false,
@@ -4056,6 +4157,8 @@ function installMobilePanelDragHandle() {
     if (Math.abs(event.clientY - drag.startY) > 6) {
       drag.moved = true;
     }
+    drag.lastX = event.clientX;
+    drag.lastY = event.clientY;
     scheduleDragRatio(drag.startRatio + deltaRatio);
   });
 
@@ -5374,6 +5477,49 @@ function greatCircleDistanceNm(pointA, pointB) {
   return 3440.065 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(Math.max(0, 1 - a)));
 }
 
+function initialBearingDeg(pointA, pointB) {
+  const lat1 = Number(pointA?.lat);
+  const lat2 = Number(pointB?.lat);
+  const lon1 = Number.isFinite(pointA?.originalLon) ? Number(pointA.originalLon) : Number(pointA?.lon);
+  const lon2 = Number.isFinite(pointB?.originalLon) ? Number(pointB.originalLon) : Number(pointB?.lon);
+  if (![lat1, lat2, lon1, lon2].every(Number.isFinite)) {
+    return null;
+  }
+  const toRad = (value) => (value * Math.PI) / 180;
+  const toDeg = (value) => (value * 180) / Math.PI;
+  const phi1 = toRad(lat1);
+  const phi2 = toRad(lat2);
+  const lambda = toRad(normalizeLongitude(lon2 - lon1));
+  const y = Math.sin(lambda) * Math.cos(phi2);
+  const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(lambda);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+
+function bearingDeltaDeg(a, b) {
+  if (!Number.isFinite(a) || !Number.isFinite(b)) {
+    return 0;
+  }
+  const diff = Math.abs(((a - b + 540) % 360) - 180);
+  return Number.isFinite(diff) ? diff : 0;
+}
+
+function fr24SegmentLooksSparseCurve(points, index, distanceNm) {
+  if (distanceNm < FR24_TRACK_CURVE_MIN_NM) {
+    return false;
+  }
+  const previousPrevious = points[index - 2];
+  const previous = points[index - 1];
+  const current = points[index];
+  const next = points[index + 1];
+  const beforeTurn = previousPrevious
+    ? bearingDeltaDeg(initialBearingDeg(previousPrevious, previous), initialBearingDeg(previous, current))
+    : 0;
+  const afterTurn = next
+    ? bearingDeltaDeg(initialBearingDeg(previous, current), initialBearingDeg(current, next))
+    : 0;
+  return Math.max(beforeTurn, afterTurn) >= FR24_TRACK_CURVE_TURN_DEG;
+}
+
 function splitFR24TrackSegments(points) {
   if (!Array.isArray(points) || points.length < 2) {
     return [];
@@ -5383,7 +5529,10 @@ function splitFR24TrackSegments(points) {
   for (let index = 1; index < points.length; index += 1) {
     const previous = points[index - 1];
     const current = points[index];
-    if (greatCircleDistanceNm(previous, current) > FR24_TRACK_GAP_NM) {
+    const distanceNm = greatCircleDistanceNm(previous, current);
+    const shouldDash = distanceNm > FR24_TRACK_GAP_NM
+      || fr24SegmentLooksSparseCurve(points, index, distanceNm);
+    if (shouldDash) {
       if (solidRun.length >= 2) {
         segments.push({ points: solidRun, dashed: false });
       }
@@ -7128,7 +7277,7 @@ function setAirwayHighlight(airwayKey, hovered) {
     state.hoveredAirwayKey = airwayKey;
     if (layers) {
       layers.forEach((layer) => {
-        layer.visible.setStyle({ weight: 10, opacity: 1, color: MAP_COLORS.routeHover });
+        layer.visible.setStyle({ weight: routeStrokeWeight(10), opacity: 1, color: MAP_COLORS.routeHover });
         layer.visible.bringToFront();
         layer.hit.bringToFront();
       });
@@ -7141,7 +7290,7 @@ function setAirwayHighlight(airwayKey, hovered) {
   }
   if (layers) {
     layers.forEach((layer) => {
-      layer.visible.setStyle({ weight: 5, opacity: 0.98, color: MAP_COLORS.route });
+      layer.visible.setStyle({ weight: routeStrokeWeight(5), opacity: 0.98, color: MAP_COLORS.route });
     });
   }
   chip?.classList.remove("hovered");
@@ -7159,12 +7308,20 @@ function setProcedureHighlight(type, hovered) {
     return;
   }
   if (hovered) {
-    layers?.primary.setStyle({ weight: 9, opacity: 1 });
+    layers?.primary.setStyle({ weight: routeStrokeWeight(9), opacity: 1 });
     layers?.primary.bringToFront();
+    layers?.highlights?.forEach((marker) => {
+      marker.outer.bringToFront();
+      marker.inner.bringToFront();
+    });
     chip?.classList.add("hovered");
     return;
   }
-  layers?.primary.setStyle({ weight: 5, opacity: 0.98, color: layers.color });
+  layers?.primary.setStyle({ weight: routeStrokeWeight(5), opacity: 0.98, color: layers.color });
+  layers?.highlights?.forEach((marker) => {
+    marker.outer.bringToFront();
+    marker.inner.bringToFront();
+  });
   chip?.classList.remove("hovered");
 }
 
@@ -7211,7 +7368,7 @@ function drawRouteCopy(points, payload, routeAssociations, longitudeOffset, fitB
         const visibleLayer = L.polyline(latlngs, {
           pane: "routePane",
           color: MAP_COLORS.route,
-          weight: 5,
+          weight: routeStrokeWeight(5),
           opacity: 0.98,
           interactive: false,
           lineCap: "round",
@@ -7408,6 +7565,32 @@ function panToLatLngsCenter(latlngs) {
   }
 }
 
+function addProcedureWaypointHighlights(type, points, color) {
+  const markers = [];
+  const seen = new Set();
+  (points || []).forEach((item) => {
+    const latlng = procedureItemLatLng(item);
+    if (!latlng) {
+      return;
+    }
+    const ident = String(item.waypoint_identifier || item.fix_identifier || "");
+    const key = `${ident}:${latlng.lat.toFixed(6)}:${latlng.lng.toFixed(6)}`;
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    markers.push(addWaypointHighlightMarker(latlng, procedureLayerGroups[type], {
+      outerRadius: compactPhoneValue(7, 0.72, 4.8),
+      innerRadius: compactPhoneValue(2.7, 0.72, 2.1),
+      color: "#fff4b5",
+      fillColor: color,
+      fillOpacity: 0.2,
+      innerFillColor: "#071928",
+    }));
+  });
+  return markers;
+}
+
 /**
  * 功能：绘制 `drawProcedure` 对应的业务逻辑。
  * 输入：type、path、points、color、options。
@@ -7419,14 +7602,19 @@ function drawProcedure(type, path, points, color, options = {}) {
   const layer = L.polyline(latlngs, {
     pane: "routePane",
     color,
-    weight: 5,
+    weight: routeStrokeWeight(5),
     opacity: 0.98,
     interactive: false,
     lineCap: "round",
     lineJoin: "round",
   }).addTo(procedureLayerGroups[type]);
-  state.procedureVisualLayers[type] = { primary: layer, color };
+  const highlights = addProcedureWaypointHighlights(type, points, color);
+  state.procedureVisualLayers[type] = { primary: layer, color, highlights };
   layer.bringToFront();
+  highlights.forEach((marker) => {
+    marker.outer.bringToFront();
+    marker.inner.bringToFront();
+  });
   if (!options.skipFitBounds) {
     panToLatLngsCenter(latlngs);
   }
@@ -7443,20 +7631,21 @@ function drawApproach(primaryPath, missedPath, points, options = {}) {
   const primary = L.polyline(latlngs, {
     pane: "routePane",
     color: MAP_COLORS.approach,
-    weight: 5,
+    weight: routeStrokeWeight(5),
     opacity: 0.98,
     interactive: false,
     lineCap: "round",
     lineJoin: "round",
   }).addTo(procedureLayerGroups.approach);
-  state.procedureVisualLayers.approach = { primary, color: MAP_COLORS.approach };
+  const highlights = addProcedureWaypointHighlights("approach", points, MAP_COLORS.approach);
+  state.procedureVisualLayers.approach = { primary, color: MAP_COLORS.approach, highlights };
   const panLatLngs = [...latlngs];
   if (missedPath?.length >= 2) {
     const missedLatLngs = missedPath.map((item) => [item.lat, item.lon]);
     L.polyline(missedLatLngs, {
       pane: "routePane",
       color: MAP_COLORS.approach,
-      weight: 2,
+      weight: routeStrokeWeight(2),
       opacity: 0.95,
       dashArray: "6 8",
       interactive: false,
@@ -7466,6 +7655,10 @@ function drawApproach(primaryPath, missedPath, points, options = {}) {
     panLatLngs.push(...missedLatLngs);
   }
   primary.bringToFront();
+  highlights.forEach((marker) => {
+    marker.outer.bringToFront();
+    marker.inner.bringToFront();
+  });
   if (!options.skipFitBounds) {
     panToLatLngsCenter(panLatLngs);
   }
@@ -8122,10 +8315,19 @@ function setFR24QueryBusy(isBusy) {
   state.fr24QueryBusy = Boolean(isBusy);
   [
     elements.fr24SearchButton,
+    elements.fr24ManualHistoryButton,
+    elements.fr24CacheSearchButton,
     ...Array.from(elements.fr24FlightList?.querySelectorAll("[data-fr24-action]") || []),
+    ...Array.from(elements.fr24CacheList?.querySelectorAll("[data-fr24-action]") || []),
   ].forEach((button) => {
     button.disabled = Boolean(isBusy);
   });
+  if (elements.fr24ManualHistoryInput) {
+    elements.fr24ManualHistoryInput.disabled = Boolean(isBusy);
+  }
+  if (elements.fr24CacheSearchInput) {
+    elements.fr24CacheSearchInput.disabled = Boolean(isBusy);
+  }
 }
 
 function currentQueryRouteInputs() {
@@ -8137,6 +8339,12 @@ function currentQueryRouteInputs() {
     return null;
   }
   return { departure, arrival };
+}
+
+function optionalQueryRouteInputs() {
+  const departure = elements.departureInput.value.trim().toUpperCase();
+  const arrival = elements.arrivalInput.value.trim().toUpperCase();
+  return departure && arrival ? { departure, arrival } : null;
 }
 
 function fr24FlightKey(flight, index = 0, prefix = "flight") {
@@ -8152,9 +8360,10 @@ function flightPrimaryLabel(flight) {
 }
 
 function flightAirportCode(flight, side) {
+  const actualCode = flight[`${side}_actual_code`];
   const icao = flight[`${side}_icao`];
   const iata = flight[`${side}_iata`];
-  return icao || iata || "----";
+  return actualCode || icao || iata || "----";
 }
 
 function normalizeFlightTimestamp(value) {
@@ -8206,6 +8415,18 @@ function formatFlightTimes(flight) {
   return t("query.scheduleActual", { scheduled, actual });
 }
 
+function formatFlightActualRoute(flight) {
+  if (flight.actual_route_mismatch !== true) {
+    return "";
+  }
+  const route = `${flightAirportCode(flight, "origin")} → ${flightAirportCode(flight, "dest")}`;
+  return t("query.actualRoute", { route });
+}
+
+function getFR24FlightByKey(key) {
+  return state.fr24Flights.get(key) || state.fr24CacheFlights.get(key) || null;
+}
+
 function renderFR24FlightActions(key) {
   return `
     <div class="query-flight-actions">
@@ -8215,32 +8436,57 @@ function renderFR24FlightActions(key) {
   `;
 }
 
-function renderFR24FlightCard(flight, key, { history = false } = {}) {
+function renderFR24CacheActions(flight, key) {
+  const isFavorite = flight.favorite === true;
+  const favoriteLabel = isFavorite ? t("query.cacheUnfavorite") : t("query.cacheFavorite");
+  return `
+    <div class="query-flight-actions query-cache-actions">
+      <button class="ghost-button compact-button" type="button" data-fr24-action="draw" data-fr24-key="${escapeHtml(key)}">${escapeHtml(t("query.cacheDraw"))}</button>
+      <button class="ghost-button compact-button" type="button" data-fr24-action="favorite-cache" data-fr24-key="${escapeHtml(key)}" data-fr24-favorite="${isFavorite ? "false" : "true"}">${escapeHtml(favoriteLabel)}</button>
+      <button class="ghost-button compact-button danger-button" type="button" data-fr24-action="delete-cache" data-fr24-key="${escapeHtml(key)}">${escapeHtml(t("query.cacheDelete"))}</button>
+    </div>
+  `;
+}
+
+function renderFR24FlightCard(flight, key, { history = false, cacheItem = false } = {}) {
   const route = `${flightAirportCode(flight, "origin")} → ${flightAirportCode(flight, "dest")}`;
   const airline = flight.airline || t("query.airlineUnknown");
   const aircraft = [flight.aircraft, flight.aircraft_registration].filter(Boolean).join(" / ") || t("query.aircraftUnknown");
   const status = flight.status ? `<span>${escapeHtml(flight.status)}</span>` : "";
+  const actualRoute = formatFlightActualRoute(flight);
+  const actualRouteLine = actualRoute ? `<span class="query-flight-actual-route">${escapeHtml(actualRoute)}</span>` : "";
+  const downloadedLine = cacheItem
+    ? `<span>${escapeHtml(t("query.cacheDownloaded", {
+      time: formatFlightTime(flight.downloaded_at),
+      count: formatCount(flight.track_point_count || 0),
+    }))}</span>`
+    : "";
   const cacheBadge = flight.cache_hit === true
     ? `<span class="query-flight-badge">${escapeHtml(t("query.cacheHit"))}</span>`
     : "";
+  const favoriteBadge = flight.favorite === true
+    ? `<span class="query-flight-badge query-flight-badge-favorite">${escapeHtml(t("query.cacheFavoriteBadge"))}</span>`
+    : "";
   return `
-    <article class="query-flight-card ${history ? "is-history" : ""}">
+    <article class="query-flight-card ${history ? "is-history" : ""} ${cacheItem ? "is-cache" : ""}">
       <div class="query-flight-head">
         <div>
           <div class="query-flight-number">${escapeHtml(flightPrimaryLabel(flight))}</div>
           <div class="query-flight-route">${escapeHtml(route)}</div>
         </div>
-        ${cacheBadge}
+        <div class="query-flight-badges">${cacheBadge}${favoriteBadge}</div>
       </div>
       <div class="query-flight-meta">
         <span>${escapeHtml(airline)}</span>
         <span>${escapeHtml(aircraft)}</span>
         ${status}
+        ${actualRouteLine}
         <span>${escapeHtml(formatFlightTimes(flight))}</span>
         <span>${escapeHtml(t("query.duration", { duration: formatFlightDuration(flight.duration_seconds) }))}</span>
+        ${downloadedLine}
       </div>
-      ${renderFR24FlightActions(key)}
-      ${history ? "" : `
+      ${cacheItem ? renderFR24CacheActions(flight, key) : renderFR24FlightActions(key)}
+      ${history || cacheItem ? "" : `
         <details class="query-history">
           <summary>${escapeHtml(t("query.history"))}</summary>
           <button class="ghost-button compact-button query-history-load" type="button" data-fr24-action="history" data-fr24-key="${escapeHtml(key)}">${escapeHtml(t("query.loadHistory"))}</button>
@@ -8268,10 +8514,11 @@ function renderFR24HistoryList(key) {
   }).join("");
 }
 
-function renderFR24Flights(flights = []) {
+function renderFR24Flights(flights = [], options = {}) {
   if (!elements.fr24FlightList) {
     return;
   }
+  state.fr24SearchRenderOptions = options;
   state.fr24SearchFlights = flights;
   state.fr24Flights.clear();
   if (!flights.length) {
@@ -8279,9 +8526,26 @@ function renderFR24Flights(flights = []) {
     return;
   }
   elements.fr24FlightList.innerHTML = flights.map((flight, index) => {
-    const key = fr24FlightKey(flight, index);
+    const key = fr24FlightKey(flight, index, options.prefix || "flight");
     state.fr24Flights.set(key, flight);
-    return renderFR24FlightCard(flight, key);
+    return renderFR24FlightCard(flight, key, { history: Boolean(options.history) });
+  }).join("");
+}
+
+function renderFR24CacheFlights(items = []) {
+  if (!elements.fr24CacheList) {
+    return;
+  }
+  state.fr24CacheItems = items;
+  state.fr24CacheFlights.clear();
+  if (!items.length) {
+    elements.fr24CacheList.innerHTML = `<div class="query-empty">${escapeHtml(t("query.cacheEmpty"))}</div>`;
+    return;
+  }
+  elements.fr24CacheList.innerHTML = items.map((flight, index) => {
+    const key = fr24FlightKey(flight, index, "cache");
+    state.fr24CacheFlights.set(key, flight);
+    return renderFR24FlightCard(flight, key, { history: true, cacheItem: true });
   }).join("");
 }
 
@@ -8360,6 +8624,28 @@ async function refreshFR24CacheStatus() {
   return payload;
 }
 
+async function searchFR24Cache() {
+  hideSearchResults();
+  const query = elements.fr24CacheSearchInput?.value.trim() || "";
+  setFR24QueryBusy(true);
+  setFR24QueryStatus(t("query.cacheLoading"));
+  try {
+    const params = new URLSearchParams({ query, limit: "120" });
+    const payload = await fetchJson(`/api/fr24/cache/list?${params.toString()}`);
+    const items = payload.items || [];
+    renderFR24CacheFlights(items);
+    updateFR24CacheSummary(payload.cache || state.fr24CacheStatus || {});
+    setFR24QueryStatus(items.length ? t("query.cacheLoaded", { count: items.length }) : t("query.cacheEmpty"), !items.length);
+  } catch (error) {
+    renderFR24CacheFlights([]);
+    const message = localizedErrorMessage(error.message);
+    setFR24QueryStatus(message, true);
+    setStatus(message, true);
+  } finally {
+    setFR24QueryBusy(false);
+  }
+}
+
 async function refreshFR24AccessStatus() {
   const payload = await fetchJson("/api/fr24/access/status");
   updateFR24AccessSummary(payload);
@@ -8427,8 +8713,42 @@ async function searchFR24Flights() {
   }
 }
 
+async function searchFR24ManualHistory() {
+  hideSearchResults();
+  const query = elements.fr24ManualHistoryInput?.value.trim() || "";
+  if (!query) {
+    setFR24QueryStatus(t("query.manualHistoryMissing"), true);
+    setStatus(t("query.manualHistoryMissing"), true);
+    return;
+  }
+  const route = optionalQueryRouteInputs();
+  const params = new URLSearchParams({ query, limit: "0" });
+  if (route) {
+    params.set("departure", route.departure);
+    params.set("arrival", route.arrival);
+  }
+  setFR24QueryBusy(true);
+  setFR24QueryStatus(t("query.manualHistoryLoading"));
+  try {
+    const payload = await fetchJson(`/api/fr24/manual-history?${params.toString()}`);
+    const flights = payload.flights || [];
+    state.fr24HistoryByKey.clear();
+    renderFR24Flights(flights, { history: true, prefix: "manual" });
+    updateFR24CacheSummary(payload.cache || state.fr24CacheStatus || {});
+    updateFR24AccessSummary(payload.access || state.fr24AccessStatus || {});
+    setFR24QueryStatus(flights.length ? t("query.manualHistoryLoaded", { count: flights.length }) : t("query.noHistory"), !flights.length);
+  } catch (error) {
+    renderFR24Flights([], { history: true, prefix: "manual" });
+    const message = localizedErrorMessage(error.message);
+    setFR24QueryStatus(message, true);
+    setStatus(message, true);
+  } finally {
+    setFR24QueryBusy(false);
+  }
+}
+
 async function loadFR24History(key) {
-  const flight = state.fr24Flights.get(key);
+  const flight = getFR24FlightByKey(key);
   const route = currentQueryRouteInputs();
   if (!flight || !route) {
     return;
@@ -8441,7 +8761,7 @@ async function loadFR24History(key) {
     );
     const histories = payload.flights || [];
     state.fr24HistoryByKey.set(key, histories);
-    renderFR24Flights(state.fr24SearchFlights);
+    renderFR24Flights(state.fr24SearchFlights, state.fr24SearchRenderOptions);
     updateFR24AccessSummary(payload.access || state.fr24AccessStatus || {});
     setFR24QueryStatus(histories.length ? t("query.historyLoaded", { count: histories.length }) : t("query.noHistory"), !histories.length);
   } catch (error) {
@@ -8482,7 +8802,7 @@ function drawFR24TrackPoints(trackPoints, { fitBounds = true } = {}) {
       const layer = L.polyline(latlngs, {
         pane: "routePane",
         color: "#050505",
-        weight: segment.dashed ? 2.8 : 3.4,
+        weight: routeStrokeWeight(segment.dashed ? 2.8 : 3.4),
         opacity: segment.dashed ? 0.82 : 0.92,
         interactive: false,
         lineCap: "round",
@@ -8507,7 +8827,7 @@ function drawFR24TrackPoints(trackPoints, { fitBounds = true } = {}) {
 }
 
 async function downloadAndDrawFR24Track(key) {
-  const flight = state.fr24Flights.get(key);
+  const flight = getFR24FlightByKey(key);
   if (!flight) {
     return;
   }
@@ -8530,7 +8850,7 @@ async function downloadAndDrawFR24Track(key) {
 }
 
 async function matchFR24FlightTrack(key) {
-  const flight = state.fr24Flights.get(key);
+  const flight = getFR24FlightByKey(key);
   const route = currentQueryRouteInputs();
   if (!flight || !route) {
     return;
@@ -8620,6 +8940,65 @@ async function restoreFR24MatchedRoute() {
   }
 }
 
+async function deleteFR24CachedFlight(key) {
+  const flight = state.fr24CacheFlights.get(key);
+  const cacheKey = flight?.cache_key || flight?.fr24_id;
+  if (!flight || !cacheKey) {
+    return;
+  }
+  const label = flightPrimaryLabel(flight);
+  if (!window.confirm(t("query.cacheDeleteConfirm", { flight: label }))) {
+    return;
+  }
+  setFR24QueryBusy(true);
+  setFR24QueryStatus(t("query.cacheLoading"));
+  try {
+    const payload = await fetchJson("/api/fr24/cache/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cache_key: cacheKey }),
+    });
+    updateFR24CacheSummary(payload.cache || state.fr24CacheStatus || {});
+    await searchFR24Cache();
+    setFR24QueryStatus(t("query.cacheDeleted"));
+    setStatus(t("query.cacheDeleted"));
+  } catch (error) {
+    const message = localizedErrorMessage(error.message);
+    setFR24QueryStatus(message, true);
+    setStatus(message, true);
+  } finally {
+    setFR24QueryBusy(false);
+  }
+}
+
+async function setFR24CacheFavorite(key, favorite) {
+  const flight = state.fr24CacheFlights.get(key);
+  const cacheKey = flight?.cache_key || flight?.fr24_id;
+  if (!flight || !cacheKey) {
+    return;
+  }
+  setFR24QueryBusy(true);
+  setFR24QueryStatus(t("query.cacheLoading"));
+  try {
+    const payload = await fetchJson("/api/fr24/cache/favorite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cache_key: cacheKey, favorite: Boolean(favorite) }),
+    });
+    updateFR24CacheSummary(payload.cache || state.fr24CacheStatus || {});
+    await searchFR24Cache();
+    const message = favorite ? t("query.cacheFavorited") : t("query.cacheUnfavorited");
+    setFR24QueryStatus(message);
+    setStatus(message);
+  } catch (error) {
+    const message = localizedErrorMessage(error.message);
+    setFR24QueryStatus(message, true);
+    setStatus(message, true);
+  } finally {
+    setFR24QueryBusy(false);
+  }
+}
+
 async function clearFR24Cache() {
   const status = state.fr24CacheStatus || await refreshFR24CacheStatus();
   const size = formatBytes(status.size_bytes || 0);
@@ -8629,8 +9008,13 @@ async function clearFR24Cache() {
   }
   const payload = await fetchJson("/api/fr24/cache/clear", { method: "POST" });
   updateFR24CacheSummary(payload);
-  setFR24QueryStatus(t("query.cacheCleared"));
-  setStatus(t("query.cacheCleared"));
+  await searchFR24Cache();
+  const favoriteCount = Number(payload.favorite_count || 0);
+  const message = favoriteCount > 0
+    ? t("query.cacheClearedWithFavorites", { count: formatCount(favoriteCount) })
+    : t("query.cacheCleared");
+  setFR24QueryStatus(message);
+  setStatus(message);
 }
 
 function handleFR24FlightAction(event) {
@@ -8647,6 +9031,10 @@ function handleFR24FlightAction(event) {
     downloadAndDrawFR24Track(key).catch(setErrorStatus);
   } else if (action === "match") {
     matchFR24FlightTrack(key).catch(setErrorStatus);
+  } else if (action === "delete-cache") {
+    deleteFR24CachedFlight(key).catch(setErrorStatus);
+  } else if (action === "favorite-cache") {
+    setFR24CacheFavorite(key, button.dataset.fr24Favorite === "true").catch(setErrorStatus);
   }
 }
 
@@ -8726,7 +9114,26 @@ elements.clearMapCacheButton?.addEventListener("click", () => {
 elements.fr24SearchButton?.addEventListener("click", () => {
   searchFR24Flights().catch(setErrorStatus);
 });
+elements.fr24ManualHistoryButton?.addEventListener("click", () => {
+  searchFR24ManualHistory().catch(setErrorStatus);
+});
+elements.fr24ManualHistoryInput?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    searchFR24ManualHistory().catch(setErrorStatus);
+  }
+});
 elements.fr24FlightList?.addEventListener("click", handleFR24FlightAction);
+elements.fr24CacheSearchButton?.addEventListener("click", () => {
+  searchFR24Cache().catch(setErrorStatus);
+});
+elements.fr24CacheSearchInput?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    searchFR24Cache().catch(setErrorStatus);
+  }
+});
+elements.fr24CacheList?.addEventListener("click", handleFR24FlightAction);
 elements.fr24ClearTrackButton?.addEventListener("click", clearFR24TrackDrawing);
 elements.fr24RestoreMatchButton?.addEventListener("click", () => {
   restoreFR24MatchedRoute().catch(setErrorStatus);
