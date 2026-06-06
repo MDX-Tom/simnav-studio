@@ -16,7 +16,7 @@ NavPlanner 是一个 iPhone / iPad Universal App 项目，目标是做成本地�
 ## 当前阶段
 
 - 已创建 `NavPlanner.xcodeproj` 和 `NavPlanner` SwiftUI App target。
-- 支持 iPhone / iPad：iPad 保持 Web 工作台式布局，iPhone 竖屏使用地图优先的上下布局，最新移动比例约为上部 66% 地图 + 下部 34% 输入工作区，并在最底部保留约 19px 的低高度三标签；iPhone 横屏切换为 iPad 横屏式左计划栏 / 中地图 / 右详情栏布局，但字体、输入框、按钮、地图标签和弹窗仍沿用 iPhone 竖屏的紧凑尺寸。横屏时 SwiftUI 让 WebView 横向铺满，由 Web 层识别刘海在左 / 右，只在刘海侧保留完整安全区，另一侧缩到 8px 以释放可用宽度；iPhone 17 Pro Max 等更宽 iPhone 横屏也会进入同一套 1024px 紧凑工作台规则，避免退回桌面布局。
+- 支持 iPhone / iPad：iPad 保持 Web 工作台式布局，iPhone 竖屏使用地图优先的上下布局，最新移动比例约为上部 66% 地图 + 下部 34% 输入工作区，并在最底部保留约 19px 的低高度四标签；iPhone 横屏切换为 iPad 横屏式左计划栏 / 中地图 / 右详情栏布局，但字体、输入框、按钮、地图标签和弹窗仍沿用 iPhone 竖屏的紧凑尺寸。横屏时 SwiftUI 让 WebView 横向铺满，由 Web 层识别刘海在左 / 右，只在刘海侧保留完整安全区，另一侧缩到 8px 以释放可用宽度；iPhone 17 Pro Max 等更宽 iPhone 横屏也会进入同一套 1024px 紧凑工作台规则，避免退回桌面布局。
 - 已把参考导航数据库复制为 App 自己的 `NavPlanner/Resources/Database/navdata.sqlite`，启动后复制到 Application Support 使用。
 - 已实现 Swift 本地 API 层：`header`、`search`、`airport`、`procedure`、`nav-overlay` 的第一阶段版本。
 - 当前 bundle identifier：`com.midaxia.navplanner`。
@@ -26,7 +26,7 @@ NavPlanner 是一个 iPhone / iPad Universal App 项目，目标是做成本地�
 - 已将 Web 参考项目的静态工作台复制到 iOS 自有资源目录：`NavPlanner/Resources/Web/map.html`、`styles.css`、`app.js`、`nav-icons/`。
 - 已将 Leaflet、MapLibre GL、maplibre-contour、pmtiles 前端运行时打包到 `NavPlanner/Resources/Web/vendor/`，地图内核启动不依赖 CDN。
 - SwiftUI 当前提供全屏 WKWebView 容器和本地服务层，Plan、Airport、Settings、Selection、Offline Maps 等交互由本地 Web 工作台渲染，以优先满足 Web 行为复刻。
-- iPhone 下部工作区已拆分为中文图标标签 `计划`、`机场`、`查询`、`设置`，标签采用更薄的紧凑玻璃质感并独占底部一行，同时为 iOS Home Indicator 保留安全区距离；工作区顶部新增类似系统输入栏的上拉手柄，可把地图区域从默认约 66% 压缩到最小 30%，标签切换时保持上拉位置，软键盘出现时仍走原有 `visualViewport` 自动上拉逻辑；手柄当前使用透明大触控热区、按下/拖动动画和帧节流布局更新，减少小屏上划掉帧；切换时顶部地图实例、视角和叠加层保持不变。
+- iPhone 下部工作区已拆分为中文图标标签 `计划`、`机场`、`查询`、`设置`，标签采用更薄的紧凑玻璃质感并独占底部一行，同时为 iOS Home Indicator 保留安全区距离；底部标签栏当前整体向下 14px，并左右各内收 20px，标签预留行收窄到 9px 以同步增加中部工作区高度；工作区顶部新增类似系统输入栏的上拉手柄，可把地图区域从默认约 66% 压缩到最小 30%，标签切换时保持上拉位置，软键盘出现时仍走原有 `visualViewport` 自动上拉逻辑；手柄当前高度和面板顶部预留均为 20px，外层胶囊光晕改为上下居中的固定高度，保留按下/拖动动画和帧节流布局更新，减少小屏上划掉帧并进一步压缩 banner 上下占位；切换时顶部地图实例、视角和叠加层保持不变。
 - iPhone 横屏不显示底部四标签，改用 iPad 工作台的左右折叠栏与右侧 `机场 / 查询 / 设置` 详情切换；左右面板使用横屏专用窄列宽，刘海侧安全避让，非刘海侧尽量贴近机身圆角边缘，避免左右同时留出大空白。当前紧凑布局断点已扩展到 1024px，覆盖 iPhone 17 Pro Max 等更宽机型。
 - iPad 工作台新增 `Airport / Query / Settings` 详情切换，原有左侧计划栏、地图区和详情区布局保持不变；左右竖向折叠栏按钮已按日间 / 夜间主题分别使用浅蓝灰和深色玻璃配色，并在 WebView 首屏加载前预设主题，同时用显式日间样式兜底，避免日间模式短暂或持续显示深蓝长条。
 - Settings 页面支持从 Files 选择 `.s3db` / `.sqlite` / `.sqlite3` / `.db` 本地导航数据库，导入后 Swift 本地 SQLite 服务即时切库。
@@ -109,6 +109,10 @@ xcodebuild -project NavPlanner.xcodeproj \
 
 最近一次验证：
 
+- `node --check NavPlanner/Resources/Web/app.js` 成功；CSS 大括号配对检查成功；`git diff --check` 成功。
+- XcodeBuildMCP `build_run_sim` 在 iPhone 17 Pro Max 成功，构建、安装、启动无 warning / error；首屏截图确认 banner / 手柄顶部占位已压缩到 20px，短条仍可见，截图为 `/var/folders/7m/jzh_ftyn6_gfjz552yy612zr0000gn/T/screenshot_optimized_2ea3b5a8-3b9e-4287-8847-d2c2127a4f4a.jpg`。
+- XcodeBuildMCP `build_run_sim` 在 iPhone 17 Pro Max 再次成功，首屏截图确认 banner 外层阴影上下观感已更接近对称，底部四标签栏总下移 14px、左右总内收 20px 后仍保持可点按，中部工作区同步增高；截图为 `/var/folders/7m/jzh_ftyn6_gfjz552yy612zr0000gn/T/screenshot_optimized_8e02f35e-e7e1-4d0c-bc0e-3106915eb9e6.jpg`。
+- `git -C NavPlanner-web status --short` 无输出，参考项目保持未修改。
 - `node --check NavPlanner/Resources/Web/app.js` 成功；CSS 大括号配对检查成功；`swift -frontend -parse NavPlanner/Core/WebBridge/NavPlannerSchemeHandler.swift NavPlanner/Core/PlannerCore/PlannerService.swift` 成功。
 - `plutil -lint NavPlanner.xcodeproj/project.pbxproj NavPlanner/Support/PrivacyInfo.xcprivacy` 成功；`git diff --check` 成功。
 - `python3 Tools/Parity/run_all_parity.py` 成功；RouteParity 22、TrackParity 7、ProcedureParity 6 均无差异。

@@ -1,5 +1,70 @@
 # Codex 执行报告
 
+## 2026-06-06 banner 阴影对称与底栏再下移 2px
+
+已完成：
+
+- 将 iPhone 竖屏底部 `计划 / 机场 / 查询 / 设置` 标签栏在上一轮基础上再向下移动 2px，当前总下移为 14px。
+- 将底部标签栏预留网格行从 11px 收窄到 9px，把高度继续还给中部工作区。
+- 将上拉 banner 外层胶囊光晕改为上下居中的固定高度，让阴影上缘和下缘观感更接近一致。
+- `map.html` 中 `app.js` / `styles.css` 资源版本刷新为 `20260606-banner-shadow-tabs14`。
+
+验证记录：
+
+- `node --check NavPlanner/Resources/Web/app.js` 成功；CSS 大括号配对检查成功；`git diff --check` 成功。
+- XcodeBuildMCP `build_run_sim` 在 iPhone 17 Pro Max 成功，构建、安装、启动无 warning / error。
+- 首屏截图确认 banner 外层阴影上下观感更对称，底部四标签栏继续下移且中部工作区略有增高，截图为 `/var/folders/7m/jzh_ftyn6_gfjz552yy612zr0000gn/T/screenshot_optimized_8e02f35e-e7e1-4d0c-bc0e-3106915eb9e6.jpg`。
+- 扫描本轮 runtime / oslog，未发现新的 JS 异常或 App 级错误；仅有 iOS 模拟器常见的 WebKit 辅助功能重复类提示。
+- `git -C NavPlanner-web status --short` 无输出，参考项目保持未修改。
+
+## 2026-06-06 banner 高度 20px 调整
+
+已完成：
+
+- 将 iPhone 竖屏上拉 banner / 手柄触控高度从 34px 调整为 20px。
+- 将下方面板顶部预留从 24px 调整为 20px，进一步减少 banner 上下占用空间。
+- 手柄视觉短条保持 34px x 3px，按下 / 拖动光晕动画继续保留。
+- `map.html` 中 `app.js` / `styles.css` 资源版本刷新为 `20260606-banner-20px`。
+
+验证记录：
+
+- `node --check NavPlanner/Resources/Web/app.js` 成功；CSS 大括号配对检查成功；`git diff --check` 成功。
+- XcodeBuildMCP `build_run_sim` 在 iPhone 17 Pro Max 成功，构建、安装、启动无 warning / error。
+- 首屏截图确认 banner / 手柄顶部占位已压缩到 20px，短条仍可见，截图为 `/var/folders/7m/jzh_ftyn6_gfjz552yy612zr0000gn/T/screenshot_optimized_2ea3b5a8-3b9e-4287-8847-d2c2127a4f4a.jpg`。
+- `git -C NavPlanner-web status --short` 无输出，参考项目保持未修改。
+
+## 2026-06-06 iPhone 底部标签与 banner 二次微调
+
+已完成：
+
+- 底部 `计划 / 机场 / 查询 / 设置` 标签栏在上一轮基础上再向下移动 8px，当前总下移为 12px。
+- 底部标签栏在上一轮基础上左右再各内收 12px，当前左右总内收为 20px。
+- 将底部标签栏预留网格行收窄到 11px，同步增加中部工作区可用高度。
+- banner / 上拉手柄触控区域保持 `min(148px, 46vw) x 34px` 不变；面板顶部预留从 30px 收到 24px，减少 banner 上下占用空间。
+- `map.html` 中 `app.js` / `styles.css` 资源版本刷新为 `20260606-tabs-lower-compact-banner`。
+
+验证记录：
+
+- `node --check NavPlanner/Resources/Web/app.js` 成功；CSS 大括号配对检查成功；`git diff --check` 成功。
+- XcodeBuildMCP `build_run_sim` 在 iPhone 17 Pro Max 成功，构建、安装、启动无 warning / error。
+- 首屏截图确认底部标签栏继续下移并内收，中部工作区可见高度增加，banner 触控热区保持但上方占位收小，截图为 `/var/folders/7m/jzh_ftyn6_gfjz552yy612zr0000gn/T/screenshot_optimized_be18a359-d4a2-4dff-a01b-6c2fd024bc19.jpg`。
+- `git -C NavPlanner-web status --short` 无输出，参考项目保持未修改。
+
+## 2026-06-06 iPhone 底部标签栏位置微调
+
+已完成：
+
+- 将 iPhone 竖屏底部 `计划 / 机场 / 查询 / 设置` 标签栏整体向下移动 4px。
+- 将底部标签栏左右各向内收 8px，避免玻璃栏贴满下部面板边缘。
+- `map.html` 中 `app.js` / `styles.css` 资源版本刷新为 `20260606-tabs-inset-down`。
+
+验证记录：
+
+- `node --check NavPlanner/Resources/Web/app.js` 成功；CSS 大括号配对检查成功；`git diff --check` 成功。
+- XcodeBuildMCP `build_run_sim` 在 iPhone 17 Pro Max 成功，构建、安装、启动无 warning / error。
+- 首屏截图确认底部标签栏已向下移动并左右内收，截图为 `/var/folders/7m/jzh_ftyn6_gfjz552yy612zr0000gn/T/screenshot_optimized_bee8d6e2-e379-461f-88b1-e9dc1b2e3a26.jpg`。
+- `git -C NavPlanner-web status --short` 无输出，参考项目保持未修改。
+
 ## 2026-06-06 FR24 历史字段、轨迹断点与航路点高亮
 
 已完成：
