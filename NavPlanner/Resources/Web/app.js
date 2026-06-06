@@ -3981,6 +3981,12 @@ function installMobilePanelDragHandle() {
   }
   applyMobilePanelMapRatio(state.mobilePanelMapRatio);
   const isPortraitPhone = () => !window.matchMedia || window.matchMedia("(orientation: portrait)").matches;
+  const togglePanelByTap = () => {
+    const isExpanded = state.mobilePanelMapRatio <= MOBILE_PANEL_MIN_MAP_RATIO + 0.5;
+    const targetRatio = isExpanded ? MOBILE_PANEL_DEFAULT_MAP_RATIO : MOBILE_PANEL_MIN_MAP_RATIO;
+    applyMobilePanelMapRatio(targetRatio);
+    window.setTimeout(() => map.invalidateSize({ animate: false, pan: false }), 180);
+  };
   const cancelPendingDragFrame = () => {
     if (state.mobilePanelDragFrame) {
       window.cancelAnimationFrame(state.mobilePanelDragFrame);
@@ -4003,16 +4009,21 @@ function installMobilePanelDragHandle() {
     });
   };
   const finishDrag = () => {
-    if (!state.mobilePanelDrag) {
+    const drag = state.mobilePanelDrag;
+    if (!drag) {
       return;
     }
     const finalRatio = state.mobilePanelDragPendingRatio;
     cancelPendingDragFrame();
-    if (finalRatio !== null) {
+    if (drag.moved && finalRatio !== null) {
       applyMobilePanelMapRatio(finalRatio, { dragging: true });
     }
     state.mobilePanelDrag = null;
     delete document.body.dataset.mobilePanelDragging;
+    if (!drag.moved) {
+      togglePanelByTap();
+      return;
+    }
     scheduleMobilePanelMapResize();
     scheduleVectorMapResizeSync();
     window.setTimeout(() => map.invalidateSize({ animate: false, pan: false }), 140);
@@ -4030,6 +4041,7 @@ function installMobilePanelDragHandle() {
       startY: event.clientY,
       startRatio: state.mobilePanelMapRatio,
       shellHeight: Math.max(1, shellRect?.height || window.innerHeight || 1),
+      moved: false,
     };
     document.body.dataset.mobilePanelDragging = "true";
   });
@@ -4041,6 +4053,9 @@ function installMobilePanelDragHandle() {
     }
     event.preventDefault();
     const deltaRatio = ((event.clientY - drag.startY) / drag.shellHeight) * 100;
+    if (Math.abs(event.clientY - drag.startY) > 6) {
+      drag.moved = true;
+    }
     scheduleDragRatio(drag.startRatio + deltaRatio);
   });
 
