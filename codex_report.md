@@ -1,5 +1,23 @@
 # Codex 执行报告
 
+## 2026-06-06 banner 点击切换与阴影再校正
+
+已完成：
+
+- 将 iPhone 竖屏上拉 banner 的外层胶囊光晕改为围绕短条等距外扩，去掉短条按下时的 1px 下移和自身外扩阴影，减少上下厚度不一致的观感。
+- 为 banner 增加轻点切换：当前面板处于最低位时，点击展开到最高位；当前面板处于最高位时，点击缩回最低位。
+- 保留原有拖动手势，使用 6px 移动阈值区分轻点和拖动，避免轻点误触发连续拖拽。
+- `map.html` 中 `app.js` / `styles.css` 资源版本刷新为 `20260606-banner-tap-toggle`。
+
+验证记录：
+
+- `node --check NavPlanner/Resources/Web/app.js` 成功；CSS 大括号配对检查成功；`plutil -lint NavPlanner.xcodeproj/project.pbxproj NavPlanner/Support/PrivacyInfo.xcprivacy` 成功；`git diff --check` 成功。
+- XcodeBuildMCP `build_run_sim` 在 iPhone 17 Pro Max 成功，构建、安装、启动无 warning / error。
+- 首屏截图确认 banner 保持 20px 顶部占位、短条居中，外层光晕不再由短条下移和自身阴影叠加造成上下厚度差；截图为 `/var/folders/7m/jzh_ftyn6_gfjz552yy612zr0000gn/T/screenshot_optimized_bfe86266-5a02-43b6-8a38-d2fb8ecec079.jpg`。
+- 扫描本轮 runtime / oslog，未发现 `TypeError`、`ReferenceError`、`SyntaxError`、`Exception`、`fatal` 或 banner / drag 相关错误。
+- 自动坐标点击受当前 macOS 辅助功能权限限制，LLDB DAP 后端也不支持表达式注入 JS；本轮已完成启动截图和代码路径检查，轻点切换仍建议在已启动模拟器中手动补一次真实 tap 复验。
+- `git -C NavPlanner-web status --short` 无输出，参考项目保持未修改。
+
 ## 2026-06-06 banner 阴影对称与底栏再下移 2px
 
 已完成：

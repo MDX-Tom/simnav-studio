@@ -3558,15 +3558,17 @@ html[data-theme="day"] .offline-progress {
     top: 50%;
     left: 0;
     right: 0;
-    height: 16px;
+    height: 15px;
     border-radius: 999px;
     background: rgba(84, 189, 255, 0.08);
     opacity: 0;
     transform: translateY(-50%) scaleX(0.58);
+    transform-origin: center;
     transition:
       opacity 0.14s ease,
       transform 0.14s ease;
     content: "";
+    pointer-events: none;
   }
 
   html:not([data-device="pad"]) .mobile-panel-drag-handle span {
@@ -3598,8 +3600,8 @@ html[data-theme="day"] .offline-progress {
     width: 42px;
     height: 4px;
     background: rgba(84, 189, 255, 0.78);
-    box-shadow: 0 0 0 5px rgba(84, 189, 255, 0.08);
-    transform: translateY(1px);
+    box-shadow: none;
+    transform: none;
   }
 
   html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .shell {
@@ -3723,7 +3725,7 @@ html[data-theme="day"] .offline-progress {
   html[data-theme="day"]:not([data-device="pad"]) .mobile-panel-drag-handle:active span,
   html[data-theme="day"]:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .mobile-panel-drag-handle span {
     background: rgba(36, 125, 162, 0.68);
-    box-shadow: 0 0 0 5px rgba(36, 125, 162, 0.09);
+    box-shadow: none;
   }
 
   html:not([data-device="pad"]) .mobile-bottom-tab {
