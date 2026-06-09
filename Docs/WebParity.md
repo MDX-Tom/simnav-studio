@@ -20,6 +20,7 @@
 - nav-overlay 已按 Web `planner_overlay.py` 迁移本地缓存、世界副本偏移、跨日期变更线边界判断、航路空间分桶、航路标签预算、terminal waypoint / navaid、跑道和 ILS 输出；典型跨日期变更线视野与 Web 参考 payload 计数一致。
 - `/api/map-cache/google_terrain/...`、`/api/terrain/terrarium/...` 已由 Swift 本地异步缓存承接；`google_terrain` 增加 Esri / OpenTopoMap / Google 顺序兜底，没有真实底图、下载失败或离线时不阻塞 nav-overlay。
 - nav-overlay 前端绘制采用双缓冲 layer group 替换，缩放后旧航路叠加层会保留到新叠加层绘制完成；iPhone 额外使用 SVG renderer 和延迟旧层移除减少闪烁。
+- 地图左上角新增本地叠加层开关，覆盖地图层、自动 / 匹配航路与 nav-overlay 蓝色 airway、人工航路、SID / STAR / APPROACH、FR24 轨迹、terminal waypoints 和其他航点 / 导航台；开关只控制前端 Leaflet / MapLibre 图层显隐，不改变 Swift 本地 API payload，也不修改 `NavPlanner-web/` 参考项目。隐藏态只置灰图标，按钮背景、阴影和底纹保持和显示态一致。
 - 按航点绘制的规划航路会将主世界副本中参与绘制的全部航点加上与 Procedure 表格行点击相同的 SVG 脉冲高亮，便于对照 route payload 的点列和地图上实际航点。
 - iPhone 已按本地 App 需求调整为上部地图、下部 Plan / Airport / Settings 三标签；标签切换不重建地图。
 - iPad 保持既有 Web 工作台布局，并新增 Settings 切换页。

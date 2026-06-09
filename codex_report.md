@@ -1,5 +1,109 @@
 # Codex 执行报告
 
+## 2026-06-09 叠加层按钮左上角与蓝色 airway 控制修正
+
+已完成：
+
+- 将新增叠加层按钮组从地图右上角移到左上角，避开原有地图类型按钮。
+- 调整隐藏态样式：只把按钮内图标置灰，按钮本体的背景、发光 / 阴影和底纹保持显示态质感。
+- 将 nav-overlay 蓝色 airway 线和 airway 标签拆入独立 Leaflet layer group，并接到第二个“航路”按钮；该按钮现在会同时显示 / 隐藏自动 / 匹配蓝色航路和截图中 `W234`、`B330` 一类 nav-overlay 蓝色 airway。
+- `map.html` 中 `app.js` / `styles.css` 资源版本刷新为 `20260609-overlay-left-airways`。
+
+验证：
+
+- `node --check NavPlanner/Resources/Web/app.js` 成功；CSS 大括号配对检查成功；HTML 本地化覆盖检查确认 137 个 `data-i18n*` 属性均有翻译键、436 个翻译键已被扫描。
+- `swift -frontend -parse NavPlanner/Core/WebBridge/NavPlannerSchemeHandler.swift NavPlanner/Core/PlannerCore/PlannerService.swift` 成功。
+- `plutil -lint NavPlanner.xcodeproj/project.pbxproj NavPlanner/Support/PrivacyInfo.xcprivacy` 成功；`git diff --check` 成功。
+- `python3 Tools/Parity/run_all_parity.py` 成功；RouteParity 22、TrackParity 7、ProcedureParity 6 均无差异。
+- XcodeBuildMCP `build_run_sim` 在 iPhone 17 Pro Max 成功，构建、安装、启动无 warning / error；截图确认新增叠加层按钮组位于地图左上角，右侧保留原地图类型与缩放按钮，截图为 `/var/folders/7m/jzh_ftyn6_gfjz552yy612zr0000gn/T/screenshot_optimized_54ea1aca-9b3c-4415-a057-70a20bd19ef8.jpg`。
+- 扫描本轮 runtime / oslog，未发现 `TypeError`、`ReferenceError`、`SyntaxError`、`Exception`、`fatal`、WebBridge、overlay 或 `ResizeObserver` 相关错误。
+- ZULS/ZUAL FR24 无会话降级验证：按当前 Swift FR24 schedule 参数直接探测 `LXA departures` 与 `NGQ arrivals`，均返回 HTTP 403、`cf-mitigated: challenge` 和 Cloudflare HTML，符合 Query 页提示用户打开 FR24 验证页并同步会话的路径；本轮未修改 FR24 网络请求链路。
+- `git -C NavPlanner-web status --short` 无输出，参考项目保持未修改。
+
+## 2026-06-09 地图叠加层控制与清除绘制按钮
+
+已完成：
+
+- 在地图右上角新增垂直叠加层控制按钮，样式、尺寸和间距与现有 `+ / -`、地图类型按钮保持一致；按钮本体使用图标，`title` / `aria-label` 跟随中文 / English 语言切换。
+- 叠加层开关支持分别显示 / 隐藏：地图层、蓝色自动 / 匹配航路、黄色人工绘制航路、SID / STAR / APPROACH、FR24 黑色轨迹、terminal waypoints、其他航点 / 导航台；隐藏态按钮置灰。
+- 底图层隐藏通过 `data-overlay-base-map` 淡出栅格瓦片和 MapLibre 矢量底图；其它叠加层通过 Leaflet layer group add/remove 控制，不重新请求 nav-overlay，不重算航路，也不清空缓存 payload。
+- 主航路绘制拆分为自动 / 匹配航路蓝色图层和手工输入航路黄色图层；route marker、航点标签、hit layer 和全航点脉冲高亮跟随对应图层组一起显示 / 隐藏。
+- nav-overlay 前端图层进一步拆分为主导航叠加层、terminal waypoint 子图层、其他航点 / 导航台子图层；跑道、ILS、机场和 airway 保持在主叠加层，不被 terminal / 其他航点按钮误隐藏。
+- Query 页把“清除轨迹绘制”和“还原轨迹匹配”移动到“查询”按钮右侧，缓存卡片底部只保留“删除下载缓存 / 刷新状态”。
+- Plan 页将“生成航路”改为“生成并绘制航路”，并在“重新计算”右侧增加“清除轨迹绘制”；从计划页点击但没有 FR24 轨迹时，主状态栏也会显示“当前没有已绘制的 FR24 轨迹”。
+- `map.html` 中 `app.js` / `styles.css` 资源版本刷新为 `20260609-overlay-controls`。
+
+初步验证：
+
+- `node --check NavPlanner/Resources/Web/app.js` 成功；CSS 大括号配对检查成功；HTML 本地化覆盖检查确认 137 个 `data-i18n*` 属性均有翻译键。
+- `swift -frontend -parse NavPlanner/Core/WebBridge/NavPlannerSchemeHandler.swift NavPlanner/Core/PlannerCore/PlannerService.swift` 成功。
+- `plutil -lint NavPlanner.xcodeproj/project.pbxproj NavPlanner/Support/PrivacyInfo.xcprivacy` 成功；`git diff --check` 成功。
+- `python3 Tools/Parity/run_all_parity.py` 成功；RouteParity 22、TrackParity 7、ProcedureParity 6 均无差异。
+- XcodeBuildMCP `build_run_sim` 在 iPhone 17 Pro Max 成功，构建、安装、启动无 warning / error；截图确认右上角叠加层按钮、Plan 三按钮行、地图和底部 `计划 / 机场 / 查询 / 设置` 正常，截图为 `/var/folders/7m/jzh_ftyn6_gfjz552yy612zr0000gn/T/screenshot_optimized_777949a4-9156-44aa-8ca3-b42e47ad1f41.jpg`。
+- 扫描本轮 runtime / oslog，未发现 `TypeError`、`ReferenceError`、`SyntaxError`、`Exception`、`fatal`、WebBridge、overlay 或 `ResizeObserver` 相关错误。
+- ZULS/ZUAL FR24 无会话降级验证：按当前 Swift FR24 schedule 参数直接探测 `LXA departures` 与 `NGQ arrivals`，均返回 HTTP 403、`cf-mitigated: challenge` 和 Cloudflare HTML，符合 Query 页提示用户打开 FR24 验证页并同步会话的路径；本轮未修改 FR24 网络请求链路。
+- `git -C NavPlanner-web status --short` 无输出，参考项目保持未修改。
+
+## 2026-06-09 banner 同步拖动回滚与按压态拆分
+
+已完成：
+
+- 按用户反馈回滚 6 月 9 日 compositor-only sheet 预览方案；该方案虽然降低了重排，但改变了视觉效果，拖动时 panel 和 banner 位置会以预览方式变化，地图 panel 也不会同步调整。
+- 恢复 6 月 8 日视觉行为：拖动 banner 时同步调整地图 panel 和输入 panel 尺寸，不再等拖动结束后才改变地图区域。
+- 重新优化同步拖动路径：拖动比例按地图行 + 面板行的真实轨道高度计算，越过 6px 阈值的第一帧直接写入当前指尖对应的固定像素行高 `--mobile-map-row-size` / `--mobile-panel-row-size`，避免先回写起点高度造成一帧滞后；释放后再提交持久 `--mobile-map-flex` / `--mobile-panel-flex` 并清除像素变量。
+- 修复点击 banner 按住但不拖动时 panel 变成最大高度的回归：旧实现 `pointerdown` 立即写入 `data-mobile-panel-dragging` 并启动最大高度 sheet 预览，导致未拖动也改变 panel 尺寸。
+- 将手柄按压态和拖动态拆分为 `data-mobile-panel-pressing` / `data-mobile-panel-dragging`：按住但未超过 6px 阈值时只显示手柄按压动画，不改变 panel 大小；真正拖动后才进入同步像素行高拖动。
+- 手柄按压动画继续优化为 `scale3d`，不再通过修改短条宽高产生布局变化。
+- 重新查阅 Web 动画性能资料：web.dev 和 MDN 均强调高帧率动画应优先减少布局 / paint 成本、用 `requestAnimationFrame` 合并每帧写入；本功能因视觉要求必须同步改变地图和输入 panel 尺寸，所以不再采用 transform-only 假预览，而是把同步布局路径的读写次数和重绘成本压到最低。
+- `map.html` 中 `app.js` / `styles.css` 资源版本刷新为 `20260609-banner-sync-trackheight`。
+
+验证记录：
+
+- `node --check NavPlanner/Resources/Web/app.js` 成功；CSS 大括号配对检查成功；HTML 本地化覆盖检查确认 136 个 `data-i18n*` 属性均有翻译键。
+- `swift -frontend -parse NavPlanner/Core/WebBridge/NavPlannerSchemeHandler.swift NavPlanner/Core/PlannerCore/PlannerService.swift` 成功；`plutil -lint NavPlanner.xcodeproj/project.pbxproj NavPlanner/Support/PrivacyInfo.xcprivacy` 成功；`git diff --check` 成功。
+- `python3 Tools/Parity/run_all_parity.py` 成功；RouteParity 22、TrackParity 7、ProcedureParity 6 均无差异。
+- XcodeBuildMCP `build_run_sim` 在 iPhone 17 Pro Max 成功，构建、安装、启动无 warning / error；首屏截图确认地图、20px banner、Plan 表单和底部四标签正常，截图为 `/var/folders/7m/jzh_ftyn6_gfjz552yy612zr0000gn/T/screenshot_optimized_47896e20-1ee6-4d02-b846-a0422264f789.jpg`。
+- 扫描本轮 runtime / oslog，未发现 `TypeError`、`ReferenceError`、`SyntaxError`、`Exception`、`fatal`、WebBridge、`mobilePanel` 或 `ResizeObserver` 相关错误。
+- XcodeBuildMCP runtime snapshot 仅暴露外层 WKWebView scroll-view，内部 banner 不暴露为可点按 / 拖动的 AX 目标，本轮无法自动化真实“按住不拖动”和手柄拖动体感；需在已启动模拟器或真机上手动补充复验。
+
+## 2026-06-09 banner compositor-only 拖动预览（已废弃）
+
+已完成：
+
+- 按用户要求查阅 WebKit / Web 动画性能资料后，确认要稳定接近 120Hz，拖动阶段应避免每帧触发布局和绘制，优先使用 compositor 可处理的 `transform`。
+- 将 iPhone banner 拖动从“实时修改 `grid-template-rows`”改为 compositor-only sheet 预览：拖动开始时把当前面板一次性提升为最大高度，后续每帧只更新 `--mobile-panel-drag-offset` / `--mobile-panel-drag-handle-shift`，通过 `translate3d` 移动面板和手柄。
+- 拖动中不再实时改变地图 grid 行高、Leaflet 尺寸和 MapLibre 容器尺寸；释放手指后才提交真实 `--mobile-map-flex` / `--mobile-panel-flex`，再统一执行 Leaflet `invalidateSize`、MapLibre resize / sync 和矢量底图相机同步。
+- 保留上一轮拖动态轻量化：临时关闭毛玻璃 / 重阴影，保留 layout/paint containment，底部标签层级提高以避免最大高度 sheet 预览时盖住标签栏。
+- `map.html` 中 `app.js` / `styles.css` 资源版本刷新为 `20260609-banner-compositor-drag`。
+
+验证记录：
+
+- `node --check NavPlanner/Resources/Web/app.js` 成功；CSS 大括号配对检查成功；HTML 本地化覆盖检查确认 136 个 `data-i18n*` 属性均有翻译键。
+- `swift -frontend -parse NavPlanner/Core/WebBridge/NavPlannerSchemeHandler.swift NavPlanner/Core/PlannerCore/PlannerService.swift` 成功；`plutil -lint NavPlanner.xcodeproj/project.pbxproj NavPlanner/Support/PrivacyInfo.xcprivacy` 成功；`git diff --check` 成功。
+- `python3 Tools/Parity/run_all_parity.py` 成功；RouteParity 22、TrackParity 7、ProcedureParity 6 均无差异。
+- XcodeBuildMCP `build_run_sim` 在 iPhone 17 Pro Max 成功，构建、安装、启动无 warning / error；首屏截图确认地图、20px banner、Plan 表单和底部四标签正常，截图为 `/var/folders/7m/jzh_ftyn6_gfjz552yy612zr0000gn/T/screenshot_optimized_65cb0232-5967-4783-bab7-925befc9e27c.jpg`。
+- 扫描本轮 runtime / oslog，未发现 `TypeError`、`ReferenceError`、`SyntaxError`、`Exception`、`fatal`、WebBridge、`mobilePanel` 或 `ResizeObserver` 相关错误。
+- WKWebView 内部 banner 不暴露为 XcodeBuildMCP 可点按 / 拖动的 AX 目标，本轮仍无法自动化真实手柄拖动体感；需在已启动模拟器或真机上手动补充 120Hz 拖动复验。
+
+## 2026-06-08 banner 拖动 120Hz 性能优化
+
+已完成：
+
+- 定位 banner 上划掉帧的主要来源：拖动时每帧改 `grid-template-rows` 已经会触发布局，旧实现还会反复写入 body dataset，并由 MapLibre 容器 `ResizeObserver` 连续触发矢量底图 resize / sync，叠加面板毛玻璃和阴影重绘后很难达到 120Hz 观感。
+- 优化拖动帧 JS：拖动中只写入变化后的 `--mobile-map-flex` / `--mobile-panel-flex`，并缓存上一次 CSS 值，避免重复 `setProperty`；`data-mobile-panel` 状态只在释放后提交。
+- 拖动期间延后 MapLibre `ResizeObserver` 同步、Leaflet `invalidateSize` 和矢量底图 resize，释放后统一刷新地图尺寸和矢量底图相机。
+- 拖动态为地图和面板增加 layout/paint containment，临时关闭面板毛玻璃、底部标签毛玻璃和重阴影，减少 iPhone 小屏拖动过程中的重排、重绘和合成压力。
+- `map.html` 中 `app.js` / `styles.css` 资源版本刷新为 `20260608-banner-drag-perf`。
+
+验证记录：
+
+- `node --check NavPlanner/Resources/Web/app.js` 成功；CSS 大括号配对检查成功；HTML 本地化覆盖检查确认 136 个 `data-i18n*` 属性均有翻译键。
+- `swift -frontend -parse NavPlanner/Core/WebBridge/NavPlannerSchemeHandler.swift NavPlanner/Core/PlannerCore/PlannerService.swift` 成功；`plutil -lint NavPlanner.xcodeproj/project.pbxproj NavPlanner/Support/PrivacyInfo.xcprivacy` 成功；`git diff --check` 成功。
+- `python3 Tools/Parity/run_all_parity.py` 成功；RouteParity 22、TrackParity 7、ProcedureParity 6 均无差异。
+- XcodeBuildMCP `build_run_sim` 在 iPhone 17 Pro Max 成功，构建、安装、启动无 warning / error；首屏截图确认地图、20px banner、Plan 表单和底部四标签正常，截图为 `/var/folders/7m/jzh_ftyn6_gfjz552yy612zr0000gn/T/screenshot_optimized_bdf8860b-91b1-44b9-99c5-ebbb5f446ed6.jpg`。
+- 扫描本轮 runtime / oslog，未发现 `TypeError`、`ReferenceError`、`SyntaxError`、`Exception`、`fatal`、WebBridge、`mobilePanel` 或 `ResizeObserver` 相关错误。
+- WKWebView 内部 banner 不暴露为 XcodeBuildMCP 可点按 / 拖动的 AX 目标，本轮未能自动化真实手柄拖动体感；需在已启动模拟器或真机上手动补充 120Hz 拖动复验。
+
 ## 2026-06-06 banner 点击护栏与 FR24 缓存检索管理
 
 已完成：

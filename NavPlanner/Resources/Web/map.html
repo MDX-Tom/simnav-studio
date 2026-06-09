@@ -45,7 +45,7 @@
     </script>
     <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
     <link rel="stylesheet" href="/vendor/maplibre-gl/maplibre-gl.css" />
-    <link rel="stylesheet" href="/styles.css?v=20260606-fr24-cache-banner-guard" />
+    <link rel="stylesheet" href="/styles.css?v=20260609-overlay-left-airways" />
   </head>
   <body data-mobile-tab="plan">
     <div class="shell">
@@ -93,8 +93,9 @@
           </div>
 
           <div class="button-row">
-            <button id="planButton" class="primary-button" data-i18n="plan.buildRoute">生成航路</button>
+            <button id="planButton" class="primary-button" data-i18n="plan.buildRoute">生成并绘制航路</button>
             <button id="recalculateButton" class="ghost-button" data-i18n="plan.recalculate">重新计算</button>
+            <button id="planClearTrackButton" class="ghost-button" type="button" data-i18n="query.clearTrack">清除轨迹绘制</button>
           </div>
           <button id="stopRequestButton" class="stop-button hidden" type="button" disabled data-i18n="plan.stopTask">停止当前任务</button>
           <div class="helper-text" data-i18n="plan.autoRouteHint">航路留空时，会从本地 `tbl_enroute_airways` 自动规划最近 IFR 航路。</div>
@@ -283,7 +284,11 @@
                 <strong id="fr24QueryTitle" data-i18n="query.title">FR24 航班查询</strong>
                 <span id="fr24QueryStatus" data-i18n="query.statusInitial">填好起飞和到达机场后，可查询该航线的最新 FR24 航班。</span>
               </div>
-              <button id="fr24SearchButton" class="primary-button compact-button" type="button" data-i18n="query.search">查询</button>
+              <div class="query-primary-actions">
+                <button id="fr24SearchButton" class="primary-button compact-button" type="button" data-i18n="query.search">查询</button>
+                <button id="fr24ClearTrackButton" class="ghost-button compact-button" type="button" data-i18n="query.clearTrack">清除轨迹绘制</button>
+                <button id="fr24RestoreMatchButton" class="ghost-button compact-button" type="button" data-i18n="query.restoreMatch">还原轨迹匹配</button>
+              </div>
             </div>
             <div class="helper-text" data-i18n="query.hint">FR24 是在线增强；查询或下载失败不会影响本地航路、Procedure、nav-overlay 和离线地图。</div>
           </div>
@@ -353,8 +358,6 @@
               </div>
             </div>
             <div class="settings-action-row query-control-row">
-              <button id="fr24ClearTrackButton" class="ghost-button compact-button" type="button" data-i18n="query.clearTrack">清除轨迹绘制</button>
-              <button id="fr24RestoreMatchButton" class="ghost-button compact-button" type="button" data-i18n="query.restoreMatch">还原轨迹匹配</button>
               <button id="fr24ClearCacheButton" class="ghost-button compact-button" type="button" data-i18n="query.clearCache">删除下载缓存</button>
               <button id="fr24RefreshCacheButton" class="ghost-button compact-button" type="button" data-i18n="common.refreshStatus">刷新状态</button>
             </div>
@@ -531,6 +534,6 @@
     <script src="/vendor/maplibre-gl/maplibre-gl.js"></script>
     <script src="/vendor/maplibre-contour/index.min.js"></script>
     <script src="/vendor/pmtiles/pmtiles.js"></script>
-    <script src="/app.js?v=20260606-fr24-cache-banner-guard" type="module"></script>
+    <script src="/app.js?v=20260609-overlay-left-airways" type="module"></script>
   </body>
 </html>
