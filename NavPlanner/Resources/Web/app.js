@@ -24,7 +24,7 @@ const TRANSLATIONS = {
   "plan.arrivalRunway": { "zh-Hans": "到达跑道", en: "Arrival Runway" },
   "plan.route": { "zh-Hans": "航路", en: "Route" },
   "plan.routePlaceholder": { "zh-Hans": "例如：DOVAN A1 KEC B213 LIPRO 或 KTM *** LXA", en: "Example: DOVAN A1 KEC B213 LIPRO or KTM *** LXA" },
-  "plan.buildRoute": { "zh-Hans": "生成航路", en: "Build Route" },
+  "plan.buildRoute": { "zh-Hans": "生成并绘制航路", en: "Build & Draw" },
   "plan.recalculate": { "zh-Hans": "重新计算", en: "Recalculate" },
   "plan.matchTrack": { "zh-Hans": "匹配轨迹", en: "Match Track" },
   "plan.stopTask": { "zh-Hans": "停止当前任务", en: "Stop Current Task" },
@@ -266,6 +266,13 @@ const TRANSLATIONS = {
   "map.offline.label": { "zh-Hans": "离线地形", en: "Offline Terrain" },
   "map.offline.title": { "zh-Hans": "本地 map_offline 资源", en: "Local map_offline resources" },
   "map.offlineControl": { "zh-Hans": "管理离线地形地图", en: "Manage offline terrain maps" },
+  "map.overlay.base": { "zh-Hans": "地图层", en: "Base map layer" },
+  "map.overlay.route": { "zh-Hans": "航路绘制", en: "Route drawing" },
+  "map.overlay.manualRoute": { "zh-Hans": "人工绘制航路", en: "Manual route drawing" },
+  "map.overlay.procedure": { "zh-Hans": "SID / STAR / APPROACH 绘制", en: "SID / STAR / APPROACH drawing" },
+  "map.overlay.fr24": { "zh-Hans": "FR24 航路", en: "FR24 track" },
+  "map.overlay.terminal": { "zh-Hans": "terminal waypoints", en: "terminal waypoints" },
+  "map.overlay.points": { "zh-Hans": "其他航点和导航台", en: "Other waypoints and navaids" },
   "map.vectorRuntimeError": { "zh-Hans": "矢量地图运行库加载失败。", en: "Vector map runtime failed to load." },
   "map.contourRuntimeError": { "zh-Hans": "矢量地形等高线运行库加载失败。", en: "Vector contour runtime failed to load." },
   "map.pmtilesRuntimeError": { "zh-Hans": "PMTiles 运行库加载失败。", en: "PMTiles runtime failed to load." },
@@ -578,12 +585,23 @@ const state = {
   currentRouteAirports: null,
   preTrackMatchRoutePayload: null,
   preTrackMatchAirports: null,
+  preTrackMatchRouteLayerKind: null,
   offlineDownloadError: "",
   offlineSelectionRequested: false,
   offlineDownloadBounds: null,
   offlineBoundsSelecting: false,
   searchSuppressedUntil: 0,
   baseMap: "terrain",
+  mapOverlayVisibility: {
+    baseMap: true,
+    route: true,
+    manualRoute: true,
+    procedures: true,
+    fr24: true,
+    terminalWaypoints: true,
+    otherWaypoints: true,
+  },
+  currentRouteLayerKind: "route",
   activeDetailTab: "airport",
   activeMobileTab: "plan",
   themeMode: THEME_MODES.has(savedThemeMode) ? savedThemeMode : "system",
@@ -605,7 +623,12 @@ const state = {
   mobilePanelDrag: null,
   mobilePanelDragFrame: 0,
   mobilePanelDragPendingRatio: null,
+  mobilePanelMapFlexValue: "",
+  mobilePanelPanelFlexValue: "",
   mobilePanelTapGuard: null,
+  mobilePanelDeferredVectorResize: false,
+  mobilePanelMapRowValue: "",
+  mobilePanelPanelRowValue: "",
   mobilePanelResizeFrame: 0,
 };
 
@@ -659,8 +682,10 @@ function compactPhoneSize(size) {
 }
 
 const MAP_COLORS = {
-  route: "#ffd166",
-  routeHover: "#fff0a6",
+  route: "#2f80ff",
+  routeHover: "#71b8ff",
+  manualRoute: "#ffd166",
+  manualRouteHover: "#fff0a6",
   sid: "#48d597",
   star: "#ff7185",
   approach: "#a76cff",
@@ -671,6 +696,25 @@ const MAP_COLORS = {
   departure: "#48d597",
   arrival: "#ff7185",
 };
+
+function normalizeRouteLayerKind(kind) {
+  return kind === "manualRoute" ? "manualRoute" : "route";
+}
+
+function routeLayerGroupForKind(kind) {
+  return normalizeRouteLayerKind(kind) === "manualRoute" ? manualRouteLayerGroup : autoRouteLayerGroup;
+}
+
+function routeStyleForKind(kind) {
+  const normalized = normalizeRouteLayerKind(kind);
+  return normalized === "manualRoute"
+    ? { color: MAP_COLORS.manualRoute, hoverColor: MAP_COLORS.manualRouteHover }
+    : { color: MAP_COLORS.route, hoverColor: MAP_COLORS.routeHover };
+}
+
+function inferRouteLayerKind(payload) {
+  return payload?.generated || payload?.source_provider === "track-match" ? "route" : "manualRoute";
+}
 
 const BASE_MAPS = {
   terrain: {
@@ -690,6 +734,16 @@ const BASE_MAPS = {
     titleKey: "map.offline.title",
   },
 };
+
+const MAP_OVERLAY_CONTROLS = Object.freeze([
+  { key: "baseMap", labelKey: "map.overlay.base", icon: "base" },
+  { key: "route", labelKey: "map.overlay.route", icon: "route" },
+  { key: "manualRoute", labelKey: "map.overlay.manualRoute", icon: "manualRoute" },
+  { key: "procedures", labelKey: "map.overlay.procedure", icon: "procedure" },
+  { key: "fr24", labelKey: "map.overlay.fr24", icon: "fr24" },
+  { key: "terminalWaypoints", labelKey: "map.overlay.terminal", icon: "terminal" },
+  { key: "otherWaypoints", labelKey: "map.overlay.points", icon: "points" },
+]);
 
 const VECTOR_MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 const VECTOR_ATTRIBUTION = 'Map data: &copy; <a href="https://openfreemap.org/" target="_blank" rel="noreferrer">OpenFreeMap</a>';
@@ -734,6 +788,7 @@ const elements = {
   planArrivalRunway: document.querySelector("#planArrivalRunway"),
   planButton: document.querySelector("#planButton"),
   recalculateButton: document.querySelector("#recalculateButton"),
+  planClearTrackButton: document.querySelector("#planClearTrackButton"),
   stopRequestButton: document.querySelector("#stopRequestButton"),
   statusText: document.querySelector("#statusText"),
   routeLegs: document.querySelector("#routeLegs"),
@@ -832,6 +887,7 @@ function applyStaticTranslations() {
   document.querySelectorAll("[data-i18n-title]").forEach((element) => {
     element.setAttribute("title", t(element.dataset.i18nTitle));
   });
+  updateMapOverlayControlLabels();
 }
 
 const map = L.map("map", {
@@ -904,6 +960,7 @@ let vectorMapZoomStartZoom = 0;
 let vectorMapPanBufferPx = 0;
 let terrainDemSource = null;
 let pmtilesProtocol = null;
+let mapOverlayControlContainer = null;
 let offlineMapControlContainer = null;
 let offlineMapModalElement = null;
 let offlineBoundsMiniMap = null;
@@ -1057,10 +1114,18 @@ installMobilePanelDragHandle();
 installMobileInputTouchFocus();
 installPhoneLandscapeSafeAreaTuning();
 
-const routeLayerGroup = L.layerGroup().addTo(map);
+const autoRouteLayerGroup = L.layerGroup().addTo(map);
+const manualRouteLayerGroup = L.layerGroup().addTo(map);
+let routeLayerGroup = autoRouteLayerGroup;
 const fr24TrackLayerGroup = L.layerGroup().addTo(map);
+let navAirwayLayerGroup = L.layerGroup().addTo(map);
+let navAirwayLabelLayerGroup = L.layerGroup().addTo(map);
 let navLayerGroup = L.layerGroup().addTo(map);
 let navLabelLayerGroup = L.layerGroup().addTo(map);
+let navTerminalLayerGroup = L.layerGroup().addTo(map);
+let navTerminalLabelLayerGroup = L.layerGroup().addTo(map);
+let navPointLayerGroup = L.layerGroup().addTo(map);
+let navPointLabelLayerGroup = L.layerGroup().addTo(map);
 const navRenderer = isPhoneWorkbench()
   ? L.svg({ pane: "navPane", padding: 0.42 })
   : L.canvas({ pane: "navPane", padding: 0.35 });
@@ -1076,6 +1141,8 @@ const procedureLayerGroups = {
   star: L.layerGroup().addTo(map),
   approach: L.layerGroup().addTo(map),
 };
+createMapOverlayControl().addTo(map);
+applyMapOverlayVisibility();
 
 /**
  * 功能：确保 `ensureVectorMapContainer` 对应的业务逻辑。
@@ -1908,11 +1975,27 @@ function resizeAndSyncVectorMap() {
  * 输入：无。
  * 输出：无返回值；防止 CSS 过渡和 ResizeObserver 连续触发时重复重绘。
  */
-function scheduleVectorMapResizeSync() {
+function shouldDeferVectorMapResizeSync() {
+  return state.mobilePanelDrag || document.body.dataset.mobilePanelDragging === "true";
+}
+
+function scheduleVectorMapResizeSync(options = {}) {
+  if (!options.force && shouldDeferVectorMapResizeSync()) {
+    state.mobilePanelDeferredVectorResize = true;
+    return;
+  }
   if (vectorMapResizeFrame) {
     return;
   }
   vectorMapResizeFrame = window.requestAnimationFrame(resizeAndSyncVectorMap);
+}
+
+function flushDeferredVectorMapResizeSync() {
+  if (!state.mobilePanelDeferredVectorResize) {
+    return;
+  }
+  state.mobilePanelDeferredVectorResize = false;
+  scheduleVectorMapResizeSync({ force: true });
 }
 
 /**
@@ -2313,6 +2396,158 @@ function createMapTypeControl() {
       toggle.setAttribute("aria-expanded", String(isOpen));
     });
     map.on("click", closeMenu);
+    L.DomEvent.disableClickPropagation(container);
+    L.DomEvent.disableScrollPropagation(container);
+    return container;
+  };
+  return control;
+}
+
+function mapOverlayIconMarkup(icon) {
+  switch (icon) {
+    case "base":
+      return `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4.2 7.2 12 3.8l7.8 3.4-7.8 3.5-7.8-3.5Z" />
+          <path d="M5.3 12.1 12 15l6.7-2.9" />
+          <path d="M5.3 16.7 12 19.6l6.7-2.9" />
+        </svg>
+      `;
+    case "route":
+      return `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path class="overlay-icon-route" d="M4.5 17.5 C8 8.2 13 15.8 19.5 6.5" />
+          <circle cx="4.5" cy="17.5" r="1.8" />
+          <circle cx="19.5" cy="6.5" r="1.8" />
+        </svg>
+      `;
+    case "manualRoute":
+      return `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path class="overlay-icon-manual" d="M5 16.7 8.9 9.7l4.2 4.7L19 7.4" />
+          <circle cx="5" cy="16.7" r="1.5" />
+          <circle cx="19" cy="7.4" r="1.5" />
+        </svg>
+      `;
+    case "procedure":
+      return `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path class="overlay-icon-sid" d="M4.5 7.3 H12.4" />
+          <path class="overlay-icon-star" d="M4.5 12 H18.5" />
+          <path class="overlay-icon-approach" d="M4.5 16.7 H14.7" />
+        </svg>
+      `;
+    case "fr24":
+      return `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path class="overlay-icon-fr24" d="M4.3 15.8 C8 7.8 12.2 18.2 19.7 7.2" />
+          <path class="overlay-icon-fr24-dash" d="M4.3 18.6 H19.7" />
+        </svg>
+      `;
+    case "terminal":
+      return `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 4.6 16.4 12 12 19.4 7.6 12 12 4.6Z" />
+          <circle cx="12" cy="12" r="2.1" />
+        </svg>
+      `;
+    case "points":
+      return `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 4.4 17.8 8.1v7.8L12 19.6l-5.8-3.7V8.1L12 4.4Z" />
+          <circle cx="12" cy="12" r="2.4" />
+        </svg>
+      `;
+    default:
+      return `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="7" />
+        </svg>
+      `;
+  }
+}
+
+function setLayerGroupVisible(layerGroup, visible) {
+  if (!layerGroup) {
+    return;
+  }
+  const isShown = map.hasLayer(layerGroup);
+  if (visible && !isShown) {
+    layerGroup.addTo(map);
+  } else if (!visible && isShown) {
+    map.removeLayer(layerGroup);
+  }
+}
+
+function isMapOverlayVisible(key) {
+  return state.mapOverlayVisibility[key] !== false;
+}
+
+function updateMapOverlayControlState() {
+  document.querySelectorAll(".map-overlay-toggle").forEach((button) => {
+    const visible = isMapOverlayVisible(button.dataset.mapOverlay);
+    button.classList.toggle("is-hidden", !visible);
+    button.setAttribute("aria-pressed", String(visible));
+  });
+}
+
+function updateMapOverlayControlLabels() {
+  document.querySelectorAll(".map-overlay-toggle").forEach((button) => {
+    const config = MAP_OVERLAY_CONTROLS.find((item) => item.key === button.dataset.mapOverlay);
+    if (!config) {
+      return;
+    }
+    const label = t(config.labelKey);
+    button.title = label;
+    button.setAttribute("aria-label", label);
+  });
+}
+
+function applyMapOverlayVisibility() {
+  map.getContainer().dataset.overlayBaseMap = isMapOverlayVisible("baseMap") ? "visible" : "hidden";
+  setLayerGroupVisible(autoRouteLayerGroup, isMapOverlayVisible("route"));
+  setLayerGroupVisible(navAirwayLayerGroup, isMapOverlayVisible("route"));
+  setLayerGroupVisible(navAirwayLabelLayerGroup, isMapOverlayVisible("route"));
+  setLayerGroupVisible(manualRouteLayerGroup, isMapOverlayVisible("manualRoute"));
+  Object.values(procedureLayerGroups).forEach((group) => {
+    setLayerGroupVisible(group, isMapOverlayVisible("procedures"));
+  });
+  setLayerGroupVisible(fr24TrackLayerGroup, isMapOverlayVisible("fr24"));
+  setLayerGroupVisible(navTerminalLayerGroup, isMapOverlayVisible("terminalWaypoints"));
+  setLayerGroupVisible(navTerminalLabelLayerGroup, isMapOverlayVisible("terminalWaypoints"));
+  setLayerGroupVisible(navPointLayerGroup, isMapOverlayVisible("otherWaypoints"));
+  setLayerGroupVisible(navPointLabelLayerGroup, isMapOverlayVisible("otherWaypoints"));
+  setLayerGroupVisible(navLayerGroup, true);
+  setLayerGroupVisible(navLabelLayerGroup, true);
+  setLayerGroupVisible(markerLayerGroup, true);
+  setLayerGroupVisible(labelLayerGroup, true);
+  setLayerGroupVisible(selectionHighlightLayerGroup, true);
+  updateMapOverlayControlState();
+}
+
+function toggleMapOverlay(key) {
+  if (!Object.prototype.hasOwnProperty.call(state.mapOverlayVisibility, key)) {
+    return;
+  }
+  state.mapOverlayVisibility[key] = !isMapOverlayVisible(key);
+  applyMapOverlayVisibility();
+}
+
+function createMapOverlayControl() {
+  const control = L.control({ position: "topleft" });
+  control.onAdd = () => {
+    const container = L.DomUtil.create("div", "leaflet-control map-overlay-control");
+    mapOverlayControlContainer = container;
+    MAP_OVERLAY_CONTROLS.forEach((config) => {
+      const button = L.DomUtil.create("button", `map-overlay-toggle map-overlay-${config.icon}`, container);
+      button.type = "button";
+      button.dataset.mapOverlay = config.key;
+      button.setAttribute("aria-pressed", String(isMapOverlayVisible(config.key)));
+      button.innerHTML = mapOverlayIconMarkup(config.icon);
+      button.addEventListener("click", () => toggleMapOverlay(config.key));
+    });
+    updateMapOverlayControlLabels();
+    updateMapOverlayControlState();
     L.DomEvent.disableClickPropagation(container);
     L.DomEvent.disableScrollPropagation(container);
     return container;
@@ -4003,22 +4238,90 @@ function scheduleMobilePanelMapResize() {
   });
 }
 
-function applyMobilePanelMapRatio(value, options = {}) {
-  const ratio = clampMobilePanelMapRatio(value);
-  state.mobilePanelMapRatio = ratio;
-  const panelRatio = Math.max(100 - ratio, 100 - MOBILE_PANEL_DEFAULT_MAP_RATIO);
-  document.documentElement.style.setProperty("--mobile-map-flex", `${ratio}fr`);
-  document.documentElement.style.setProperty("--mobile-panel-flex", `${panelRatio}fr`);
+function applyMobilePanelStateDataset(ratio) {
   document.body.dataset.mobilePanel = ratio <= MOBILE_PANEL_MIN_MAP_RATIO + 0.5 ? "expanded" : "custom";
   if (Math.abs(ratio - MOBILE_PANEL_DEFAULT_MAP_RATIO) < 0.5) {
     delete document.body.dataset.mobilePanel;
   }
-  if (options.dragging) {
-    document.body.dataset.mobilePanelDragging = "true";
-  } else {
-    delete document.body.dataset.mobilePanelDragging;
+}
+
+function mobilePanelPanelRatioForMapRatio(ratio) {
+  return Math.max(100 - ratio, 100 - MOBILE_PANEL_DEFAULT_MAP_RATIO);
+}
+
+function setMobilePanelDragVariable(name, value) {
+  const rootStyle = document.documentElement.style;
+  if (rootStyle.getPropertyValue(name) === value) {
+    return;
+  }
+  rootStyle.setProperty(name, value);
+}
+
+function clearMobilePanelDragVariables() {
+  ["--mobile-map-row-size", "--mobile-panel-row-size"].forEach((name) => {
+    document.documentElement.style.removeProperty(name);
+  });
+  state.mobilePanelMapRowValue = "";
+  state.mobilePanelPanelRowValue = "";
+}
+
+function activeMobilePanelElement() {
+  const candidates = [document.querySelector(".planner-panel"), document.querySelector(".detail-panel")];
+  return candidates.find((element) => {
+    if (!element) {
+      return false;
+    }
+    const style = window.getComputedStyle(element);
+    return style.display !== "none" && style.visibility !== "hidden";
+  }) || candidates.find(Boolean) || null;
+}
+
+function mobilePanelTrackHeight() {
+  const mapRect = document.querySelector(".map-wrap")?.getBoundingClientRect();
+  const panelRect = activeMobilePanelElement()?.getBoundingClientRect();
+  const total = (mapRect?.height || 0) + (panelRect?.height || 0);
+  return Math.max(1, total || window.innerHeight || 1);
+}
+
+function applyMobilePanelDragRatio(value, drag = state.mobilePanelDrag) {
+  if (!drag) {
+    return;
+  }
+  const ratio = clampMobilePanelMapRatio(value);
+  const panelRatio = mobilePanelPanelRatioForMapRatio(ratio);
+  const trackHeight = Math.max(1, drag.trackHeight || mobilePanelTrackHeight());
+  const mapRowValue = `${(trackHeight * (ratio / 100)).toFixed(2)}px`;
+  const panelRowValue = `${(trackHeight * (panelRatio / 100)).toFixed(2)}px`;
+  drag.lastRatio = ratio;
+  state.mobilePanelMapRatio = ratio;
+  if (state.mobilePanelMapRowValue !== mapRowValue) {
+    setMobilePanelDragVariable("--mobile-map-row-size", mapRowValue);
+    state.mobilePanelMapRowValue = mapRowValue;
+  }
+  if (state.mobilePanelPanelRowValue !== panelRowValue) {
+    setMobilePanelDragVariable("--mobile-panel-row-size", panelRowValue);
+    state.mobilePanelPanelRowValue = panelRowValue;
+  }
+}
+
+function applyMobilePanelMapRatio(value, options = {}) {
+  const ratio = clampMobilePanelMapRatio(value);
+  state.mobilePanelMapRatio = ratio;
+  const panelRatio = mobilePanelPanelRatioForMapRatio(ratio);
+  const mapFlexValue = `${ratio}fr`;
+  const panelFlexValue = `${panelRatio}fr`;
+  if (state.mobilePanelMapFlexValue !== mapFlexValue) {
+    document.documentElement.style.setProperty("--mobile-map-flex", mapFlexValue);
+    state.mobilePanelMapFlexValue = mapFlexValue;
+  }
+  if (state.mobilePanelPanelFlexValue !== panelFlexValue) {
+    document.documentElement.style.setProperty("--mobile-panel-flex", panelFlexValue);
+    state.mobilePanelPanelFlexValue = panelFlexValue;
   }
   if (!options.dragging) {
+    delete document.body.dataset.mobilePanelDragging;
+    delete document.body.dataset.mobilePanelPressing;
+    applyMobilePanelStateDataset(ratio);
     scheduleMobilePanelMapResize();
   }
 }
@@ -4093,8 +4396,8 @@ function installMobilePanelDragHandle() {
       state.mobilePanelDragFrame = 0;
       const pendingRatio = state.mobilePanelDragPendingRatio;
       state.mobilePanelDragPendingRatio = null;
-      if (pendingRatio !== null && state.mobilePanelDrag) {
-        applyMobilePanelMapRatio(pendingRatio, { dragging: true });
+      if (pendingRatio !== null && state.mobilePanelDrag?.previewing) {
+        applyMobilePanelDragRatio(pendingRatio);
       }
     });
   };
@@ -4112,19 +4415,30 @@ function installMobilePanelDragHandle() {
     }
     const finalRatio = state.mobilePanelDragPendingRatio;
     cancelPendingDragFrame();
-    if (drag.moved && finalRatio !== null) {
-      applyMobilePanelMapRatio(finalRatio, { dragging: true });
-    }
+    const commitRatio = finalRatio !== null
+      ? clampMobilePanelMapRatio(finalRatio)
+      : (drag.lastRatio ?? drag.startRatio);
     state.mobilePanelDrag = null;
-    delete document.body.dataset.mobilePanelDragging;
+    delete document.body.dataset.mobilePanelPressing;
     if (!drag.moved) {
+      delete document.body.dataset.mobilePanelDragging;
+      clearMobilePanelDragVariables();
       armTapGuard(drag);
       togglePanelByTap();
       return;
     }
-    scheduleMobilePanelMapResize();
-    scheduleVectorMapResizeSync();
-    window.setTimeout(() => map.invalidateSize({ animate: false, pan: false }), 140);
+    if (drag.previewing) {
+      applyMobilePanelDragRatio(commitRatio, drag);
+    }
+    applyMobilePanelMapRatio(commitRatio, { dragging: true });
+    applyMobilePanelStateDataset(commitRatio);
+    window.requestAnimationFrame(() => {
+      delete document.body.dataset.mobilePanelDragging;
+      clearMobilePanelDragVariables();
+      scheduleMobilePanelMapResize();
+      flushDeferredVectorMapResizeSync();
+      window.setTimeout(() => map.invalidateSize({ animate: false, pan: false }), 120);
+    });
   };
 
   handle.addEventListener("pointerdown", (event) => {
@@ -4142,9 +4456,11 @@ function installMobilePanelDragHandle() {
       lastY: event.clientY,
       startRatio: state.mobilePanelMapRatio,
       shellHeight: Math.max(1, shellRect?.height || window.innerHeight || 1),
+      trackHeight: mobilePanelTrackHeight(),
       moved: false,
+      previewing: false,
     };
-    document.body.dataset.mobilePanelDragging = "true";
+    document.body.dataset.mobilePanelPressing = "true";
   });
 
   handle.addEventListener("pointermove", (event) => {
@@ -4153,13 +4469,22 @@ function installMobilePanelDragHandle() {
       return;
     }
     event.preventDefault();
-    const deltaRatio = ((event.clientY - drag.startY) / drag.shellHeight) * 100;
+    const trackHeight = Math.max(1, drag.trackHeight || drag.shellHeight || 1);
+    const deltaRatio = ((event.clientY - drag.startY) / trackHeight) * 100;
+    const nextRatio = drag.startRatio + deltaRatio;
     if (Math.abs(event.clientY - drag.startY) > 6) {
       drag.moved = true;
+      if (!drag.previewing) {
+        drag.previewing = true;
+        document.body.dataset.mobilePanelDragging = "true";
+        applyMobilePanelDragRatio(nextRatio, drag);
+      }
     }
     drag.lastX = event.clientX;
     drag.lastY = event.clientY;
-    scheduleDragRatio(drag.startRatio + deltaRatio);
+    if (drag.previewing) {
+      scheduleDragRatio(nextRatio);
+    }
   });
 
   handle.addEventListener("pointerup", finishDrag);
@@ -4376,6 +4701,7 @@ async function handleNativeDatabaseSelected(payload = {}) {
 function refreshLocalizedDynamicText() {
   updateLayoutButtonLabels();
   updateMapTypeOptionLabels();
+  updateMapOverlayControlLabels();
   updateOfflineMapControlLabel();
   if (state.databaseStatus) {
     updateDatabaseStatus(state.databaseStatus);
@@ -4933,7 +5259,7 @@ function drawPointMarker(point, highlighted = false, options = {}) {
     renderer: pointRenderer,
     bubblingMouseEvents: false,
   })
-    .addTo(markerLayerGroup);
+    .addTo(options.group || markerLayerGroup);
   marker.on("click", (event) => {
     stopMapEvent(event);
     const popupPoint = options.popupPoint || normalizePopupPoint(point);
@@ -5792,7 +6118,7 @@ function addTextLabel(lat, lon, text, className, options = {}) {
       className: `map-label ${className} ${options.interactive ? "is-interactive" : ""}`,
       html: `<span>${escapeHtml(text)}</span>`,
     }),
-  }).addTo(labelLayerGroup);
+  }).addTo(options.group || labelLayerGroup);
   if (options.onClick) {
     marker.on("click", (event) => {
       stopMapEvent(event);
@@ -5827,7 +6153,7 @@ function addNavLabel(lat, lon, text, className, options = {}) {
       iconSize: isAirwayLabel ? [airwayWidth, airwayHeight] : undefined,
       iconAnchor: isAirwayLabel ? [airwayWidth / 2, airwayHeight / 2] : undefined,
     }),
-  }).addTo(navLabelLayerGroup);
+  }).addTo(options.group || navLabelLayerGroup);
   if (options.onClick) {
     marker.on("click", (event) => {
       stopMapEvent(event);
@@ -6419,6 +6745,8 @@ function addPopupHitCircle(point, latlng, options = {}) {
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
 function drawNavSymbol(point, className, options = {}) {
+  const group = options.group || navLayerGroup;
+  const labelGroup = options.labelGroup || navLabelLayerGroup;
   const marker = L.circleMarker([point.lat, point.lon], {
     pane: "navPane",
     radius: compactPhoneValue(options.radius ?? 2.5, 0.72, 1.8),
@@ -6430,13 +6758,14 @@ function drawNavSymbol(point, className, options = {}) {
     renderer: navRenderer,
     interactive: Boolean(options.interactive),
     bubblingMouseEvents: false,
-  }).addTo(navLayerGroup);
+  }).addTo(group);
   if (options.interactive) {
     marker.on("click", (event) => {
       stopMapEvent(event);
       showNavPointPopup(point, event.latlng);
     });
     addPopupHitCircle(point, [point.lat, point.lon], {
+      group,
       radius: options.hitRadius ?? 14,
       onClick: (latlng) => showNavPointPopup(point, latlng),
     });
@@ -6444,6 +6773,7 @@ function drawNavSymbol(point, className, options = {}) {
   if (options.label !== false) {
     addNavLabel(point.lat, point.lon, point.ident, className, {
       interactive: true,
+      group: labelGroup,
       onClick: (latlng) => showNavPointPopup(point, latlng),
     });
   }
@@ -6456,9 +6786,12 @@ function drawNavSymbol(point, className, options = {}) {
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
 function drawNavIcon(point, className, symbolClass, options = {}) {
+  const group = options.group || navLayerGroup;
+  const labelGroup = options.labelGroup || navLabelLayerGroup;
   const symbolSize = options.iconSize ? compactPhoneSize(options.iconSize) : navSymbolSize(symbolClass);
   const symbolAnchor = options.iconAnchor || [symbolSize[0] / 2, symbolSize[1] / 2];
   addPopupHitCircle(point, [point.lat, point.lon], {
+    group,
     radius: options.hitRadius ?? 12,
     onClick: (latlng) => showNavPointPopup(point, latlng),
   });
@@ -6472,7 +6805,7 @@ function drawNavIcon(point, className, symbolClass, options = {}) {
       iconSize: symbolSize,
       iconAnchor: symbolAnchor,
     }),
-  }).addTo(navLayerGroup);
+  }).addTo(group);
   marker.on("click", (event) => {
     stopMapEvent(event);
     showNavPointPopup(point, event.latlng);
@@ -6480,6 +6813,7 @@ function drawNavIcon(point, className, symbolClass, options = {}) {
   if (options.label !== false) {
     addNavLabel(point.lat, point.lon, point.ident, className, {
       interactive: true,
+      group: labelGroup,
       onClick: (latlng) => showNavPointPopup(point, latlng),
     });
   }
@@ -6510,6 +6844,10 @@ function navSymbolSize(symbolClass) {
       size = [7, 7];
   }
   return compactPhoneSize(size);
+}
+
+function isTerminalWaypoint(point) {
+  return point?.kind === "terminal_waypoint" || /^[A-Z]{2}\d{3}$/i.test(String(point?.ident || ""));
 }
 
 /**
@@ -6616,10 +6954,22 @@ function drawNavOverlay(payload) {
   // 这样旧航路不会在 fetch / draw 间隙先消失，避免 iPhone 上明显闪烁。
   const previousNavLayerGroup = navLayerGroup;
   const previousNavLabelLayerGroup = navLabelLayerGroup;
+  const previousNavAirwayLayerGroup = navAirwayLayerGroup;
+  const previousNavAirwayLabelLayerGroup = navAirwayLabelLayerGroup;
+  const previousNavTerminalLayerGroup = navTerminalLayerGroup;
+  const previousNavTerminalLabelLayerGroup = navTerminalLabelLayerGroup;
+  const previousNavPointLayerGroup = navPointLayerGroup;
+  const previousNavPointLabelLayerGroup = navPointLabelLayerGroup;
   const previousNavAirwayLayers = state.navAirwayLayers;
   const previousNavAirwayLabels = state.navAirwayLabels;
+  navAirwayLayerGroup = L.layerGroup();
+  navAirwayLabelLayerGroup = L.layerGroup();
   navLayerGroup = L.layerGroup();
   navLabelLayerGroup = L.layerGroup();
+  navTerminalLayerGroup = L.layerGroup();
+  navTerminalLabelLayerGroup = L.layerGroup();
+  navPointLayerGroup = L.layerGroup();
+  navPointLabelLayerGroup = L.layerGroup();
   const selectedAirway = state.selectedNavAirway;
   state.navAirwayLayers = new Map();
   state.navAirwayLabels = new Map();
@@ -6668,7 +7018,7 @@ function drawNavOverlay(payload) {
         renderer: navRenderer,
         interactive: false,
         bubblingMouseEvents: false,
-      }).addTo(navLayerGroup);
+      }).addTo(navAirwayLayerGroup);
       const batchedAirwayHitLayer = L.polyline(batchedAirwayPaths, {
         pane: "navPane",
         color: "#ffffff",
@@ -6677,7 +7027,7 @@ function drawNavOverlay(payload) {
         renderer: navRenderer,
         interactive: true,
         bubblingMouseEvents: false,
-      }).addTo(navLayerGroup);
+      }).addTo(navAirwayLayerGroup);
       batchedAirwayHitLayer.on("click", (event) => {
         const airway = nearestAirwayForLatLng(event.latlng, batchedAirwayCandidates);
         if (airway) {
@@ -6703,7 +7053,7 @@ function drawNavOverlay(payload) {
           renderer: navRenderer,
           interactive: true,
           bubblingMouseEvents: false,
-        }).addTo(navLayerGroup);
+        }).addTo(navAirwayLayerGroup);
         airwayLayer.on("click", (event) => showAirwayPopupFromEvent(airway, event));
         const airwayHitLayer = L.polyline(airwayPath, {
           pane: "navPane",
@@ -6713,7 +7063,7 @@ function drawNavOverlay(payload) {
           renderer: navRenderer,
           interactive: true,
           bubblingMouseEvents: false,
-        }).addTo(navLayerGroup);
+        }).addTo(navAirwayLayerGroup);
         airwayHitLayer.on("click", (event) => showAirwayPopupFromEvent(airway, event));
         const layerList = state.navAirwayLayers.get(airway.name) || [];
         layerList.push(airwayLayer);
@@ -6731,6 +7081,7 @@ function drawNavOverlay(payload) {
           addNavLabel(labelAt[0], labelAt[1], airwayLabelText(airway), "nav-airway-label", {
             directionClass: airway.direction === "F" ? "dir-f" : airway.direction === "B" ? "dir-b" : "",
             interactive: true,
+            group: navAirwayLabelLayerGroup,
             airwayName: airway.name,
             onClick: (_latlng, event) => showAirwayPopupFromEvent(airway, event),
           });
@@ -6811,6 +7162,8 @@ function drawNavOverlay(payload) {
           return;
         }
         drawNavIcon(navaidCopy, className, symbolClass, {
+          group: navPointLayerGroup,
+          labelGroup: navPointLabelLayerGroup,
           label: roundedZoom >= 7,
         });
       });
@@ -6822,7 +7175,7 @@ function drawNavOverlay(payload) {
       if (navaidIdents.has(String(waypoint.ident || "").toUpperCase())) {
         return;
       }
-      const isSmall = waypoint.kind === "terminal_waypoint" || /^[A-Z]{2}\d{3}$/i.test(waypoint.ident);
+      const isSmall = isTerminalWaypoint(waypoint);
       if (isSmall && roundedZoom < NAV_TERMINAL_DETAIL_MIN_ZOOM) {
         return;
       }
@@ -6831,7 +7184,11 @@ function drawNavOverlay(payload) {
         if (!navPointIntersectsBounds(waypointCopy, viewBounds)) {
           return;
         }
+        const group = isSmall ? navTerminalLayerGroup : navPointLayerGroup;
+        const labelGroup = isSmall ? navTerminalLabelLayerGroup : navPointLabelLayerGroup;
         drawNavIcon(waypointCopy, "nav-waypoint-label", isSmall ? "nav-symbol-small-waypoint" : "nav-symbol-waypoint", {
+          group,
+          labelGroup,
           label: true,
         });
       });
@@ -6842,15 +7199,34 @@ function drawNavOverlay(payload) {
     setNavAirwayHighlight(selectedAirway, true);
   }
   state.navOverlayDrawZoom = roundedZoom;
-  navLayerGroup.addTo(map);
-  navLabelLayerGroup.addTo(map);
-  removeNavOverlayLayerAfterPaint(previousNavLayerGroup);
-  removeNavOverlayLayerAfterPaint(previousNavLabelLayerGroup);
+  applyMapOverlayVisibility();
+  [
+    previousNavLayerGroup,
+    previousNavLabelLayerGroup,
+    previousNavAirwayLayerGroup,
+    previousNavAirwayLabelLayerGroup,
+    previousNavTerminalLayerGroup,
+    previousNavTerminalLabelLayerGroup,
+    previousNavPointLayerGroup,
+    previousNavPointLabelLayerGroup,
+  ].forEach(removeNavOverlayLayerAfterPaint);
   } catch (error) {
     navLayerGroup.clearLayers();
     navLabelLayerGroup.clearLayers();
+    navAirwayLayerGroup.clearLayers();
+    navAirwayLabelLayerGroup.clearLayers();
+    navTerminalLayerGroup.clearLayers();
+    navTerminalLabelLayerGroup.clearLayers();
+    navPointLayerGroup.clearLayers();
+    navPointLabelLayerGroup.clearLayers();
     navLayerGroup = previousNavLayerGroup;
     navLabelLayerGroup = previousNavLabelLayerGroup;
+    navAirwayLayerGroup = previousNavAirwayLayerGroup;
+    navAirwayLabelLayerGroup = previousNavAirwayLabelLayerGroup;
+    navTerminalLayerGroup = previousNavTerminalLayerGroup;
+    navTerminalLabelLayerGroup = previousNavTerminalLabelLayerGroup;
+    navPointLayerGroup = previousNavPointLayerGroup;
+    navPointLabelLayerGroup = previousNavPointLabelLayerGroup;
     state.navAirwayLayers = previousNavAirwayLayers;
     state.navAirwayLabels = previousNavAirwayLabels;
     throw error;
@@ -7271,13 +7647,14 @@ function setAirwayHighlight(airwayKey, hovered) {
     return;
   }
   if (hovered) {
+    const style = routeStyleForKind(state.currentRouteLayerKind);
     if (state.hoveredAirwayKey && state.hoveredAirwayKey !== airwayKey) {
       setAirwayHighlight(state.hoveredAirwayKey, false);
     }
     state.hoveredAirwayKey = airwayKey;
     if (layers) {
       layers.forEach((layer) => {
-        layer.visible.setStyle({ weight: routeStrokeWeight(10), opacity: 1, color: MAP_COLORS.routeHover });
+        layer.visible.setStyle({ weight: routeStrokeWeight(10), opacity: 1, color: style.hoverColor });
         layer.visible.bringToFront();
         layer.hit.bringToFront();
       });
@@ -7289,8 +7666,9 @@ function setAirwayHighlight(airwayKey, hovered) {
     state.hoveredAirwayKey = null;
   }
   if (layers) {
+    const style = routeStyleForKind(state.currentRouteLayerKind);
     layers.forEach((layer) => {
-      layer.visible.setStyle({ weight: routeStrokeWeight(5), opacity: 0.98, color: MAP_COLORS.route });
+      layer.visible.setStyle({ weight: routeStrokeWeight(5), opacity: 0.98, color: style.color });
     });
   }
   chip?.classList.remove("hovered");
@@ -7331,6 +7709,7 @@ function setProcedureHighlight(type, hovered) {
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
 function drawRouteCopy(points, payload, routeAssociations, longitudeOffset, fitBoundsLatLngs) {
+  const routeStyle = routeStyleForKind(state.currentRouteLayerKind);
   const copyKey = String(longitudeOffset);
   const enroutePoints = points.slice(1, -1);
   const visiblePoints = [];
@@ -7351,9 +7730,11 @@ function drawRouteCopy(points, payload, routeAssociations, longitudeOffset, fitB
     drawPointMarker(point, index === 0 || index === visiblePoints.length - 1, {
       popupPoint,
       keySuffix: copyKey,
+      group: routeLayerGroup,
     });
     addTextLabel(point.lat, point.lon, point.ident, "waypoint-label", {
       interactive: true,
+      group: routeLayerGroup,
       onClick: (latlng) => showNavPointPopup(popupPoint, latlng),
     });
   });
@@ -7367,7 +7748,7 @@ function drawRouteCopy(points, payload, routeAssociations, longitudeOffset, fitB
         const latlngs = legPoints.map(latLngForPoint);
         const visibleLayer = L.polyline(latlngs, {
           pane: "routePane",
-          color: MAP_COLORS.route,
+          color: routeStyle.color,
           weight: routeStrokeWeight(5),
           opacity: 0.98,
           interactive: false,
@@ -7400,6 +7781,7 @@ function drawRouteCopy(points, payload, routeAssociations, longitudeOffset, fitB
       if (midpoint && leg.type === "airway") {
         addTextLabel(midpoint.lat, midpoint.lon, leg.name, "airway-label", {
           interactive: true,
+          group: routeLayerGroup,
           onClick: (latlng) => {
             setAirwayHighlight(airwayKey, true);
             showRouteLegPopup(leg, latlng);
@@ -7415,7 +7797,7 @@ function drawRouteCopy(points, payload, routeAssociations, longitudeOffset, fitB
         outerRadius: compactPhoneValue(isEndpoint ? 8.5 : 7, 0.72, isEndpoint ? 5.6 : 4.8),
         innerRadius: compactPhoneValue(isEndpoint ? 3.3 : 2.7, 0.72, isEndpoint ? 2.5 : 2.1),
         color: "#fff4b5",
-        fillColor: MAP_COLORS.route,
+        fillColor: routeStyle.color,
         fillOpacity: isEndpoint ? 0.24 : 0.18,
         innerFillColor: "#071928",
       });
@@ -7427,6 +7809,7 @@ function drawRouteCopy(points, payload, routeAssociations, longitudeOffset, fitB
   drawPointMarker({ ...points[0], kind: "departure" }, true, {
     popupPoint: popupPointWithRouteAssociations(restoreOriginalLongitude(points[0]), routeAssociations),
     keySuffix: `${copyKey}:departure`,
+    group: routeLayerGroup,
   }).setStyle({
     color: MAP_COLORS.departure,
     fillColor: MAP_COLORS.departure,
@@ -7434,6 +7817,7 @@ function drawRouteCopy(points, payload, routeAssociations, longitudeOffset, fitB
   drawPointMarker({ ...points.at(-1), kind: "arrival" }, true, {
     popupPoint: popupPointWithRouteAssociations(restoreOriginalLongitude(points.at(-1)), routeAssociations),
     keySuffix: `${copyKey}:arrival`,
+    group: routeLayerGroup,
   }).setStyle({
     color: MAP_COLORS.arrival,
     fillColor: MAP_COLORS.arrival,
@@ -7445,12 +7829,15 @@ function drawRouteCopy(points, payload, routeAssociations, longitudeOffset, fitB
  * 输入：payload。
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
-function drawRoute(payload) {
+function drawRoute(payload, options = {}) {
   const basePoints = withDisplayLongitudes(payload.points || []);
   if (basePoints.length < 2) {
     return;
   }
-  routeLayerGroup.clearLayers();
+  state.currentRouteLayerKind = normalizeRouteLayerKind(options.routeLayerKind || inferRouteLayerKind(payload));
+  routeLayerGroup = routeLayerGroupForKind(state.currentRouteLayerKind);
+  autoRouteLayerGroup.clearLayers();
+  manualRouteLayerGroup.clearLayers();
   markerLayerGroup.clearLayers();
   clearLabels();
   state.airportMarkers.clear();
@@ -7479,6 +7866,7 @@ function drawRoute(payload) {
     interactive: false,
   }).addTo(routeLayerGroup);
   map.fitBounds(boundsPolyline.getBounds(), { padding: [36, 36] });
+  applyMapOverlayVisibility();
 }
 
 /**
@@ -8238,13 +8626,15 @@ async function applyRoutePayload(payload, departure, arrival, options = {}) {
   if (state.arrivalAirport) {
     rerenderProcedureLists("arrival", state.arrivalAirport.airport_identifier);
   }
-  drawRoute(payload);
+  const routeLayerKind = normalizeRouteLayerKind(options.routeLayerKind || inferRouteLayerKind(payload));
+  drawRoute(payload, { routeLayerKind });
   renderLegs(payload.legs || []);
   elements.routeInput.value = routeStringFromPayload(payload);
   state.lastRouteWasGenerated = Boolean(payload.generated);
   state.lastGeneratedRouteDisplay = payload.generated ? routeStringFromPayload(payload).toUpperCase() : "";
   state.currentRoutePayload = cloneJSON(payload);
   state.currentRouteAirports = { departure, arrival };
+  state.currentRouteLayerKind = routeLayerKind;
   await applyAutoSelectedProcedures(payload.selected_procedures || {}, { signal: options.signal });
 }
 
@@ -8279,7 +8669,10 @@ async function buildRoute(options = {}) {
     );
     throwIfAborted(controller.signal);
     payload.selected_runways = payload.selected_runways || { departure: departureRunway, arrival: arrivalRunway };
-    await applyRoutePayload(payload, departure, arrival, { signal: controller.signal });
+    await applyRoutePayload(payload, departure, arrival, {
+      signal: controller.signal,
+      routeLayerKind: route ? "manualRoute" : "route",
+    });
     setStatus(
       payload.generated
         ? t("route.generatedStatus", {
@@ -8868,6 +9261,7 @@ async function matchFR24FlightTrack(key) {
     if (state.currentRoutePayload && !state.preTrackMatchRoutePayload) {
       state.preTrackMatchRoutePayload = cloneJSON(state.currentRoutePayload);
       state.preTrackMatchAirports = cloneJSON(state.currentRouteAirports);
+      state.preTrackMatchRouteLayerKind = state.currentRouteLayerKind;
     }
     const payload = await fetchJson("/api/route/track-match", {
       method: "POST",
@@ -8880,7 +9274,10 @@ async function matchFR24FlightTrack(key) {
       signal: controller.signal,
     });
     throwIfAborted(controller.signal);
-    await applyRoutePayload(payload, route.departure, route.arrival, { signal: controller.signal });
+    await applyRoutePayload(payload, route.departure, route.arrival, {
+      signal: controller.signal,
+      routeLayerKind: "route",
+    });
     const message = t("query.matched", {
       message: currentLanguage() === "zh-Hans" && payload.message ? payload.message : t("track.importMatchedFallback"),
       distance: Math.round(payload.distance_nm || 0),
@@ -8904,10 +9301,12 @@ async function matchFR24FlightTrack(key) {
 function clearFR24TrackDrawing() {
   if (!state.fr24TrackPayload) {
     setFR24QueryStatus(t("query.noTrack"), true);
+    setStatus(t("query.noTrack"), true);
     return;
   }
   fr24TrackLayerGroup.clearLayers();
   state.fr24TrackPayload = null;
+  applyMapOverlayVisibility();
   setFR24QueryStatus(t("query.trackCleared"));
   setStatus(t("query.trackCleared"));
 }
@@ -8923,10 +9322,11 @@ async function restoreFR24MatchedRoute() {
       cloneJSON(state.preTrackMatchRoutePayload),
       state.preTrackMatchAirports.departure,
       state.preTrackMatchAirports.arrival,
-      { signal: controller.signal },
+      { signal: controller.signal, routeLayerKind: state.preTrackMatchRouteLayerKind || inferRouteLayerKind(state.preTrackMatchRoutePayload) },
     );
     state.preTrackMatchRoutePayload = null;
     state.preTrackMatchAirports = null;
+    state.preTrackMatchRouteLayerKind = null;
     setFR24QueryStatus(t("query.restored"));
     setStatus(t("query.restored"));
   } catch (error) {
@@ -9040,6 +9440,7 @@ function handleFR24FlightAction(event) {
 
 elements.planButton.addEventListener("click", buildRoute);
 elements.recalculateButton.addEventListener("click", () => buildRoute({ forceAuto: true }));
+elements.planClearTrackButton?.addEventListener("click", clearFR24TrackDrawing);
 elements.stopRequestButton.addEventListener("click", stopActiveRouteOperation);
 elements.mapExpandButton.addEventListener("click", () => {
   const expanded = !document.body.classList.contains("map-expanded");

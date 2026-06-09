@@ -8,10 +8,12 @@
 - Leaflet、MapLibre GL、maplibre-contour、pmtiles 已打包到 `Web/vendor/`，启动不依赖 CDN。
 - 触控拖动、缩放控件、地图类型控件沿用 Web 参考版实现。
 - 矢量底图拖动和缩放期间不再高频 `jumpTo`：拖动/缩放中用 Leaflet 同帧 CSS transform 镜像 MapLibre 容器，结束后再同步真实 MapLibre 相机，降低 vector 底图与航路层动画不同步。
+- 地图左上角新增垂直叠加层控制，按钮尺寸、圆角和间距与缩放 / 地图类型控件保持一致；可分别显示 / 隐藏地图层、蓝色自动 / 匹配航路与 nav-overlay 蓝色 airway、黄色人工航路、SID / STAR / APPROACH、FR24 黑色轨迹、terminal waypoints 和其他航点 / 导航台。隐藏态仅移除或淡出前端图层并把图标置灰，按钮本体背景、阴影和底纹保持不变；显隐切换不重新请求 nav-overlay、不重算航路，也不影响本地离线服务。
 - iPhone 缩放控件尺寸保持紧凑，`+` / `-` 按钮之间增加少量间距，避免小屏连续点按时误触；每个缩放按钮都覆盖 Leaflet touch 默认首尾圆角，保持四角独立圆角。
 - 已禁用 Leaflet `doubleClickZoom`，并拦截地图容器与页面空白处的 `dblclick` / 双触默认行为，避免双击空白处放大。
 - 保留单指平移、双指缩放、缩放按钮、点击航路/航点弹窗和输入框触控。
 - 节流请求 `/api/nav-overlay`，由 `WKURLSchemeHandler` 路由到 Swift 本地 `PlannerService`。前端绘制采用双缓冲图层：新 nav-overlay 在离屏 layer group 完成后再替换旧 layer group；iPhone 使用 SVG renderer 与两帧延迟旧层移除，避免缩放或移动后旧航路先消失再显示；地图仍处于拖动/缩放动画时会延后刷新，避免重绘和动画争用同一帧。
+- nav-overlay 前端图层已拆分为主导航叠加层、蓝色 airway 子图层、terminal waypoint 子图层和其他航点 / 导航台子图层；跑道、ILS 和机场保持在主叠加层，airway 跟随左上角第二个“航路”开关独立显示或隐藏，terminal / 其他点位也可由对应开关独立控制。
 - 底图绘制、离线地图状态、nav-overlay 请求相互独立。
 - nav-overlay Swift 服务已使用 Web 参考版同款本地缓存、世界副本偏移、跨日期变更线边界判断、空间分桶和航路标签预算。
 - 点击机场 / 航点 / 导航台可弹窗。

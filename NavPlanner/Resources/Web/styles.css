@@ -616,7 +616,7 @@ textarea:focus-visible {
 
 .button-row {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-top: 12px;
 }
@@ -628,6 +628,8 @@ textarea:focus-visible {
   margin-top: 0;
   border-radius: 14px;
   font-size: 12px;
+  line-height: 1.12;
+  white-space: normal;
 }
 
 .plan-runway-grid {
@@ -1335,6 +1337,23 @@ body.left-panel-expanded .selection-table {
   min-width: 96px;
 }
 
+.query-primary-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  width: min(340px, 42vw);
+  min-width: 276px;
+}
+
+.query-action-card .query-primary-actions .primary-button,
+.query-primary-actions .compact-button {
+  width: 100%;
+  min-width: 0;
+  margin-top: 0;
+  line-height: 1.1;
+  white-space: normal;
+}
+
 .query-manual-flight-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(88px, auto);
@@ -2031,6 +2050,12 @@ html[data-theme="day"] .selection-leg-turn {
   opacity: 1;
 }
 
+#map[data-overlay-base-map="hidden"] .terrain-pane,
+#map[data-overlay-base-map="hidden"] .vector-maplibre-base {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 .vector-maplibre-base.has-error {
   display: grid;
   place-items: center;
@@ -2152,6 +2177,105 @@ html[data-theme="day"] .selection-leg-turn {
 
 .map-type-option.active span {
   color: #0d628f;
+}
+
+.map-overlay-control {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.map-overlay-toggle {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid rgba(84, 189, 255, 0.28);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(229, 242, 253, 0.9));
+  color: #173550;
+  cursor: pointer;
+  box-shadow:
+    0 14px 28px rgba(9, 18, 31, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    color 0.16s ease,
+    filter 0.16s ease,
+    opacity 0.16s ease;
+}
+
+.map-overlay-toggle svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.map-overlay-toggle:hover {
+  transform: translateY(-1px);
+  border-color: rgba(84, 189, 255, 0.58);
+  color: #12638f;
+  box-shadow:
+    0 18px 34px rgba(9, 18, 31, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.88);
+}
+
+.map-overlay-toggle.is-hidden {
+  color: #6f7a84;
+}
+
+.map-overlay-toggle.is-hidden svg {
+  opacity: 0.56;
+}
+
+.map-overlay-toggle.is-hidden .overlay-icon-route,
+.map-overlay-toggle.is-hidden .overlay-icon-manual,
+.map-overlay-toggle.is-hidden .overlay-icon-sid,
+.map-overlay-toggle.is-hidden .overlay-icon-star,
+.map-overlay-toggle.is-hidden .overlay-icon-approach,
+.map-overlay-toggle.is-hidden .overlay-icon-fr24,
+.map-overlay-toggle.is-hidden .overlay-icon-fr24-dash {
+  stroke: currentColor;
+}
+
+.map-overlay-toggle .overlay-icon-route {
+  stroke: #2f80ff;
+}
+
+.map-overlay-toggle .overlay-icon-manual {
+  stroke: #d59920;
+}
+
+.map-overlay-toggle .overlay-icon-sid {
+  stroke: #20a86e;
+}
+
+.map-overlay-toggle .overlay-icon-star {
+  stroke: #d94d62;
+}
+
+.map-overlay-toggle .overlay-icon-approach {
+  stroke: #8c56e8;
+}
+
+.map-overlay-toggle .overlay-icon-fr24,
+.map-overlay-toggle .overlay-icon-fr24-dash {
+  stroke: #050505;
+}
+
+.map-overlay-toggle .overlay-icon-fr24-dash {
+  stroke-dasharray: 2 2;
 }
 
 .offline-map-control {
@@ -3560,7 +3684,7 @@ html[data-theme="day"] .offline-progress {
     max-height: 100%;
     min-height: 0;
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, var(--mobile-map-flex)) minmax(0, var(--mobile-panel-flex)) 9px;
+    grid-template-rows: minmax(0, var(--mobile-map-row-size, var(--mobile-map-flex))) minmax(0, var(--mobile-panel-row-size, var(--mobile-panel-flex))) 9px;
     grid-template-areas:
       "map"
       "planner"
@@ -3572,12 +3696,12 @@ html[data-theme="day"] .offline-progress {
       max-height 0.22s cubic-bezier(0.2, 0.82, 0.2, 1),
       grid-template-rows 0.22s cubic-bezier(0.2, 0.82, 0.2, 1),
       padding 0.22s cubic-bezier(0.2, 0.82, 0.2, 1);
-    will-change: height, max-height, grid-template-rows;
   }
 
   html:not([data-device="pad"]) .map-wrap {
     min-height: 0;
     border-radius: 10px;
+    contain: layout paint style;
   }
 
   html:not([data-device="pad"]) .planner-panel,
@@ -3589,6 +3713,7 @@ html[data-theme="day"] .offline-progress {
     overflow-y: auto;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
+    contain: layout paint style;
   }
 
   html:not([data-device="pad"]) .planner-panel {
@@ -3644,31 +3769,56 @@ html[data-theme="day"] .offline-progress {
     background: rgba(181, 190, 198, 0.58);
     box-shadow: none;
     transition:
-      width 0.14s ease,
-      height 0.14s ease,
       background-color 0.14s ease,
-      box-shadow 0.14s ease,
       transform 0.14s ease;
-    will-change: width, height, transform;
+    transform: scale3d(1, 1, 1);
+    will-change: transform;
   }
 
   html:not([data-device="pad"]) .mobile-panel-drag-handle:active::before,
+  html:not([data-device="pad"]) body[data-mobile-panel-pressing="true"] .mobile-panel-drag-handle::before,
   html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .mobile-panel-drag-handle::before {
     opacity: 1;
     transform: translateY(-50%) scaleX(1);
   }
 
   html:not([data-device="pad"]) .mobile-panel-drag-handle:active span,
+  html:not([data-device="pad"]) body[data-mobile-panel-pressing="true"] .mobile-panel-drag-handle span,
   html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .mobile-panel-drag-handle span {
-    width: 42px;
-    height: 4px;
     background: rgba(84, 189, 255, 0.78);
     box-shadow: none;
-    transform: none;
+    transform: scale3d(1.24, 1.34, 1);
   }
 
   html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .shell {
     transition: none;
+  }
+
+  html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .map-wrap,
+  html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .planner-panel,
+  html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .detail-panel {
+    pointer-events: none;
+  }
+
+  html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .planner-panel,
+  html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .detail-panel,
+  html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .mobile-bottom-tabs {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: none;
+  }
+
+  html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .mobile-bottom-tabs {
+    z-index: 120;
+  }
+
+  html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .query-card,
+  html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .query-flight-card,
+  html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .settings-card,
+  html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .airport-slot-tab,
+  html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .route-leg,
+  html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .procedure-chip {
+    box-shadow: none;
   }
 
   html:not([data-device="pad"]) button {
@@ -3786,6 +3936,7 @@ html[data-theme="day"] .offline-progress {
   }
 
   html[data-theme="day"]:not([data-device="pad"]) .mobile-panel-drag-handle:active span,
+  html[data-theme="day"]:not([data-device="pad"]) body[data-mobile-panel-pressing="true"] .mobile-panel-drag-handle span,
   html[data-theme="day"]:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .mobile-panel-drag-handle span {
     background: rgba(36, 125, 162, 0.68);
     box-shadow: none;
@@ -3943,7 +4094,7 @@ html[data-theme="day"] .offline-progress {
   }
 
   html:not([data-device="pad"]) .button-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 5px;
     margin-top: 5px;
   }
@@ -4292,6 +4443,12 @@ html[data-theme="day"] .offline-progress {
   html:not([data-device="pad"]) .settings-row {
     grid-template-columns: minmax(0, 1fr);
     gap: 5px;
+  }
+
+  html:not([data-device="pad"]) .query-primary-actions {
+    width: 100%;
+    min-width: 0;
+    gap: 4px;
   }
 
   html:not([data-device="pad"]) .settings-row strong {
@@ -4659,6 +4816,7 @@ html[data-theme="day"] .offline-progress {
 
   html:not([data-device="pad"]) .leaflet-control-zoom a,
   html:not([data-device="pad"]) .map-type-toggle,
+  html:not([data-device="pad"]) .map-overlay-toggle,
   html:not([data-device="pad"]) .offline-map-toggle {
     width: 26px !important;
     height: 26px !important;
@@ -4679,6 +4837,16 @@ html[data-theme="day"] .offline-progress {
   html:not([data-device="pad"]) .map-type-menu {
     right: 36px;
     min-width: 138px;
+  }
+
+  html:not([data-device="pad"]) .map-overlay-control {
+    gap: 7px;
+    margin-top: 6px !important;
+  }
+
+  html:not([data-device="pad"]) .map-overlay-toggle svg {
+    width: 15px;
+    height: 15px;
   }
 
   html:not([data-device="pad"]) body.left-panel-expanded .selection-table-wrap {
