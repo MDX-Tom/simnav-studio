@@ -1,5 +1,50 @@
 # Codex 执行报告
 
+## 2026-06-11 Xcode 运行期红色提示清理
+
+已完成：
+
+- 修复 `Could not create a sandbox extension for ... NavPlanner.app`：`MapWebView` 现在优先从 App Bundle 以 `loadFileURL(...allowingReadAccessTo:)` 加载 `Web/map.html`，让 WebKit 获得明确的目录读权限；找不到 bundle 文件时才回退到 `navplanner://app/map.html`。
+- 保持本地优先架构：`app.js` 在 `file:`、`about:` 或 `origin === "null"` 下继续把 API origin 归一到 `navplanner://app`，所有核心查询、规划、Procedure、nav-overlay、离线地图和在线缓存通路仍走 Swift `WKURLSchemeHandler`。
+- 把在线瓦片、离线瓦片、离线资源瓦片和 PMTiles 的 cache busting 从 query string 改为 `_v...` 路径段；`NavPlannerSchemeHandler` 新增版本段跳过逻辑，兼容 `/api/map-cache/.../_v.../{z}/{x}/{y}`、`/api/offline-maps/tile/_v.../{z}/{x}/{y}`、`/api/offline-maps/resource/{name}/_v.../{z}/{x}/{y}` 和 `/api/offline-maps/pmtiles/_v.../{name}.pmtiles`。
+- `map.html` 保留 `<base href="navplanner://app/">` 并刷新资源版本为 `20260611-xcode-runtime-cleanup`。实测移除 `<base>` 虽能减少一条 WebKit ResourceLoadStatistics 查询参数诊断，但会导致地图工作台底图和叠加层异常，因此保留功能正确性。
+- 禁用本地 MapLibre vendor 启动阶段的 WebP 探测，消除 iOS ImageIO `makeImagePlus 'WEBP' ... err=-50` 红字；实际瓦片仍按服务端返回 MIME / 文件格式处理。
+- 将 Debug / Release 的 `INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents` 改为 `NO`，消除 iOS 27 beta 中 `com.apple.PointerUI.pointeruid.default-service` 与 `-[UIApplication statusBarOrientation]` 组合红字。
+- 复核剩余宽日志：最近 45 秒只剩 `cfprefsd` 周期性探测 `com.apple.proactiveeventtrackerd.plist`、`.GlobalPreferences` 等系统偏好文件失败，进程不是 `NavPlanner`，不对应 JS、WebBridge 或本地 API 异常。
+
+验证：
+
+- `node --check NavPlanner/Resources/Web/app.js` 成功；`node --check NavPlanner/Resources/Web/vendor/maplibre-gl/maplibre-gl.js` 成功。
+- CSS 大括号配对检查成功；HTML 本地化覆盖检查 141 个 `data-i18n*` 属性均有翻译键。
+- `swift -frontend -parse NavPlanner/Core/WebBridge/NavPlannerSchemeHandler.swift NavPlanner/Features/Map/MapWebView.swift NavPlanner/Core/PlannerCore/PlannerService.swift NavPlanner/Core/LocalDataStore/LocalDataStore.swift NavPlanner/App/AppEnvironment.swift` 成功。
+- `plutil -lint NavPlanner.xcodeproj/project.pbxproj NavPlanner/Support/PrivacyInfo.xcprivacy` 成功。
+- `python3 Tools/Parity/run_all_parity.py` 成功；RouteParity 22、TrackParity 7、ProcedureParity 6 均无差异。
+- Xcode beta arm64 iOS Simulator build 成功；由于 XcodeBuildMCP 仍受全局 CommandLineTools `xcode-select` 影响，安装 / 启动 / 截图使用 `/Applications/Xcode-beta.app/Contents/Developer/usr/bin/simctl`。
+- iPhone 17 Pro Max 模拟器安装并启动 `com.midaxia.navplanner` 成功；重启最终包后的截图 `/private/tmp/navplanner-xcode-runtime-final-rerun.png` 确认地图、底图、nav-overlay 蓝色航路、左上叠加层按钮、Plan 表单和底部 `计划 / 机场 / 查询 / 设置` 正常。
+- 关键词日志过滤未再命中 `statusBarOrientation`、`PointerUI`、`Unable to hide query parameters`、`makeImagePlus`、`WEBP`、`Could not create a sandbox extension`、`TypeError`、`ReferenceError` 或 `SyntaxError`。
+- `git -C NavPlanner-web status --short` 无输出，参考项目保持未修改。
+
+## 2026-06-10 Settings 数据库卡片顺序与 Xcode WebContent 日志复核
+
+已完成：
+
+- 将 Settings 页面“导航数据库”卡片移动到“应用图标”与“离线地图”之间，保持数据库导入、列表搜索、切换、删除和恢复内置库的既有 Swift 本地服务链路不变。
+- 刷新 `map.html` 中 `styles.css` / `app.js` 资源版本为 `20260610-settings-db-order`，避免 WKWebView 继续使用旧 HTML 资源引用。
+- 核对用户截图中的 Xcode 控制台提示：`WebContent[...] Couldn't open ... ExtensionKit/Extensions/Web...`、`com.apple.WebKit.WebContent.plist`、`ByHost/.GlobalPreferences...plist` 均来自 iOS 27.0 模拟器 WebKit WebContent 进程通过 `cfprefsd` 探测系统 runtime / 偏好 plist 时的 “No such file or directory” 诊断；运行日志没有 `TypeError`、`ReferenceError`、`SyntaxError`、`Exception`、`fatal`、`crash` 或 WebBridge 应用级异常。
+- 未加入 `OS_ACTIVITY_MODE=disable` 等全局日志屏蔽，因为它会隐藏真正有用的 NavPlanner / WebKit 调试信息；当前结论是这些提示属于模拟器 / WebKit 系统噪声，不是项目构建或 App 运行错误。
+- 同步更新 `README.md`、`TODO.md`、`Docs/Settings.md`、`Docs/WebParity.md` 和本报告。
+
+验证：
+
+- `node --check NavPlanner/Resources/Web/app.js` 成功；CSS 大括号配对检查成功；HTML 本地化覆盖检查 141 个 `data-i18n*` 属性均有翻译键、457 个翻译键已被扫描。
+- `swift -frontend -parse NavPlanner/Core/LocalDataStore/LocalDataStore.swift NavPlanner/Core/PlannerCore/PlannerService.swift NavPlanner/Core/WebBridge/NavPlannerSchemeHandler.swift NavPlanner/App/AppEnvironment.swift NavPlanner/Features/Map/MapWebView.swift` 成功。
+- `plutil -lint NavPlanner.xcodeproj/project.pbxproj NavPlanner/Support/PrivacyInfo.xcprivacy` 成功；`git diff --check` 成功。
+- `python3 Tools/Parity/run_all_parity.py` 成功；RouteParity 22、TrackParity 7、ProcedureParity 6 均无差异。
+- XcodeBuildMCP 仍因全局 `xcode-select -p` 指向 `/Library/Developer/CommandLineTools` 无法找到完整 Xcode / idb；改用 `/Applications/Xcode-beta.app/Contents/Developer/usr/bin/xcodebuild` 构建 iOS Simulator arm64 成功。
+- 用 Xcode beta `simctl` 确认 iPhone 17 Pro Max 模拟器已启动，安装并启动 `com.midaxia.navplanner` 成功；启动截图为 `/private/tmp/navplanner-settings-db-order.png`。
+- 过滤最近运行日志时，异常关键词只命中 WebContent / `cfprefsd` 的缺失偏好 plist 探测；排除 `Couldn...` 后没有应用级异常关键词输出。
+- `git -C NavPlanner-web status --short` 无输出，参考项目保持未修改。
+
 ## 2026-06-09 叠加层按钮左上角与蓝色 airway 控制修正
 
 已完成：
@@ -2318,3 +2363,31 @@
 
 - ZULS/ZUAL 在线调试已复测：iPhone 17 Pro Max 模拟器中，FR24 `/common/v1/airport.json` 通过隐藏 WKWebView 顶层导航返回 `status=200 type=application/json body=json-object`；`LXA departures offset=24` 从 138 条 raw schedule 中命中 1-2 条 `ZULS -> ZUAL` 航班，Query 页显示 `TV9723`、`TV9943` 等航班卡片。
 - FR24 对更早的 `offset=48` schedule timestamp 返回 HTTP 400 JSON；已增加停止条件，较新窗口已有航班后遇到该 400 会停止继续向前扫描并返回已找到结果，避免 Query 页长时间等待。
+
+## 2026-06-10 数据库管理、双击放大与说明文案精简
+
+已完成：
+
+- 主地图重新启用 Leaflet `doubleClickZoom`，双击地图可放大；document 级双击 / 双触页面缩放保护保留在非地图空白区域，离线范围选择小地图仍禁用双击缩放。
+- Plan 页删除 Route 示例占位，自动航路说明改为“留空航路以自动规划整条航路，或在航点间输入'***'以自动规划航路片段”；启动时不再把本地数据库载入信息写入 Plan 状态栏。
+- Query 页删除 FR24 在线增强说明；FR24 访问摘要改为只显示“浏览器会话已同步 / 未同步”，同步提示截断到“然后同步会话，即可查询 FR24 航班”，手动 Cookie / `_frPl` 仍仅作为高级兜底。
+- Settings 导航数据库卡片保留 Files 导入入口，并新增本地数据库存储管理：读取 `Application Support/NavPlanner/Database/` 下 `.sqlite` / `.sqlite3` / `.s3db` / `.db` 文件，显示文件数量、空间占用、AIRAC / 修订、大小、修改时间、当前 / 内置 / 不可读标记，支持刷新 / 搜索、切换、删除非当前非内置数据库、恢复并启用内置 `navdata.sqlite`。
+- Swift 本地服务新增 `LocalDataStore.databaseListPayload`、`selectDatabase`、`deleteDatabase`、`restoreBundledDatabase`，并通过 `PlannerService` 和 `NavPlannerSchemeHandler` 暴露 `/api/databases/list`、`select`、`delete`、`restore-bundled`；切库和恢复内置库后会失效 route / airport / Procedure / nav-overlay 前端缓存。
+- 导入数据库不再覆盖同名文件；同名导入会生成递增后缀，避免误删用户已有数据库。
+- Settings“版权与说明”改为先介绍 App 基本能力和操作方式，最后说明数据版权归各自来源所有，App 开发者为 MDX。
+- iPhone 设置说明文字字号与 `.helper-text` 对齐，修正“默认图标为日间均衡”等说明文字在小屏上明显偏小的问题。
+- `map.html` 中 `app.js` / `styles.css` 资源版本刷新为 `20260610-database-doubleclick`。
+- 同步更新 README、TODO、Docs/Settings.md、Docs/WebParity.md、Docs/MapKernel.md、Docs/FR24Query.md 和本执行记录。
+
+已完成的本地校验：
+
+- `node --check NavPlanner/Resources/Web/app.js` 成功。
+- CSS 大括号配对检查成功。
+- HTML 静态本地化覆盖检查成功：141 个 `data-i18n*` 属性均有翻译键，457 个翻译键已被扫描。
+- `swift -frontend -parse NavPlanner/Core/LocalDataStore/LocalDataStore.swift NavPlanner/Core/PlannerCore/PlannerService.swift NavPlanner/Core/WebBridge/NavPlannerSchemeHandler.swift NavPlanner/App/AppEnvironment.swift NavPlanner/Features/Map/MapWebView.swift` 成功。
+- `plutil -lint NavPlanner.xcodeproj/project.pbxproj NavPlanner/Support/PrivacyInfo.xcprivacy` 成功。
+- `git diff --check` 成功。
+- `python3 Tools/Parity/run_all_parity.py` 成功：RouteParity 22、TrackParity 7、ProcedureParity 6 均无差异。
+- 沙箱内 XcodeBuildMCP 因当前 `xcode-select -p` 指向 `/Library/Developer/CommandLineTools` 无法找到 `simctl`；沙箱内直接 `xcodebuild` 还会因 SwiftUI 宏插件 `sandbox_apply` 权限失败。已按审批在沙箱外用 `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer` 执行 arm64 iOS Simulator 构建，`xcodebuild ... ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build` 成功。
+- 当前 `simctl list devices booted` 无 booted simulator，本轮未完成安装、启动和截图。
+- `git -C NavPlanner-web status --short` 无输出，参考项目保持未修改。

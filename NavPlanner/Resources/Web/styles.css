@@ -1669,6 +1669,67 @@ body.left-panel-expanded .selection-table {
   color: var(--danger) !important;
 }
 
+.database-manager {
+  border-top: 1px solid var(--surface-line);
+  display: grid;
+  gap: 9px;
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.database-search-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content max-content;
+  gap: 7px;
+  align-items: center;
+}
+
+.database-search-row input {
+  margin: 0;
+}
+
+.database-list {
+  display: grid;
+  gap: 7px;
+}
+
+.database-file-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--surface-line);
+  border-radius: 10px;
+  padding: 9px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.database-file-card.is-invalid {
+  border-color: rgba(255, 123, 123, 0.34);
+}
+
+.database-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.database-badge {
+  border: 1px solid rgba(84, 189, 255, 0.34);
+  border-radius: 999px;
+  padding: 4px 7px;
+  color: rgba(190, 232, 255, 0.94);
+  font-size: 9px;
+  font-weight: 820;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.database-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
 .compact-button {
   min-height: 32px;
   padding: 0 10px;
@@ -4190,11 +4251,15 @@ html[data-theme="day"] .offline-progress {
 
   html:not([data-device="pad"]) .airport-name,
   html:not([data-device="pad"]) .airport-meta,
-  html:not([data-device="pad"]) .list-meta,
-  html:not([data-device="pad"]) .settings-row span,
-  html:not([data-device="pad"]) .copyright-card p {
+  html:not([data-device="pad"]) .list-meta {
     font-size: 7.4px;
     line-height: 1.16;
+  }
+
+  html:not([data-device="pad"]) .settings-row span,
+  html:not([data-device="pad"]) .copyright-card p {
+    font-size: 9px;
+    line-height: 1.28;
   }
 
   html:not([data-device="pad"]) .subheading,
@@ -4443,6 +4508,33 @@ html[data-theme="day"] .offline-progress {
   html:not([data-device="pad"]) .settings-row {
     grid-template-columns: minmax(0, 1fr);
     gap: 5px;
+  }
+
+  html:not([data-device="pad"]) .database-manager {
+    gap: 5px;
+    margin-top: 6px;
+    padding-top: 6px;
+  }
+
+  html:not([data-device="pad"]) .database-search-row,
+  html:not([data-device="pad"]) .database-actions {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+
+  html:not([data-device="pad"]) .database-list {
+    gap: 5px;
+  }
+
+  html:not([data-device="pad"]) .database-file-card {
+    gap: 5px;
+    padding: 5px;
+    border-radius: 8px;
+  }
+
+  html:not([data-device="pad"]) .database-badge {
+    padding: 2.5px 5px;
+    font-size: 6.8px;
   }
 
   html:not([data-device="pad"]) .query-primary-actions {

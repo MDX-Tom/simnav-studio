@@ -27,6 +27,7 @@
 - [x] 为 iPad 工作台加入 Settings 页面，同时保持既有布局。
 - [x] 调整 iPad 左右竖向折叠栏按钮配色，使日间 / 夜间主题下都与工作台面板和主色保持一致，并在首屏加载前同步主题；已增加显式日间样式兜底和缓存版本刷新，避免日间模式残留深蓝长条。
 - [x] Settings 支持从 Files 选择 `.s3db` / `.sqlite` / `.sqlite3` / `.db` 数据库并切换本地 SQLite 服务。
+- [x] Settings 增加本地数据库存储管理：数据库卡片位于应用图标与离线地图之间，显示数据库文件数量 / 空间占用、AIRAC / 修订、大小和修改时间，支持刷新、搜索、切换、删除非当前非内置库、恢复内置库，并在切库后清理航路和 nav-overlay 缓存。
 - [x] Settings 支持系统自动、日间、夜间外观模式。
 - [x] Settings 主题切换同步 SwiftUI 外壳安全区，让 iPhone 刘海区域随日间 / 夜间主题变色。
 - [x] 设计并接入日间三档 / 夜间三档 Liquid Glass App 图标，默认图标为日间均衡，上一轮默认档位下放为柔和，夜间图标弱化整图玻璃罩并改为航路/山体局部玻璃反光，Settings 可选择系统替代图标。
@@ -36,7 +37,7 @@
 - [x] 在 Settings 增加在线地图缓存管理：卡片标题为“在线地图缓存”，按钮行提供“清理缓存 / 刷新缓存”。
 - [x] 将 Plan 航路输入示例从 `RKZ *** P245` 改为 `KTM *** LXA`。
 - [x] 移除地图右下角水印 / attribution 显示。
-- [x] 禁用地图和页面空白处双击/双触放大，保留平移、双指缩放、缩放控件和点击弹窗。
+- [x] 主地图支持双击放大；页面空白和非地图区域继续拦截 WKWebView 双击 / 双触页面级放大，保留平移、双指缩放、缩放控件和点击弹窗。
 - [x] 修复 iPhone 输入框聚焦时 WebKit 系统输入附件栏顶起页面的问题，保持页面级视口不可滚动。
 - [x] 修复 iPhone 输入框无法进入编辑态的回归：撤销零高度 input accessory 覆盖，保留 WKWebView 外层 scroll view 触控能力，并改用原生单击聚焦 + click 阶段兜底聚焦，完全移除输入框 `touchstart` 聚焦桥，避免 `touchstart` 抢占 iOS 原生输入流程导致键盘闪退。
 - [x] 增加 iPhone 软键盘可见性处理：键盘出现时将 Web 工作台缩到键盘上方可见高度，隐藏底部 Tab，并把当前输入面板留在键盘上方。
@@ -73,6 +74,7 @@
 - [x] 将 Leaflet / MapLibre / maplibre-contour / pmtiles 前端依赖打包为本地 vendor 资源。
 - [x] 让 `navplanner://app/...` 支持嵌套资源、`/api/...` 绝对路径、nav-icons 和 vendor 文件。
 - [x] 为 Web 工作台补齐 `airway`、`map-cache`、`terrain`、`offline-maps` 占位 API，避免启动和底图失败阻塞叠加层。
+- [x] 清理 iOS 27 / Xcode beta 运行期红色提示：WKWebView 主页面改为 bundle file URL + 目录读权限加载，`file:` 页面仍通过 `navplanner://app` 访问本地 API；瓦片缓存版本从 query string 改为 `_v...` 路径段，scheme handler 兼容解析；禁用 MapLibre WebP 探测并关闭 `UIApplicationSupportsIndirectInputEvents`，消除 sandbox extension、WebP、PointerUI 和 `statusBarOrientation` 红字。保留 `<base href="navplanner://app/">` 以维持地图工作台资源加载，剩余 `cfprefsd Couldn't open ... plist` 归类为模拟器系统偏好探测噪声。
 - [x] 为 `/api/map-cache/google_terrain/...` 增加 Swift 本地异步缓存下载和 Esri / OpenTopoMap 兜底，修复在线地形图无法加载。
 - [x] 为 `/api/map-cache/status` 与 `/api/map-cache/clear` 增加 Swift 本地缓存统计和清理。
 - [x] nav-overlay 前端刷新改为双缓冲图层替换，iPhone 使用 SVG renderer 与延迟旧层移除，降低缩放后航路叠加层先消失再显示的闪烁。
@@ -81,7 +83,7 @@
 - [x] 运行时验证 iPhone Web 工作台搜索：`ZBAA` 可显示 Web 版搜索结果卡片。
 - [x] 运行时验证 iPhone 设置页：文件选择器可弹出，取消后状态回写，夜间模式可即时切换。
 - [x] 运行时验证 iPhone 地图触控：拖动平移、缩放按钮和航路点击弹窗可用。
-- [x] 运行时验证 iPad 设置页：Airport / Settings 切换可用，地图区和计划栏保持既有布局。
+- [x] 运行时验证 iPad 设置页：Airport / Query / Settings 切换可用，地图区和计划栏保持既有布局。
 
 ## 第二阶段：补齐 PlannerCore
 
@@ -124,14 +126,15 @@
 - [x] 将 `ZULS` / `ZUAL` 固定为 FR24 相关改动的验证航线；无已同步 FR24 会话时至少验证该航线的会话缺失 / Cloudflare 降级路径。
 - [ ] 继续补齐 FR24 在线增强的真实样例回归：会话缺失、Cloudflare 验证、轨迹不足、飞行中航班、跨日期变更线航班、噪声/稀疏轨迹和剩余错误提示细节。
 - [ ] 对齐 Web 弹窗、航路点命中层、非规划航路点击、空白关闭弹窗等交互细节。
-- [x] 将 Plan / Airport / Settings 常用路径的表单、按钮、空状态、机场详情、Procedure 和主要弹窗动作改为中文。
+- [x] 将 Plan / Airport / Query / Settings 常用路径的表单、按钮、空状态、机场详情、FR24 查询状态、Procedure 和主要弹窗动作改为中文。
 - [x] 提高计划航路地图标签清晰度，并收紧 iPhone Airport 页面跑道行、通信频率和 Procedure chip 的字号与控件高度。
 - [x] 重新设计 App 图标：用户提供的立体地形底图、无文字 S 形下降航路和右下角地面示意跑道；日间按饱和度 / 对比度分三档，默认使用均衡档，夜间使用蓝黑反色地形、紫色层次、暗橙航路和局部玻璃反光；本轮已将六套图标外框整体加宽，Settings 预览同步刷新。
 - [x] 二次清理离线地图管理页中文化：资源类型、供应商类型/格式、下载进度、范围选择、离线地形状态提示和 Swift 下载状态中的可见英文已改为中文。
 - [x] 三次清理 Web UI 中文化：机场弹窗详情字段、机场跑道摘要、Procedure 明细阶段 / 特征、Settings 数据库状态、控制台状态和进近标题中的可见英文已改为中文。
 - [x] 四次清理 Web UI 中文化：统一本地化常见网络、API、航路解析、轨迹匹配、离线地图下载和 App 图标回调错误提示，避免状态栏直接显示 `Request failed`、`Failed to fetch`、`Waypoint not found` 等英文。
-- [x] 增加 Web 工作台多语言支持：默认跟随系统首选语言，并在 Settings 增加系统语言 / 简体中文 / English 选择；Plan、Airport、Settings、Procedure、已打开的地图弹窗、离线地图和常见状态/错误提示可即时切换，同时保持 `SID` / `STAR` / `APPROACH`、`DCT`、`IFR`、`AIRAC` 等标识英文。
+- [x] 增加 Web 工作台多语言支持：默认跟随系统首选语言，并在 Settings 增加系统语言 / 简体中文 / English 选择；Plan、Airport、Query、Settings、Procedure、已打开的地图弹窗、离线地图和常见状态/错误提示可即时切换，同时保持 `SID` / `STAR` / `APPROACH`、`DCT`、`IFR`、`AIRAC` 等标识英文。
 - [x] 细化多语言即时刷新：语言切换时保留当前机场 / 航点 / 航路弹窗位置并重渲染弹窗内容，App 图标 Swift bridge 回调状态按当前语言显示。
+- [x] 精简 Plan / Query 说明文案：Route 输入不再显示示例占位，自动规划说明改为留空整条航路或使用 `***` 自动补航段；Query 页 FR24 会话状态只显示“浏览器会话已同步 / 未同步”，不再要求用户理解 Cookie / `_frPl` 状态。
 - [ ] 继续完成 Web UI 双语覆盖，优先清理底层服务透出的长错误、真实在线失败状态和更多控制台可见状态中的未本地化文案。
 
 ## 第三阶段：原生化与离线地图

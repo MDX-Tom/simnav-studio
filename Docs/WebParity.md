@@ -7,7 +7,8 @@
 - iOS `NavPlanner/Resources/Web/` 已包含 Web 参考版 `index.html` 的副本，入口文件为 `map.html`。
 - iOS `NavPlanner/Resources/Web/` 已包含 Web 参考版 `app.js`、`styles.css` 和 `nav-icons/`。
 - Leaflet、MapLibre GL、maplibre-contour、pmtiles 已打包到 `vendor/`，启动地图工作台不依赖 `unpkg.com`。
-- `WKURLSchemeHandler` 支持 `navplanner://app/...` 嵌套资源，并兼容 Web 代码中的 `/api/...` 绝对路径。
+- `WKURLSchemeHandler` 支持 `navplanner://app/...` 嵌套资源，并兼容 Web 代码中的 `/api/...` 绝对路径。iOS 主页面现在优先用 bundle file URL 加载，`<base href="navplanner://app/">` 保持资源和 API 行为与原自定义 scheme 入口一致；`app.js` 会在 `file:` / `about:` / null origin 下自动把 API origin 归一到 `navplanner://app`。
+- 离线瓦片、在线缓存瓦片和 PMTiles URL 已兼容 `_v...` 路径段版本号，替代 query string 资源版本；这既保留 Web 工作台缓存刷新能力，也减少 iOS 27 WebKit 对 file/custom-scheme 资源的查询参数诊断。
 - Web 工作台可通过 Swift 本地服务读取 `/api/header`、`/api/search`、`/api/airport/{ident}`、`/api/procedure/...`、`/api/nav-overlay`。
 - `/api/route/resolve` 已接收 `departure_runway` / `arrival_runway`；Route 留空时可自动选择 SID / STAR / APPROACH，并通过 `selected_procedures` 驱动 Web 工作台绘制 Procedure。
 - `/api/route/resolve` 已迁移 airway graph 基础 Dijkstra、同航路优先、partial airway + DCT fallback、`***` 自动补航段、带 airway 上下文的边界点解析、起降点 / 普通 route token 双查找优先级、自动航路连续 airway 合并、重复 airway / A-B-A 合并、内部 excluded airway 搜索通路，以及按数据库路径缓存的 airway graph / route-between；airway graph/expand 分组、heap tie-break、Procedure 候选顺序、Approach 前缀排序和 SQLite NULL 处理已按 Web 行为修正；`Tools/RouteParity` 已可重复比较 22 个 route resolve case，并包含点列签名和跨日期变更线几何摘要。
@@ -22,14 +23,15 @@
 - nav-overlay 前端绘制采用双缓冲 layer group 替换，缩放后旧航路叠加层会保留到新叠加层绘制完成；iPhone 额外使用 SVG renderer 和延迟旧层移除减少闪烁。
 - 地图左上角新增本地叠加层开关，覆盖地图层、自动 / 匹配航路与 nav-overlay 蓝色 airway、人工航路、SID / STAR / APPROACH、FR24 轨迹、terminal waypoints 和其他航点 / 导航台；开关只控制前端 Leaflet / MapLibre 图层显隐，不改变 Swift 本地 API payload，也不修改 `NavPlanner-web/` 参考项目。隐藏态只置灰图标，按钮背景、阴影和底纹保持和显示态一致。
 - 按航点绘制的规划航路会将主世界副本中参与绘制的全部航点加上与 Procedure 表格行点击相同的 SVG 脉冲高亮，便于对照 route payload 的点列和地图上实际航点。
-- iPhone 已按本地 App 需求调整为上部地图、下部 Plan / Airport / Settings 三标签；标签切换不重建地图。
+- iPhone 已按本地 App 需求调整为上部地图、下部 Plan / Airport / Query / Settings 四标签；标签切换不重建地图。
 - iPad 保持既有 Web 工作台布局，并新增 Settings 切换页。
-- Settings 支持本地数据库选择、日间/夜间/系统自动外观模式、日间三档 / 夜间三档 App 图标选择、离线地图管理、在线地图缓存管理和版权说明。
+- Settings 支持本地数据库选择和本地数据库存储管理，数据库卡片位于应用图标与离线地图之间，可查看数据库文件数量 / 空间占用、AIRAC / 修订、大小和修改时间，并支持切换、删除非当前非内置库、恢复内置库；同时支持日间/夜间/系统自动外观模式、日间三档 / 夜间三档 App 图标选择、离线地图管理、在线地图缓存管理和版权说明。
 - 地图右下角 attribution / 水印已移除。
-- Leaflet 双击缩放已禁用，并增加页面级双击/双触防放大保护，避免地图或下方面板空白处误放大。
+- 主地图 Leaflet 双击缩放已启用，双击地图可放大；页面级双击 / 双触防放大保护仍覆盖下方面板和非地图空白区域，避免 WKWebView 页面误放大。
 - MBTiles、Web `tiles.sqlite`、Web `tiles/` 文件布局已可由 Swift `MapStore` 读取本地瓦片；PMTiles 已通过本地 Range 响应接入 MapLibre `pmtiles://` 基础通路。
 - `/api/offline-maps/download` 已从占位改为 Swift 本地下载任务，支持 Web 版下载表单的供应商、范围、缩放、分级策略、状态轮询、取消和完成后 SQLite 瓦片库读取；下载器已保留启动前 provider 探测、12 worker / 24 inflight 有界并发、慢请求提示、连续失败中止、250 瓦片批量提交和旧散瓦片迁移。按最新产品要求，iOS 版不再暴露离线地图下载代理设置。
-- Plan / Airport / Settings 常用路径已从单一中文化推进到中英双语本地化，包含表单、按钮、空状态、机场详情、Procedure、地图弹窗动作、航路状态、常见错误提示、离线地图管理和在线缓存摘要；Settings 新增系统语言 / 简体中文 / English 选择，默认按系统首选语言显示。语言切换时已打开的机场 / 航点 / 航路弹窗会保留原 `latlng` 并重渲染当前语言内容；App 图标 Swift bridge 回调状态也按当前语言显示。Procedure 类型和必要航空标识固定为 `SID` / `STAR` / `APPROACH`、`DCT`、`IFR`、`AIRAC` 等英文，避免翻译破坏数据语义。
+- Plan / Airport / Query / Settings 常用路径已从单一中文化推进到中英双语本地化，包含表单、按钮、空状态、机场详情、Procedure、地图弹窗动作、航路状态、FR24 会话状态、常见错误提示、离线地图管理和在线缓存摘要；Settings 新增系统语言 / 简体中文 / English 选择，默认按系统首选语言显示。语言切换时已打开的机场 / 航点 / 航路弹窗会保留原 `latlng` 并重渲染当前语言内容；App 图标 Swift bridge 回调状态也按当前语言显示。Procedure 类型和必要航空标识固定为 `SID` / `STAR` / `APPROACH`、`DCT`、`IFR`、`AIRAC` 等英文，避免翻译破坏数据语义。
+- Xcode / iOS 27 beta 运行期清理已完成一轮：bundle sandbox extension、MapLibre WebP 探测、`PointerUI` / `statusBarOrientation` 红字均已消除。仍可能看到 `cfprefsd Couldn't open ... plist` 一类系统偏好文件探测日志；当前验证显示它不来自 `NavPlanner` 进程，也不对应 JS / WebBridge / 本地 API 错误，因此不通过屏蔽日志或移除 `<base>` 来换取表面干净。
 - iPhone 17 Pro 模拟器已验证 Web 移动布局加载，`ZBAA` 搜索结果可显示。
 - iPad Pro 13-inch (M5) 模拟器已验证 Web 工作台加载，竖屏按 Web 窄屏布局显示。
 
@@ -50,7 +52,7 @@
 - Web 版弹窗交互的完整验收：规划航路命中层、非规划航路点击、空白关闭、跨日期变更线多世界副本。
 - 底层服务长错误、真实在线失败状态和更多控制台状态中仍可能有未本地化文案，需要逐步补齐中文 / English 双语展示，同时保持交互结构与参考版一致。
 - iPad 横屏、iPad 竖屏、iPhone 真机键盘高度和 Home Indicator 细节仍需逐项截图回归；当前 iPhone 17 Pro 模拟器已确认键盘可唤起且页面不整体上移。
-- 本地导入数据库当前只做文件复制与 SQLite 打开校验，尚未做完整 schema 兼容性检查。
+- 本地导入数据库当前会保留多个数据库文件并提供列表 / 搜索 / 切换 / 删除 / 恢复内置库，但仍只做文件复制与 SQLite 打开校验，尚未做完整 schema 兼容性检查。
 
 ## 下一步验收清单
 

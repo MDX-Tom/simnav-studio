@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+    <base href="navplanner://app/" />
+    <meta name="navplanner-resource-version" content="20260611-xcode-runtime-cleanup" />
     <title>航空航路规划器</title>
     <script>
       (() => {
@@ -45,7 +47,7 @@
     </script>
     <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
     <link rel="stylesheet" href="/vendor/maplibre-gl/maplibre-gl.css" />
-    <link rel="stylesheet" href="/styles.css?v=20260609-overlay-left-airways" />
+    <link rel="stylesheet" href="/styles.css" />
   </head>
   <body data-mobile-tab="plan">
     <div class="shell">
@@ -87,8 +89,7 @@
             <textarea
               id="routeInput"
               rows="4"
-              placeholder="例如：DOVAN A1 KEC B213 LIPRO 或 KTM *** LXA"
-              data-i18n-placeholder="plan.routePlaceholder"
+              placeholder=""
             ></textarea>
           </div>
 
@@ -98,7 +99,7 @@
             <button id="planClearTrackButton" class="ghost-button" type="button" data-i18n="query.clearTrack">清除轨迹绘制</button>
           </div>
           <button id="stopRequestButton" class="stop-button hidden" type="button" disabled data-i18n="plan.stopTask">停止当前任务</button>
-          <div class="helper-text" data-i18n="plan.autoRouteHint">航路留空时，会从本地 `tbl_enroute_airways` 自动规划最近 IFR 航路。</div>
+          <div class="helper-text" data-i18n="plan.autoRouteHint">留空航路以自动规划整条航路，或在航点间输入'***'以自动规划航路片段</div>
           <div class="status" id="statusText" data-i18n="status.waitingRoute">等待输入航路。</div>
         </section>
 
@@ -290,7 +291,6 @@
                 <button id="fr24RestoreMatchButton" class="ghost-button compact-button" type="button" data-i18n="query.restoreMatch">还原轨迹匹配</button>
               </div>
             </div>
-            <div class="helper-text" data-i18n="query.hint">FR24 是在线增强；查询或下载失败不会影响本地航路、Procedure、nav-overlay 和离线地图。</div>
           </div>
 
           <div class="query-card query-manual-flight-card">
@@ -306,7 +306,7 @@
             <div class="settings-row">
               <div>
                 <strong data-i18n="query.access">FR24 网络访问</strong>
-                <span id="fr24AccessSummary" data-i18n="query.accessInitial">未同步 FR24 Web 会话。</span>
+                <span id="fr24AccessSummary" data-i18n="query.accessInitial">浏览器会话未同步。</span>
               </div>
             </div>
             <div class="settings-action-row query-access-actions">
@@ -315,7 +315,7 @@
               <button id="fr24RefreshAccessButton" class="ghost-button compact-button" type="button" data-i18n="common.refreshStatus">刷新状态</button>
               <button id="fr24ClearAccessButton" class="ghost-button compact-button" type="button" data-i18n="query.accessClear">清除会话配置</button>
             </div>
-            <div class="helper-text" data-i18n="query.accessHint">在 App 内打开 FR24 验证页并正常完成验证，然后同步会话；无需手动查 Cookie。App 只复用你已完成验证的会话，不绕过 Cloudflare。失败不会影响本地航路、Procedure、nav-overlay 和离线地图。</div>
+            <div class="helper-text" data-i18n="query.accessHint">在 App 内打开 FR24 验证页并正常完成验证，然后同步会话，即可查询 FR24 航班。</div>
             <details class="query-manual-access">
               <summary data-i18n="query.accessManual">高级：手动会话配置（可选）</summary>
               <div class="query-access-grid">
@@ -366,18 +366,6 @@
         <section id="settingsSection" class="detail-tab-panel settings-section hidden" data-detail-panel="settings">
           <div class="section-label" data-i18n="nav.settings">设置</div>
           <div class="settings-card">
-            <div class="subheading" data-i18n="settings.database">导航数据库</div>
-            <div class="settings-row">
-              <div>
-                <strong id="databaseNameText">navdata.sqlite</strong>
-                <span id="databaseStatusText" data-i18n="database.loading">正在读取本地导航数据库...</span>
-              </div>
-              <button id="selectDatabaseButton" class="ghost-button compact-button" type="button" data-i18n="settings.chooseS3db">选择 s3db</button>
-            </div>
-            <div class="helper-text" data-i18n="settings.databaseHint">支持从“文件”中选择 .s3db / .sqlite / .db，导入后核心查询会切换到新的本地数据库。</div>
-          </div>
-
-          <div class="settings-card">
             <div class="subheading" data-i18n="settings.appearance">外观</div>
             <div class="theme-choice-group" role="radiogroup" aria-label="外观模式" data-i18n-aria-label="settings.appearanceMode">
               <button class="theme-choice active" type="button" data-theme-choice="system" data-i18n="theme.system">系统自动</button>
@@ -403,15 +391,15 @@
                 <div class="app-icon-choice-heading" data-i18n="theme.day">日间</div>
                 <div class="app-icon-choice-row">
                   <button class="app-icon-choice" type="button" data-app-icon-choice="day-high">
-                    <img class="app-icon-preview" src="/app-icons/day-high.png?v=20260604-icon-wider-border" alt="" />
+                    <img class="app-icon-preview" src="/app-icons/day-high.png" alt="" />
                     <span data-i18n="appIcon.highSaturation">高饱和</span>
                   </button>
                   <button class="app-icon-choice active" type="button" data-app-icon-choice="primary">
-                    <img class="app-icon-preview" src="/app-icons/day-medium.png?v=20260604-icon-wider-border" alt="" />
+                    <img class="app-icon-preview" src="/app-icons/day-medium.png" alt="" />
                     <span data-i18n="appIcon.default">默认</span>
                   </button>
                   <button class="app-icon-choice" type="button" data-app-icon-choice="day-soft">
-                    <img class="app-icon-preview" src="/app-icons/day-soft.png?v=20260604-icon-wider-border" alt="" />
+                    <img class="app-icon-preview" src="/app-icons/day-soft.png" alt="" />
                     <span data-i18n="appIcon.soft">柔和</span>
                   </button>
                 </div>
@@ -420,21 +408,49 @@
                 <div class="app-icon-choice-heading" data-i18n="theme.night">夜间</div>
                 <div class="app-icon-choice-row">
                   <button class="app-icon-choice" type="button" data-app-icon-choice="night-high">
-                    <img class="app-icon-preview" src="/app-icons/night-high.png?v=20260604-icon-wider-border" alt="" />
+                    <img class="app-icon-preview" src="/app-icons/night-high.png" alt="" />
                     <span data-i18n="appIcon.highContrast">高对比</span>
                   </button>
                   <button class="app-icon-choice" type="button" data-app-icon-choice="night-medium">
-                    <img class="app-icon-preview" src="/app-icons/night-medium.png?v=20260604-icon-wider-border" alt="" />
+                    <img class="app-icon-preview" src="/app-icons/night-medium.png" alt="" />
                     <span data-i18n="appIcon.balanced">均衡</span>
                   </button>
                   <button class="app-icon-choice" type="button" data-app-icon-choice="night-soft">
-                    <img class="app-icon-preview" src="/app-icons/night-soft.png?v=20260604-icon-wider-border" alt="" />
+                    <img class="app-icon-preview" src="/app-icons/night-soft.png" alt="" />
                     <span data-i18n="appIcon.soft">柔和</span>
                   </button>
                 </div>
               </div>
             </div>
             <div class="helper-text" data-i18n="settings.appIconHint">默认图标为日间均衡，夜间图标使用蓝黑反色地形、紫色层次和暗橙航路。</div>
+          </div>
+
+          <div class="settings-card">
+            <div class="subheading" data-i18n="settings.database">导航数据库</div>
+            <div class="settings-row">
+              <div>
+                <strong id="databaseNameText">navdata.sqlite</strong>
+                <span id="databaseStatusText" data-i18n="database.loading">正在读取本地导航数据库...</span>
+              </div>
+              <button id="selectDatabaseButton" class="ghost-button compact-button" type="button" data-i18n="settings.chooseS3db">选择 s3db</button>
+            </div>
+            <div class="helper-text" data-i18n="settings.databaseHint">支持从“文件”中选择 .s3db / .sqlite / .db，导入后核心查询会切换到新的本地数据库。</div>
+            <div class="database-manager">
+              <div class="settings-row">
+                <div>
+                  <strong data-i18n="database.storageTitle">本地数据库存储</strong>
+                  <span id="databaseStorageSummary" data-i18n="database.storageInitial">本地数据库文件数量和空间占用会在这里显示。</span>
+                </div>
+              </div>
+              <div class="database-search-row">
+                <input id="databaseSearchInput" autocomplete="off" spellcheck="false" placeholder="搜索数据库、AIRAC 或修订" data-i18n-placeholder="database.searchPlaceholder" />
+                <button id="refreshDatabaseListButton" class="ghost-button compact-button" type="button" data-i18n="common.refreshStatus">刷新状态</button>
+                <button id="restoreBundledDatabaseButton" class="ghost-button compact-button" type="button" data-i18n="database.restoreBuiltIn">恢复内置库</button>
+              </div>
+              <div id="databaseList" class="database-list" aria-live="polite">
+                <div class="query-empty" data-i18n="database.listInitial">进入设置页后读取本地数据库文件。</div>
+              </div>
+            </div>
           </div>
 
           <div class="settings-card">
@@ -469,9 +485,9 @@
 
           <div class="settings-card copyright-card">
             <div class="subheading" data-i18n="settings.copyright">版权与说明</div>
-            <p data-i18n="settings.copyrightP1">NavPlanner iOS 使用本地导航数据库和本地地图资源提供离线航路规划能力。</p>
-            <p data-i18n="settings.copyrightP2">地图底图、离线地图包和导航数据版权归各自数据来源所有；请确认你有权在本机使用导入的数据文件。</p>
-            <p data-i18n="settings.copyrightP3">当前版本为本地优先离线 MVP，不启动 Python server，不依赖局域网服务完成核心查询与规划。</p>
+            <p data-i18n="settings.copyrightP1">NavPlanner 是面向航路规划和航图查看的本地优先工具，可在本机数据库上完成机场、航点、航路、SID / STAR / APPROACH 与 nav-overlay 查询。</p>
+            <p data-i18n="settings.copyrightP2">在计划页填写起降机场并生成航路，在机场页查看程序和跑道信息，在查询页检索并绘制 FR24 轨迹，在设置页管理数据库、离线地图、缓存、外观、语言和图标。</p>
+            <p data-i18n="settings.copyrightP3">地图底图、离线地图包和导航数据版权归各自数据来源所有；App 开发者为 MDX。</p>
           </div>
         </section>
       </aside>
@@ -534,6 +550,6 @@
     <script src="/vendor/maplibre-gl/maplibre-gl.js"></script>
     <script src="/vendor/maplibre-contour/index.min.js"></script>
     <script src="/vendor/pmtiles/pmtiles.js"></script>
-    <script src="/app.js?v=20260609-overlay-left-airways" type="module"></script>
+    <script src="/app.js" type="module"></script>
   </body>
 </html>
