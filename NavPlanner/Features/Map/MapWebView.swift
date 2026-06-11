@@ -34,8 +34,8 @@ struct MapWebView: UIViewRepresentable {
         webView.uiDelegate = context.coordinator
         webView.isOpaque = false
         webView.backgroundColor = .clear
-        // iPhone 键盘弹出时仍需让 WKWebView 接收原生输入手势；页面级偏移由 Coordinator 锁定。
-        webView.scrollView.isScrollEnabled = deviceClass == "phone"
+        // 需要保持 scroll view 可用，WKWebView 才能把外接鼠标滚轮 / 触控板事件交给地图；页面级偏移仍由 Coordinator 锁定。
+        webView.scrollView.isScrollEnabled = true
         webView.scrollView.delegate = context.coordinator
         context.coordinator.locksOuterScroll = deviceClass == "phone"
         webView.scrollView.minimumZoomScale = 1

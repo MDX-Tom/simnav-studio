@@ -588,6 +588,8 @@ const state = {
   procedureCache: new Map(),
   airportPopupCache: new Map(),
   activeNavPopup: null,
+  pendingMapPopupTimer: 0,
+  mapPopupSuppressUntil: 0,
   refreshingNavPopup: false,
   activeSelectionProcedure: null,
   selectionHighlightLayer: null,
@@ -662,7 +664,12 @@ const state = {
 
 const MAP_ZOOM = {
   controlStep: 0.5,
+  doubleClickStep: 0.75,
+  doubleClickPopupDelay: 280,
+  doubleClickPopupGuard: 420,
   wheelSpeed: 0.0065,
+  wheelMaxFrameDelta: 1.2,
+  trackpadGestureSpeed: 1.15,
   wheelIdleDelay: 140,
 };
 const DOUBLE_TAP_ZOOM_GUARD_MS = 320;
@@ -930,7 +937,7 @@ const map = L.map("map", {
   zoomSnap: 0,
   zoomDelta: MAP_ZOOM.controlStep,
   scrollWheelZoom: false,
-  doubleClickZoom: true,
+  doubleClickZoom: false,
   zoomAnimation: true,
   markerZoomAnimation: false,
   preferCanvas: true,
@@ -1141,6 +1148,8 @@ L.control.zoom({ position: "bottomright" }).addTo(map);
 createMapTypeControl().addTo(map);
 
 installSmoothWheelZoom(map);
+installTrackpadGestureZoom(map);
+installMapDoubleClickZoom(map);
 installPageDoubleTapZoomGuard();
 installMobileViewportLock();
 installMobilePanelDragHandle();
@@ -3946,18 +3955,145 @@ function clampZoom(mapInstance, zoom) {
 }
 
 /**
+ * 功能：获取地图容器内的事件坐标。
+ * 输入：mapInstance、event。
+ * 输出：Leaflet point。
+ */
+function mapContainerPointFromEvent(mapInstance, event) {
+  const container = mapInstance.getContainer();
+  const bounds = container.getBoundingClientRect();
+  return L.point(event.clientX - bounds.left, event.clientY - bounds.top);
+}
+
+/**
+ * 功能：按地图容器坐标缩放，供滚轮、触控板和双击共用。
+ * 输入：mapInstance、anchorPoint、zoom、options。
+ * 输出：更新地图相机。
+ */
+function zoomAroundContainerPoint(mapInstance, anchorPoint, zoom, options = {}) {
+  const nextZoom = clampZoom(mapInstance, zoom);
+  mapInstance.setZoomAround(anchorPoint, nextZoom, options);
+}
+
+/**
+ * 功能：取消尚未打开的地图 popup 点击动作。
+ * 输入：无。
+ * 输出：清空 pending timer。
+ */
+function cancelPendingMapPopupAction() {
+  if (!state.pendingMapPopupTimer) {
+    return;
+  }
+  window.clearTimeout(state.pendingMapPopupTimer);
+  state.pendingMapPopupTimer = 0;
+}
+
+/**
+ * 功能：在地图缩放手势期间临时禁止 popup 点击动作。
+ * 输入：duration 为保护时长。
+ * 输出：取消待打开 popup，并设置保护时间窗。
+ */
+function suppressMapPopupActions(duration = MAP_ZOOM.doubleClickPopupGuard) {
+  cancelPendingMapPopupAction();
+  state.mapPopupSuppressUntil = Math.max(
+    state.mapPopupSuppressUntil || 0,
+    window.performance.now() + duration,
+  );
+}
+
+/**
+ * 功能：判断当前地图点击是否应被双击/缩放手势吞掉。
+ * 输入：event 为 Leaflet 事件。
+ * 输出：需要忽略 popup 动作时返回 true。
+ */
+function shouldSuppressMapPopupAction(event) {
+  if (window.performance.now() < (state.mapPopupSuppressUntil || 0)) {
+    return true;
+  }
+  if ((event?.originalEvent?.detail || 0) > 1) {
+    suppressMapPopupActions();
+    return true;
+  }
+  return false;
+}
+
+/**
+ * 功能：延迟执行地图 popup 动作，让双击缩放有机会取消第一次点击。
+ * 输入：event、action。
+ * 输出：调度成功返回 true。
+ */
+function scheduleMapPopupAction(event, action) {
+  stopMapEvent(event);
+  if (event?._plannerMapPopupScheduled || event?.originalEvent?._plannerMapPopupScheduled) {
+    if (shouldSuppressMapPopupAction(event)) {
+      return false;
+    }
+    action();
+    return true;
+  }
+  if (shouldSuppressMapPopupAction(event)) {
+    return false;
+  }
+  cancelPendingMapPopupAction();
+  const delay = (event?.originalEvent?.detail || 0) === 1
+    ? MAP_ZOOM.doubleClickPopupDelay
+    : 0;
+  const run = () => {
+    state.pendingMapPopupTimer = 0;
+    if (window.performance.now() < (state.mapPopupSuppressUntil || 0)) {
+      return;
+    }
+    if (event) {
+      event._plannerMapPopupScheduled = true;
+    }
+    if (event?.originalEvent) {
+      event.originalEvent._plannerMapPopupScheduled = true;
+    }
+    try {
+      action();
+    } finally {
+      if (event) {
+        event._plannerMapPopupScheduled = false;
+      }
+      if (event?.originalEvent) {
+        event.originalEvent._plannerMapPopupScheduled = false;
+      }
+    }
+  };
+  if (delay <= 0) {
+    run();
+  } else {
+    state.pendingMapPopupTimer = window.setTimeout(run, delay);
+  }
+  return true;
+}
+
+/**
  * 功能：规范化 `normalizeWheelDelta` 对应的业务逻辑。
  * 输入：event。
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
 function normalizeWheelDelta(event) {
   let modeMultiplier = 1;
-  if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
+  if (typeof WheelEvent !== "undefined" && event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
     modeMultiplier = 18;
-  } else if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) {
+  } else if (typeof WheelEvent !== "undefined" && event.deltaMode === WheelEvent.DOM_DELTA_PAGE) {
     modeMultiplier = 320;
   }
   return -event.deltaY * modeMultiplier * MAP_ZOOM.wheelSpeed;
+}
+
+/**
+ * 功能：处理地图缩放手势结束后的视觉状态。
+ * 输入：container、delay。
+ * 输出：延迟移除缩放中的 class。
+ */
+function finishMapInputZoom(container, delay = MAP_ZOOM.wheelIdleDelay) {
+  window.clearTimeout(container._plannerZoomIdleTimer || 0);
+  container._plannerZoomIdleTimer = window.setTimeout(() => {
+    container.classList.remove("is-smooth-zooming");
+    container._plannerZoomIdleTimer = 0;
+  }, delay);
 }
 
 /**
@@ -3970,21 +4106,15 @@ function installSmoothWheelZoom(mapInstance) {
   let queuedDelta = 0;
   let anchorPoint = null;
   let frameId = 0;
-  let idleTimer = 0;
-
-  const finishZoom = () => {
-    container.classList.remove("is-smooth-zooming");
-  };
 
   const applyZoom = () => {
     frameId = 0;
     if (!queuedDelta || !anchorPoint) {
       return;
     }
-    const frameDelta = Math.max(-1.2, Math.min(1.2, queuedDelta));
-    const nextZoom = clampZoom(mapInstance, mapInstance.getZoom() + frameDelta);
+    const frameDelta = Math.max(-MAP_ZOOM.wheelMaxFrameDelta, Math.min(MAP_ZOOM.wheelMaxFrameDelta, queuedDelta));
     queuedDelta = 0;
-    mapInstance.setZoomAround(anchorPoint, nextZoom, { animate: false });
+    zoomAroundContainerPoint(mapInstance, anchorPoint, mapInstance.getZoom() + frameDelta, { animate: false });
   };
 
   container.addEventListener(
@@ -3994,17 +4124,106 @@ function installSmoothWheelZoom(mapInstance) {
         return;
       }
       event.preventDefault();
-      const bounds = container.getBoundingClientRect();
-      anchorPoint = L.point(event.clientX - bounds.left, event.clientY - bounds.top);
+      anchorPoint = mapContainerPointFromEvent(mapInstance, event);
       queuedDelta += normalizeWheelDelta(event);
       container.classList.add("is-smooth-zooming");
-      window.clearTimeout(idleTimer);
-      idleTimer = window.setTimeout(finishZoom, MAP_ZOOM.wheelIdleDelay);
+      finishMapInputZoom(container);
       if (!frameId) {
         frameId = window.requestAnimationFrame(applyZoom);
       }
     },
     { passive: false },
+  );
+}
+
+/**
+ * 功能：安装 WebKit 触控板捏合缩放。
+ * 输入：mapInstance。
+ * 输出：监听 gesturestart / gesturechange / gestureend。
+ */
+function installTrackpadGestureZoom(mapInstance) {
+  const container = mapInstance.getContainer();
+  let startZoom = mapInstance.getZoom();
+  let anchorPoint = null;
+
+  const resetGesture = () => {
+    finishMapInputZoom(container);
+    anchorPoint = null;
+  };
+
+  container.addEventListener(
+    "gesturestart",
+    (event) => {
+      event.preventDefault();
+      suppressMapPopupActions();
+      startZoom = mapInstance.getZoom();
+      anchorPoint = mapContainerPointFromEvent(mapInstance, event);
+      container.classList.add("is-smooth-zooming");
+    },
+    { passive: false },
+  );
+  container.addEventListener(
+    "gesturechange",
+    (event) => {
+      if (!anchorPoint) {
+        anchorPoint = mapContainerPointFromEvent(mapInstance, event);
+      }
+      event.preventDefault();
+      suppressMapPopupActions();
+      const scale = Math.max(0.05, Number(event.scale) || 1);
+      const delta = Math.log2(scale) * MAP_ZOOM.trackpadGestureSpeed;
+      container.classList.add("is-smooth-zooming");
+      zoomAroundContainerPoint(mapInstance, anchorPoint, startZoom + delta, { animate: false });
+    },
+    { passive: false },
+  );
+  container.addEventListener("gestureend", resetGesture, { passive: true });
+  container.addEventListener("gesturecancel", resetGesture, { passive: true });
+}
+
+/**
+ * 功能：安装主地图双击缩放，并阻止双击落到弹窗点击逻辑。
+ * 输入：mapInstance。
+ * 输出：dblclick 仅缩放地图，不打开航点 / 航路弹窗。
+ */
+function installMapDoubleClickZoom(mapInstance) {
+  mapInstance.doubleClickZoom?.disable();
+  const container = mapInstance.getContainer();
+  container.addEventListener(
+    "click",
+    (event) => {
+      if ((event.detail || 0) <= 1) {
+        return;
+      }
+      suppressMapPopupActions();
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation?.();
+    },
+    { capture: true },
+  );
+  container.addEventListener(
+    "dblclick",
+    (event) => {
+      if (event.target instanceof Element && event.target.closest(
+        "button, input, textarea, select, a, .leaflet-control, .leaflet-popup, .map-type-menu, .offline-map-dialog",
+      )) {
+        return;
+      }
+      suppressMapPopupActions();
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation?.();
+      const direction = event.shiftKey ? -1 : 1;
+      const anchorPoint = mapContainerPointFromEvent(mapInstance, event);
+      zoomAroundContainerPoint(
+        mapInstance,
+        anchorPoint,
+        mapInstance.getZoom() + (MAP_ZOOM.doubleClickStep * direction),
+        { animate: true },
+      );
+    },
+    { capture: true },
   );
 }
 
@@ -5491,9 +5710,10 @@ function drawPointMarker(point, highlighted = false, options = {}) {
   })
     .addTo(options.group || markerLayerGroup);
   marker.on("click", (event) => {
-    stopMapEvent(event);
-    const popupPoint = options.popupPoint || normalizePopupPoint(point);
-    showNavPointPopup(popupPoint, event.latlng);
+    scheduleMapPopupAction(event, () => {
+      const popupPoint = options.popupPoint || normalizePopupPoint(point);
+      showNavPointPopup(popupPoint, event.latlng);
+    });
   });
   state.airportMarkers.set(key, marker);
   return marker;
@@ -6351,8 +6571,7 @@ function addTextLabel(lat, lon, text, className, options = {}) {
   }).addTo(options.group || labelLayerGroup);
   if (options.onClick) {
     marker.on("click", (event) => {
-      stopMapEvent(event);
-      options.onClick(event.latlng, event);
+      scheduleMapPopupAction(event, () => options.onClick(event.latlng, event));
     });
   }
   state.labelMarkers.push(marker);
@@ -6386,8 +6605,7 @@ function addNavLabel(lat, lon, text, className, options = {}) {
   }).addTo(options.group || navLabelLayerGroup);
   if (options.onClick) {
     marker.on("click", (event) => {
-      stopMapEvent(event);
-      options.onClick(event.latlng, event);
+      scheduleMapPopupAction(event, () => options.onClick(event.latlng, event));
     });
   }
   if (options.airwayName) {
@@ -6852,9 +7070,10 @@ function showAirwayPopup(airway, latlng) {
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
 function showAirwayPopupFromEvent(airway, event) {
-  stopMapEvent(event);
-  toggleSelectedNavAirway(airway.name);
-  showAirwayPopup(airway, event.latlng);
+  scheduleMapPopupAction(event, () => {
+    toggleSelectedNavAirway(airway.name);
+    showAirwayPopup(airway, event.latlng);
+  });
 }
 
 /**
@@ -6964,8 +7183,7 @@ function addPopupHitCircle(point, latlng, options = {}) {
   })
     .addTo(options.group || navLayerGroup)
     .on("click", (event) => {
-      stopMapEvent(event);
-      options.onClick?.(event.latlng, event);
+      scheduleMapPopupAction(event, () => options.onClick?.(event.latlng, event));
     });
 }
 
@@ -6991,8 +7209,7 @@ function drawNavSymbol(point, className, options = {}) {
   }).addTo(group);
   if (options.interactive) {
     marker.on("click", (event) => {
-      stopMapEvent(event);
-      showNavPointPopup(point, event.latlng);
+      scheduleMapPopupAction(event, () => showNavPointPopup(point, event.latlng));
     });
     addPopupHitCircle(point, [point.lat, point.lon], {
       group,
@@ -7037,8 +7254,7 @@ function drawNavIcon(point, className, symbolClass, options = {}) {
     }),
   }).addTo(group);
   marker.on("click", (event) => {
-    stopMapEvent(event);
-    showNavPointPopup(point, event.latlng);
+    scheduleMapPopupAction(event, () => showNavPointPopup(point, event.latlng));
   });
   if (options.label !== false) {
     addNavLabel(point.lat, point.lon, point.ident, className, {
@@ -7849,8 +8065,7 @@ function addRoutePointHitTarget(point, associations) {
   })
     .addTo(routeLayerGroup)
     .on("click", (event) => {
-      stopMapEvent(event);
-      showNavPointPopup(popupPoint, event.latlng);
+      scheduleMapPopupAction(event, () => showNavPointPopup(popupPoint, event.latlng));
     });
 }
 
@@ -8001,9 +8216,10 @@ function drawRouteCopy(points, payload, routeAssociations, longitudeOffset, fitB
         hitLayer.on("mouseover", () => setAirwayHighlight(airwayKey, true));
         hitLayer.on("mouseout", () => setAirwayHighlight(airwayKey, false));
         hitLayer.on("click", (event) => {
-          stopMapEvent(event);
-          setAirwayHighlight(airwayKey, true);
-          showRouteLegPopup(leg, event.latlng);
+          scheduleMapPopupAction(event, () => {
+            setAirwayHighlight(airwayKey, true);
+            showRouteLegPopup(leg, event.latlng);
+          });
         });
         registerAirwaySegmentLayer(airwayKey, visibleLayer, hitLayer);
       }
