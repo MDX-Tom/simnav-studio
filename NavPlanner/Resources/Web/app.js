@@ -1,7 +1,12 @@
 const savedThemeMode = readLocalStorageValue("navplannerThemeMode");
 const savedAppIconChoice = readLocalStorageValue("navplannerAppIconChoice");
 const savedLanguageMode = readLocalStorageValue("navplannerLanguageMode");
-const NAVPLANNER_API_ORIGIN = window.location.protocol === "navplanner:" ? "navplanner://app" : window.location.origin;
+const NAVPLANNER_API_ORIGIN = (window.location.protocol === "navplanner:"
+  || window.location.protocol === "about:"
+  || window.location.protocol === "file:"
+  || window.location.origin === "null")
+  ? "navplanner://app"
+  : window.location.origin;
 const apiResourceUrl = (path) => `${NAVPLANNER_API_ORIGIN}${path}`;
 const THEME_MODES = new Set(["system", "day", "night"]);
 const LANGUAGE_MODES = new Set(["system", "zh-Hans", "en"]);
@@ -23,12 +28,12 @@ const TRANSLATIONS = {
   "plan.departureRunway": { "zh-Hans": "起飞跑道", en: "Departure Runway" },
   "plan.arrivalRunway": { "zh-Hans": "到达跑道", en: "Arrival Runway" },
   "plan.route": { "zh-Hans": "航路", en: "Route" },
-  "plan.routePlaceholder": { "zh-Hans": "例如：DOVAN A1 KEC B213 LIPRO 或 KTM *** LXA", en: "Example: DOVAN A1 KEC B213 LIPRO or KTM *** LXA" },
+  "plan.routePlaceholder": { "zh-Hans": "", en: "" },
   "plan.buildRoute": { "zh-Hans": "生成并绘制航路", en: "Build & Draw" },
   "plan.recalculate": { "zh-Hans": "重新计算", en: "Recalculate" },
   "plan.matchTrack": { "zh-Hans": "匹配轨迹", en: "Match Track" },
   "plan.stopTask": { "zh-Hans": "停止当前任务", en: "Stop Current Task" },
-  "plan.autoRouteHint": { "zh-Hans": "航路留空时，会从本地 `tbl_enroute_airways` 自动规划最近 IFR 航路。", en: "Leave Route blank to plan the nearest IFR airway locally from `tbl_enroute_airways`." },
+  "plan.autoRouteHint": { "zh-Hans": "留空航路以自动规划整条航路，或在航点间输入'***'以自动规划航路片段", en: "Leave Route blank to auto-plan the whole route, or enter '***' between waypoints to auto-plan that segment." },
   "status.waitingRoute": { "zh-Hans": "等待输入航路。", en: "Waiting for route input." },
   "section.legs": { "zh-Hans": "航段", en: "Legs" },
   "section.selectedProcedures": { "zh-Hans": "已选程序", en: "Selected Procedures" },
@@ -87,9 +92,9 @@ const TRANSLATIONS = {
   "settings.offlineMaps": { "zh-Hans": "离线地图", en: "Offline Maps" },
   "settings.mapCache": { "zh-Hans": "在线地图缓存", en: "Online Map Cache" },
   "settings.copyright": { "zh-Hans": "版权与说明", en: "Copyright & Notes" },
-  "settings.copyrightP1": { "zh-Hans": "NavPlanner iOS 使用本地导航数据库和本地地图资源提供离线航路规划能力。", en: "NavPlanner iOS uses local navigation databases and local map resources for offline route planning." },
-  "settings.copyrightP2": { "zh-Hans": "地图底图、离线地图包和导航数据版权归各自数据来源所有；请确认你有权在本机使用导入的数据文件。", en: "Base maps, offline map packages, and navigation data remain copyrighted by their sources. Make sure you have the right to use imported data on this device." },
-  "settings.copyrightP3": { "zh-Hans": "当前版本为本地优先离线 MVP，不启动 Python server，不依赖局域网服务完成核心查询与规划。", en: "This local-first offline MVP does not start a Python server and does not require LAN services for core queries or planning." },
+  "settings.copyrightP1": { "zh-Hans": "NavPlanner 是面向航路规划和航图查看的本地优先工具，可在本机数据库上完成机场、航点、航路、SID / STAR / APPROACH 与 nav-overlay 查询。", en: "NavPlanner is a local-first route planning and chart inspection tool for airports, waypoints, routes, SID / STAR / APPROACH data, and nav-overlay queries from the on-device database." },
+  "settings.copyrightP2": { "zh-Hans": "在计划页填写起降机场并生成航路，在机场页查看程序和跑道信息，在查询页检索并绘制 FR24 轨迹，在设置页管理数据库、离线地图、缓存、外观、语言和图标。", en: "Use Plan to enter airports and build routes, Airport to inspect procedures and runways, Query to find and draw FR24 tracks, and Settings to manage databases, offline maps, cache, appearance, language, and icons." },
+  "settings.copyrightP3": { "zh-Hans": "地图底图、离线地图包和导航数据版权归各自数据来源所有；App 开发者为 MDX。", en: "Base maps, offline map packages, and navigation data remain copyrighted by their sources. The app developer is MDX." },
   "theme.system": { "zh-Hans": "系统自动", en: "System" },
   "theme.day": { "zh-Hans": "日间", en: "Day" },
   "theme.night": { "zh-Hans": "夜间", en: "Night" },
@@ -115,11 +120,30 @@ const TRANSLATIONS = {
   "database.ready": { "zh-Hans": "本地导航数据库已就绪", en: "Local navigation database is ready" },
   "database.unavailable": { "zh-Hans": "数据库不可用", en: "Database unavailable" },
   "database.revision": { "zh-Hans": "修订 {revision}", en: "Rev {revision}" },
-  "database.loaded": { "zh-Hans": "本地数据库已载入：AIRAC {airac}，修订 {revision}。", en: "Local database loaded: AIRAC {airac}, Rev {revision}." },
+  "database.loaded": { "zh-Hans": "本地导航数据库已就绪。", en: "Local navigation database is ready." },
   "database.iosOnly": { "zh-Hans": "本地数据库选择需要在 iOS App 内使用。", en: "Local database selection is available inside the iOS app." },
   "database.cancelled": { "zh-Hans": "已取消选择数据库文件。", en: "Database file selection cancelled." },
   "database.importFailed": { "zh-Hans": "导入数据库失败。", en: "Database import failed." },
   "database.switched": { "zh-Hans": "已切换本地导航数据库。", en: "Local navigation database switched." },
+  "database.storageTitle": { "zh-Hans": "本地数据库存储", en: "Local Database Storage" },
+  "database.storageInitial": { "zh-Hans": "本地数据库文件数量和空间占用会在这里显示。", en: "Local database file count and storage usage appear here." },
+  "database.storageSummary": { "zh-Hans": "{count} 个数据库文件，占用 {size}。", en: "{count} database files, using {size}." },
+  "database.searchPlaceholder": { "zh-Hans": "搜索数据库、AIRAC 或修订", en: "Search database, AIRAC, or revision" },
+  "database.restoreBuiltIn": { "zh-Hans": "恢复内置库", en: "Restore Built-in" },
+  "database.listInitial": { "zh-Hans": "进入设置页后读取本地数据库文件。", en: "Open Settings to read local database files." },
+  "database.listLoading": { "zh-Hans": "正在读取本地数据库文件...", en: "Reading local database files..." },
+  "database.listEmpty": { "zh-Hans": "没有找到本地数据库文件。", en: "No local database files found." },
+  "database.listLoaded": { "zh-Hans": "已读取 {count} 个本地数据库文件。", en: "Loaded {count} local database files." },
+  "database.active": { "zh-Hans": "当前使用", en: "Active" },
+  "database.builtIn": { "zh-Hans": "内置", en: "Built-in" },
+  "database.invalid": { "zh-Hans": "不可读", en: "Unreadable" },
+  "database.airac": { "zh-Hans": "AIRAC {airac}", en: "AIRAC {airac}" },
+  "database.modified": { "zh-Hans": "修改 {time}", en: "Modified {time}" },
+  "database.use": { "zh-Hans": "使用此库", en: "Use Database" },
+  "database.delete": { "zh-Hans": "删除文件", en: "Delete File" },
+  "database.deleteConfirm": { "zh-Hans": "确认删除本地数据库 {name}？当前使用和内置数据库不会被删除。", en: "Delete local database {name}? Active and built-in databases are protected." },
+  "database.deleted": { "zh-Hans": "已删除本地数据库文件。", en: "Local database file deleted." },
+  "database.restored": { "zh-Hans": "已恢复并启用内置导航数据库。", en: "Built-in navigation database restored and enabled." },
   "offline.loading": { "zh-Hans": "正在读取离线地图...", en: "Reading offline maps..." },
   "offline.summaryInitial": { "zh-Hans": "本地资源、下载任务和启用状态会在这里显示。", en: "Local resources, download jobs, and active state appear here." },
   "offline.manage": { "zh-Hans": "管理离线地图", en: "Manage Offline Maps" },
@@ -330,7 +354,7 @@ const TRANSLATIONS = {
   "track.stopped": { "zh-Hans": "轨迹匹配已停止。", en: "Track match stopped." },
   "query.title": { "zh-Hans": "FR24 航班查询", en: "FR24 Flight Query" },
   "query.search": { "zh-Hans": "查询", en: "Search" },
-  "query.hint": { "zh-Hans": "FR24 是在线增强；查询或下载失败不会影响本地航路、Procedure、nav-overlay 和离线地图。", en: "FR24 is an online enhancement. Query or download failures do not affect local routes, Procedure, nav-overlay, or offline maps." },
+  "query.hint": { "zh-Hans": "", en: "" },
   "query.statusInitial": { "zh-Hans": "填好起飞和到达机场后，可查询该航线的最新 FR24 航班。", en: "Enter departure and arrival first, then search recent FR24 flights on this route." },
   "query.manualHistoryTitle": { "zh-Hans": "手动航班历史", en: "Manual Flight History" },
   "query.manualHistoryHint": { "zh-Hans": "可输入航班号查询 FR24 历史页，或输入 flightId 直接生成可下载 / 匹配的单条历史记录。", en: "Enter a flight number to query its FR24 history page, or a flightId to create a downloadable/matchable single history record." },
@@ -377,8 +401,10 @@ const TRANSLATIONS = {
   "query.cacheUnfavorited": { "zh-Hans": "已取消收藏 FR24 缓存文件。", en: "FR24 cached files unfavorited." },
   "query.cacheClearedWithFavorites": { "zh-Hans": "已删除未收藏的 FR24 缓存，保留 {count} 个收藏。", en: "Deleted non-favorited FR24 cache and kept {count} favorites." },
   "query.access": { "zh-Hans": "FR24 网络访问", en: "FR24 Network Access" },
-  "query.accessInitial": { "zh-Hans": "未同步 FR24 Web 会话。", en: "No FR24 Web session synced." },
-  "query.accessSummary": { "zh-Hans": "Cookie {cookie}，_frPl {frpl}。", en: "Cookie {cookie}, _frPl {frpl}." },
+  "query.accessInitial": { "zh-Hans": "浏览器会话未同步。", en: "Browser session not synced." },
+  "query.accessSummary": { "zh-Hans": "浏览器会话{state}。", en: "Browser session {state}." },
+  "query.accessSyncedState": { "zh-Hans": "已同步", en: "synced" },
+  "query.accessUnsyncedState": { "zh-Hans": "未同步", en: "not synced" },
   "query.accessConfigured": { "zh-Hans": "已配置", en: "configured" },
   "query.accessMissing": { "zh-Hans": "未配置", en: "missing" },
   "query.accessOpenBrowser": { "zh-Hans": "打开 FR24 验证页", en: "Open FR24 Verification" },
@@ -394,7 +420,7 @@ const TRANSLATIONS = {
   "query.accessClear": { "zh-Hans": "清除会话配置", en: "Clear Session" },
   "query.accessSaved": { "zh-Hans": "已保存 FR24 Web 会话配置。", en: "FR24 Web session saved." },
   "query.accessCleared": { "zh-Hans": "已清除 FR24 Web 会话配置。", en: "FR24 Web session cleared." },
-  "query.accessHint": { "zh-Hans": "在 App 内打开 FR24 验证页并正常完成验证，然后同步会话；无需手动查 Cookie。App 只复用你已完成验证的会话，不绕过 Cloudflare。失败不会影响本地航路、Procedure、nav-overlay 和离线地图。", en: "Open FR24 verification inside the app, complete verification normally, then sync the session. No manual cookie lookup is required. The app only reuses your verified session and does not bypass Cloudflare. Failures do not affect local routes, Procedure, nav-overlay, or offline maps." },
+  "query.accessHint": { "zh-Hans": "在 App 内打开 FR24 验证页并正常完成验证，然后同步会话，即可查询 FR24 航班。", en: "Open FR24 verification inside the app, complete verification normally, then sync the session to query FR24 flights." },
   "query.clearTrack": { "zh-Hans": "清除轨迹绘制", en: "Clear Track Drawing" },
   "query.restoreMatch": { "zh-Hans": "还原轨迹匹配", en: "Restore Match" },
   "query.clearCache": { "zh-Hans": "删除下载缓存", en: "Delete Download Cache" },
@@ -609,6 +635,8 @@ const state = {
   effectiveLanguage: resolveLanguageMode(savedLanguageMode),
   appIconChoice: APP_ICON_CHOICES.has(savedAppIconChoice) ? savedAppIconChoice : "primary",
   databaseStatus: null,
+  databaseListStatus: null,
+  databaseItems: [],
   airportPayloads: {
     departure: null,
     arrival: null,
@@ -651,6 +679,7 @@ const NAV_TERMINAL_DETAIL_MIN_ZOOM = 9;
 const NAV_RUNWAY_LABEL_MIN_ZOOM = 11;
 const PROCEDURE_CACHE_LIMIT = 180;
 const EMPTY_LIST = Object.freeze([]);
+const versionPathSegment = (value) => `_v${encodeURIComponent(String(value || 0))}`;
 
 /**
  * 功能：判断当前是否运行在 iPhone 紧凑工作台。
@@ -838,6 +867,11 @@ const elements = {
   databaseNameText: document.querySelector("#databaseNameText"),
   databaseStatusText: document.querySelector("#databaseStatusText"),
   selectDatabaseButton: document.querySelector("#selectDatabaseButton"),
+  databaseStorageSummary: document.querySelector("#databaseStorageSummary"),
+  databaseSearchInput: document.querySelector("#databaseSearchInput"),
+  refreshDatabaseListButton: document.querySelector("#refreshDatabaseListButton"),
+  restoreBundledDatabaseButton: document.querySelector("#restoreBundledDatabaseButton"),
+  databaseList: document.querySelector("#databaseList"),
   themeChoiceButtons: document.querySelectorAll("[data-theme-choice]"),
   languageChoiceButtons: document.querySelectorAll("[data-language-choice]"),
   appIconChoiceButtons: document.querySelectorAll("[data-app-icon-choice]"),
@@ -896,7 +930,7 @@ const map = L.map("map", {
   zoomSnap: 0,
   zoomDelta: MAP_ZOOM.controlStep,
   scrollWheelZoom: false,
-  doubleClickZoom: false,
+  doubleClickZoom: true,
   zoomAnimation: true,
   markerZoomAnimation: false,
   preferCanvas: true,
@@ -928,7 +962,7 @@ map.getPane("labelPane").classList.add("label-pane");
 
 const baseLayers = {
   terrain: null,
-  offline: L.tileLayer(`${apiResourceUrl("/api/offline-maps/tile/{z}/{x}/{y}.png")}?v=${state.offlineMapTileVersion}`, {
+  offline: L.tileLayer(apiResourceUrl(`/api/offline-maps/tile/${versionPathSegment(state.offlineMapTileVersion)}/{z}/{x}/{y}.png`), {
     maxZoom: 19,
     updateWhenZooming: true,
     updateWhenIdle: false,
@@ -1092,7 +1126,7 @@ const AsyncCachedTileLayer = L.TileLayer.extend({
   },
 });
 
-baseLayers.terrain = createAsyncCachedTileLayer(`${apiResourceUrl("/api/map-cache/google_terrain/{z}/{x}/{y}.jpg")}?v=${state.mapCacheTileVersion}`, {
+baseLayers.terrain = createAsyncCachedTileLayer(apiResourceUrl(`/api/map-cache/google_terrain/${versionPathSegment(state.mapCacheTileVersion)}/{z}/{x}/{y}.jpg`), {
   maxZoom: 20,
   updateWhenZooming: true,
   updateWhenIdle: false,
@@ -1107,7 +1141,6 @@ L.control.zoom({ position: "bottomright" }).addTo(map);
 createMapTypeControl().addTo(map);
 
 installSmoothWheelZoom(map);
-disableDoubleTapZoom(map);
 installPageDoubleTapZoomGuard();
 installMobileViewportLock();
 installMobilePanelDragHandle();
@@ -1288,7 +1321,7 @@ function configureOfflineRasterLayer(resource = activeOfflineResource()) {
 function offlineVectorTileUrl(resource) {
   const name = encodeURIComponent(resource.name || "");
   const format = resource.format || "pbf";
-  return `${apiResourceUrl(`/api/offline-maps/resource/${name}/{z}/{x}/{y}.${format}`)}?v=${state.offlineMapTileVersion}`;
+  return apiResourceUrl(`/api/offline-maps/resource/${name}/${versionPathSegment(state.offlineMapTileVersion)}/{z}/{x}/{y}.${format}`);
 }
 
 /**
@@ -1298,7 +1331,7 @@ function offlineVectorTileUrl(resource) {
  */
 function offlinePmtilesUrl(resource) {
   const name = encodeURIComponent(resource.name || "");
-  return `${apiResourceUrl(`/api/offline-maps/pmtiles/${name}.pmtiles`)}?v=${state.offlineMapTileVersion}`;
+  return apiResourceUrl(`/api/offline-maps/pmtiles/${versionPathSegment(state.offlineMapTileVersion)}/${name}.pmtiles`);
 }
 
 /**
@@ -2209,7 +2242,7 @@ function updateOfflineMapControlVisibility() {
 function refreshOfflineBaseLayer() {
   state.offlineMapTileVersion = Date.now();
   configureOfflineRasterLayer();
-  baseLayers.offline.setUrl(`${apiResourceUrl("/api/offline-maps/tile/{z}/{x}/{y}.png")}?v=${state.offlineMapTileVersion}`);
+  baseLayers.offline.setUrl(apiResourceUrl(`/api/offline-maps/tile/${versionPathSegment(state.offlineMapTileVersion)}/{z}/{x}/{y}.png`));
   if (map.hasLayer(baseLayers.offline)) {
     baseLayers.offline.redraw();
   }
@@ -2781,7 +2814,7 @@ async function clearMapCache() {
     state.mapCacheStatus = payload;
     updateMapCacheSummary(payload);
     state.mapCacheTileVersion = Date.now();
-    baseLayers.terrain.setUrl(`${apiResourceUrl("/api/map-cache/google_terrain/{z}/{x}/{y}.jpg")}?v=${state.mapCacheTileVersion}`);
+    baseLayers.terrain.setUrl(apiResourceUrl(`/api/map-cache/google_terrain/${versionPathSegment(state.mapCacheTileVersion)}/{z}/{x}/{y}.jpg`));
     setStatus(currentLanguage() === "zh-Hans" && payload.message ? payload.message : t("cache.cleared"));
   } finally {
     elements.clearMapCacheButton.disabled = false;
@@ -4016,6 +4049,9 @@ function suppressPageZoomEvent(event) {
   if (isNativeInteractiveTarget(event.target)) {
     return false;
   }
+  if (event.target instanceof Element && event.target.closest("#map")) {
+    return false;
+  }
   event.preventDefault();
   event.stopPropagation();
   return true;
@@ -4557,8 +4593,7 @@ function installPhoneLandscapeSafeAreaTuning() {
     if (Number.isFinite(angle)) {
       return angle;
     }
-    const legacyAngle = Number(window.orientation);
-    return Number.isFinite(legacyAngle) ? legacyAngle : 90;
+    return window.innerWidth >= window.innerHeight ? 90 : 0;
   };
   const isLandscape = () => landscapeQuery?.matches || window.innerWidth > window.innerHeight;
   const updateLandscapeSafeArea = () => {
@@ -4618,6 +4653,192 @@ function updateDatabaseStatus(payload = {}) {
     const fallback = [airacText, revisionText].filter(Boolean).join(" / ") || (ready ? t("database.ready") : t("database.unavailable"));
     elements.databaseStatusText.textContent = currentLanguage() === "zh-Hans" && payload.message ? payload.message : fallback;
     elements.databaseStatusText.classList.toggle("settings-status-error", !ready);
+  }
+}
+
+function formatDatabaseModified(timestamp) {
+  const value = Number(timestamp || 0);
+  if (!Number.isFinite(value) || value <= 0) {
+    return "--";
+  }
+  return new Intl.DateTimeFormat(currentLanguage(), {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value * 1000));
+}
+
+function updateDatabaseStorageSummary(payload = state.databaseListStatus) {
+  state.databaseListStatus = payload || null;
+  if (!elements.databaseStorageSummary) {
+    return;
+  }
+  if (!payload) {
+    elements.databaseStorageSummary.textContent = t("database.storageInitial");
+    return;
+  }
+  elements.databaseStorageSummary.textContent = t("database.storageSummary", {
+    count: formatCount(payload.file_count || 0),
+    size: formatBytes(payload.size_bytes || 0),
+  });
+}
+
+function databaseBadgeList(item = {}) {
+  const badges = [];
+  if (item.active) {
+    badges.push(t("database.active"));
+  }
+  if (item.built_in) {
+    badges.push(t("database.builtIn"));
+  }
+  if (item.valid === false) {
+    badges.push(t("database.invalid"));
+  }
+  return badges;
+}
+
+function databaseMetaParts(item = {}) {
+  const parts = [];
+  if (item.current_airac) {
+    parts.push(t("database.airac", { airac: item.current_airac }));
+  }
+  if (item.revision) {
+    parts.push(t("database.revision", { revision: item.revision }));
+  }
+  parts.push(formatBytes(item.size_bytes || 0));
+  parts.push(t("database.modified", { time: formatDatabaseModified(item.modified_at) }));
+  if (item.message) {
+    parts.push(cleanErrorMessage(item.message));
+  }
+  return parts;
+}
+
+function renderDatabaseList(items = state.databaseItems) {
+  if (!elements.databaseList) {
+    return;
+  }
+  state.databaseItems = items || [];
+  if (!state.databaseItems.length) {
+    elements.databaseList.innerHTML = `<div class="query-empty">${escapeHtml(t("database.listEmpty"))}</div>`;
+    return;
+  }
+  elements.databaseList.innerHTML = state.databaseItems.map((item) => {
+    const name = String(item.name || "");
+    const badges = databaseBadgeList(item)
+      .map((label) => `<span class="database-badge">${escapeHtml(label)}</span>`)
+      .join("");
+    const meta = databaseMetaParts(item)
+      .map((part) => `<span>${escapeHtml(part)}</span>`)
+      .join("");
+    const canUse = item.valid !== false && !item.active;
+    const canDelete = item.deletable === true;
+    return `
+      <div class="database-file-card${item.valid === false ? " is-invalid" : ""}">
+        <div class="query-flight-head">
+          <div>
+            <div class="query-flight-number">${escapeHtml(name || "navdata.sqlite")}</div>
+            <div class="query-flight-meta">${meta}</div>
+          </div>
+          <div class="database-badges">${badges}</div>
+        </div>
+        <div class="database-actions">
+          <button class="ghost-button compact-button" type="button" data-database-action="select" data-database-name="${escapeHtml(name)}"${canUse ? "" : " disabled"}>${escapeHtml(t("database.use"))}</button>
+          <button class="ghost-button compact-button danger-button" type="button" data-database-action="delete" data-database-name="${escapeHtml(name)}"${canDelete ? "" : " disabled"}>${escapeHtml(t("database.delete"))}</button>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+async function refreshDatabaseList({ announce = false } = {}) {
+  if (elements.databaseList) {
+    elements.databaseList.innerHTML = `<div class="query-empty">${escapeHtml(t("database.listLoading"))}</div>`;
+  }
+  const query = elements.databaseSearchInput?.value.trim() || "";
+  const params = new URLSearchParams({ query, limit: "200" });
+  const payload = await fetchJson(`/api/databases/list?${params.toString()}`);
+  updateDatabaseStorageSummary(payload);
+  if (payload.database) {
+    updateDatabaseStatus(payload.database);
+  }
+  renderDatabaseList(payload.items || []);
+  if (announce) {
+    setStatus(t("database.listLoaded", { count: payload.file_count || 0 }));
+  }
+  return payload;
+}
+
+async function applyDatabaseManagementPayload(payload = {}, { invalidate = false, statusKey = "database.switched" } = {}) {
+  if (payload.database) {
+    updateDatabaseStatus(payload.database);
+  } else {
+    updateDatabaseStatus(payload);
+  }
+  if (payload.databases) {
+    updateDatabaseStorageSummary(payload.databases);
+    renderDatabaseList(payload.databases.items || []);
+  } else {
+    await refreshDatabaseList({ announce: false });
+  }
+  if (invalidate) {
+    resetDatabaseDependentCaches();
+    try {
+      await refreshHeaderStatus({ announce: false });
+      await refreshNavOverlay();
+    } catch (error) {
+      setErrorStatus(error);
+      return;
+    }
+  }
+  const message = currentLanguage() === "zh-Hans" && payload.message ? payload.message : t(statusKey);
+  setStatus(message);
+}
+
+async function selectStoredDatabase(name) {
+  if (!name) {
+    return;
+  }
+  const payload = await fetchJson("/api/databases/select", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  await applyDatabaseManagementPayload(payload, { invalidate: true, statusKey: "database.switched" });
+}
+
+async function deleteStoredDatabase(name) {
+  if (!name) {
+    return;
+  }
+  if (!window.confirm(t("database.deleteConfirm", { name }))) {
+    return;
+  }
+  const payload = await fetchJson("/api/databases/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  await applyDatabaseManagementPayload(payload, { statusKey: "database.deleted" });
+}
+
+async function restoreBundledDatabase() {
+  const payload = await fetchJson("/api/databases/restore-bundled", { method: "POST" });
+  await applyDatabaseManagementPayload(payload, { invalidate: true, statusKey: "database.restored" });
+}
+
+function handleDatabaseListAction(event) {
+  const button = event.target.closest("[data-database-action]");
+  if (!button) {
+    return;
+  }
+  const name = button.dataset.databaseName || "";
+  if (button.dataset.databaseAction === "select") {
+    selectStoredDatabase(name).catch(setErrorStatus);
+    return;
+  }
+  if (button.dataset.databaseAction === "delete") {
+    deleteStoredDatabase(name).catch(setErrorStatus);
   }
 }
 
@@ -4691,6 +4912,12 @@ async function handleNativeDatabaseSelected(payload = {}) {
   resetDatabaseDependentCaches();
   setStatus(currentLanguage() === "zh-Hans" && payload.message ? payload.message : t("database.switched"));
   try {
+    if (payload.databases) {
+      updateDatabaseStorageSummary(payload.databases);
+      renderDatabaseList(payload.databases.items || []);
+    } else {
+      await refreshDatabaseList({ announce: false });
+    }
     await refreshHeaderStatus({ announce: false });
     await refreshNavOverlay();
   } catch (error) {
@@ -4706,6 +4933,8 @@ function refreshLocalizedDynamicText() {
   if (state.databaseStatus) {
     updateDatabaseStatus(state.databaseStatus);
   }
+  updateDatabaseStorageSummary(state.databaseListStatus);
+  renderDatabaseList(state.databaseItems);
   updateOfflineMapSettingsSummary(state.offlineMapStatus);
   updateMapCacheSummary(state.mapCacheStatus);
   updateFR24CacheSummary(state.fr24CacheStatus || {});
@@ -4873,6 +5102,7 @@ function setDetailTab(tab) {
     panel.classList.toggle("hidden", panel.dataset.detailPanel !== normalized);
   });
   if (normalized === "settings") {
+    refreshDatabaseList().catch((error) => console.warn("本地数据库列表刷新失败", error));
     refreshOfflineMapStatus().catch((error) => console.warn("离线地图状态刷新失败", error));
     refreshMapCacheStatus().catch((error) => console.warn("在线地图缓存状态刷新失败", error));
   }
@@ -8962,9 +9192,9 @@ function updateFR24AccessSummary(payload) {
   if (!elements.fr24AccessSummary) {
     return;
   }
+  const synced = Boolean(payload?.cookie_configured || payload?.frpl_configured);
   elements.fr24AccessSummary.textContent = t("query.accessSummary", {
-    cookie: formatFR24AccessFlag(payload?.cookie_configured),
-    frpl: formatFR24AccessFlag(payload?.frpl_configured),
+    state: synced ? t("query.accessSyncedState") : t("query.accessUnsyncedState"),
   });
 }
 
@@ -9500,6 +9730,19 @@ elements.mobileBottomTabButtons.forEach((button) => {
   button.addEventListener("click", () => setMobileBottomTab(button.dataset.mobileTab));
 });
 elements.selectDatabaseButton?.addEventListener("click", requestDatabaseSelection);
+elements.refreshDatabaseListButton?.addEventListener("click", () => {
+  refreshDatabaseList({ announce: true }).catch(setErrorStatus);
+});
+elements.restoreBundledDatabaseButton?.addEventListener("click", () => {
+  restoreBundledDatabase().catch(setErrorStatus);
+});
+elements.databaseSearchInput?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    refreshDatabaseList({ announce: true }).catch(setErrorStatus);
+  }
+});
+elements.databaseList?.addEventListener("click", handleDatabaseListAction);
 elements.manageOfflineMapsButton?.addEventListener("click", () => openOfflineMapManagerFromSettings("manage"));
 elements.refreshOfflineMapsButton?.addEventListener("click", () => {
   refreshOfflineMapStatus()
@@ -9629,7 +9872,7 @@ async function init() {
   setDetailTab("airport");
   setMobileBottomTab("plan");
   try {
-    await refreshHeaderStatus();
+    await refreshHeaderStatus({ announce: false });
     renderRunwayButtons("departure");
     renderRunwayButtons("arrival");
     renderRunwayButtons("manual");

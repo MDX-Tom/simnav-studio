@@ -54,7 +54,11 @@ struct MapWebView: UIViewRepresentable {
         if #available(iOS 16.4, *) {
             webView.isInspectable = true
         }
-        webView.load(URLRequest(url: URL(string: "navplanner://app/map.html")!))
+        if let htmlURL = Bundle.main.url(forResource: "map", withExtension: "html", subdirectory: "Web") {
+            webView.loadFileURL(htmlURL, allowingReadAccessTo: htmlURL.deletingLastPathComponent())
+        } else {
+            webView.load(URLRequest(url: URL(string: "navplanner://app/map.html")!))
+        }
         return webView
     }
 

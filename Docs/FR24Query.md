@@ -34,8 +34,8 @@ FR24 Query 是在线增强功能，用于在已填写起飞机场和到达机场
   - 文件管理支持删除单项缓存、收藏 / 取消收藏；收藏状态写入同名 meta JSON。
   - `删除下载缓存` 调用 `/api/fr24/cache/clear`，只删除未收藏的 FR24 GPX / playback JSON / meta 缓存，不影响已收藏轨迹、在线地图缓存、离线地图包和导航数据库。
 - 网络访问配置：
-  - Query 页可在 App 内打开 FR24 验证页，用户正常完成 FR24 / Cloudflare 验证后，点击“同步会话”即可由 Swift 自动读取内置浏览器 CookieStore 中的 FR24 Cookie / `_frPl` 并保存。
-  - 手动粘贴 FR24 Web Cookie 与 `_frPl` 仅作为高级可选兜底，主流程不要求用户自己查 Cookie。
+  - Query 页可在 App 内打开 FR24 验证页，用户正常完成 FR24 / Cloudflare 验证后，点击“同步会话”即可由 Swift 自动读取并保存内置浏览器会话。主访问摘要只显示“浏览器会话已同步 / 未同步”，不要求用户理解 Cookie / `_frPl` 的内部状态。
+  - 手动粘贴 FR24 Web Cookie 与 `_frPl` 仅作为折叠的高级可选兜底，主流程不要求用户自己查 Cookie。
   - Swift 使用 UserDefaults 保存配置，只向前端回传是否已配置，不回显敏感值；清除配置不会删除 GPX / JSON 下载缓存。
   - 若 Cookie 中已包含 `_frPl`，Swift 会自动提取；也可通过内置浏览器同步或高级输入单独保存 `_frPl`。
   - schedule/playback 请求优先通过共享的 WKWebView 浏览器上下文执行，复用用户已验证的浏览器会话；Swift 会让隐藏 WKWebView 顶层导航到 FR24 API URL，再读取页面 JSON 文本，避免从 `www.flightradar24.com` 跨域 `fetch api.flightradar24.com` 在 WKWebView 中触发 `Load failed`。航班历史页则顶层导航到 `www.flightradar24.com/data/flights/{flight}`，抽取可见 DOM 行和链接。`URLSession` 只在浏览器运行时失败时兜底；若浏览器上下文已明确返回 401 / 403、Cloudflare 或 HTML 响应，则直接向 Query 页暴露该原因。调试中已确认仅把 Cookie 搬到 `URLSession` 仍可能被 FR24 返回 403。

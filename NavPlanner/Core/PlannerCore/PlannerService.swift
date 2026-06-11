@@ -61,6 +61,26 @@ final class PlannerService: @unchecked Sendable {
         planningCacheLock.unlock()
     }
 
+    func databaseListPayload(query: String = "", limit: Int = 200) -> [String: Any] {
+        dataStore.databaseListPayload(query: query, limit: limit)
+    }
+
+    func selectDatabasePayload(name: String) throws -> [String: Any] {
+        let payload = try dataStore.selectDatabase(named: name)
+        invalidatePlanningCaches()
+        return payload
+    }
+
+    func deleteDatabasePayload(name: String) throws -> [String: Any] {
+        try dataStore.deleteDatabase(named: name)
+    }
+
+    func restoreBundledDatabasePayload() throws -> [String: Any] {
+        let payload = try dataStore.restoreBundledDatabase()
+        invalidatePlanningCaches()
+        return payload
+    }
+
     func headerPayload() -> [String: Any] {
         dataStore.read(fallback: dataStore.statusPayload()) { database in
             var header = try database.first(sql: "select * from tbl_header limit 1") ?? [:]

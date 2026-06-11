@@ -192,6 +192,9 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
         if pathComponents.first == "offline-maps" {
             return offlineMapsResponse(for: url, request: request, path: path, pathComponents: pathComponents)
         }
+        if pathComponents.first == "databases" {
+            return databasesResponse(for: request, path: path, queryValue: queryValue)
+        }
         if pathComponents.first == "fr24" {
             return fr24Response(for: request, path: path, queryValue: queryValue)
         }
@@ -306,14 +309,22 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
 
         if pathComponents.first == "map-cache", pathComponents.count >= 5 {
             providerKey = pathComponents[1]
-            zText = pathComponents[2]
-            xText = pathComponents[3]
-            yPath = pathComponents[4]
+            let coordinateStart = versionAdjustedIndex(in: pathComponents, defaultIndex: 2)
+            guard pathComponents.count > coordinateStart + 2 else {
+                return jsonResponse(["error": "Invalid map tile path"], statusCode: 404)
+            }
+            zText = pathComponents[coordinateStart]
+            xText = pathComponents[coordinateStart + 1]
+            yPath = pathComponents[coordinateStart + 2]
         } else if pathComponents.first == "terrain", pathComponents.count >= 5 {
             providerKey = pathComponents[1] == "terrarium" ? "terrain_terrarium" : pathComponents[1]
-            zText = pathComponents[2]
-            xText = pathComponents[3]
-            yPath = pathComponents[4]
+            let coordinateStart = versionAdjustedIndex(in: pathComponents, defaultIndex: 2)
+            guard pathComponents.count > coordinateStart + 2 else {
+                return jsonResponse(["error": "Invalid terrain tile path"], statusCode: 404)
+            }
+            zText = pathComponents[coordinateStart]
+            xText = pathComponents[coordinateStart + 1]
+            yPath = pathComponents[coordinateStart + 2]
         } else {
             return jsonResponse(["error": "Invalid map tile path"], statusCode: 404)
         }
@@ -381,6 +392,44 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
             return pmtilesResponse(for: request, pathComponents: pathComponents)
         }
         return jsonResponse(["error": "Offline maps API not found"], statusCode: 404)
+    }
+
+    private func databasesResponse(
+        for request: URLRequest,
+        path: String,
+        queryValue: (String, String) -> String
+    ) -> SchemeResponse {
+        if path == "/databases/list" {
+            let payload = plannerService.databaseListPayload(
+                query: queryValue("query", ""),
+                limit: Int(queryValue("limit", "200")) ?? 200
+            )
+            return jsonResponse(payload, statusCode: payload["error"] == nil ? 200 : 500)
+        }
+        if path == "/databases/select", request.httpMethod == "POST" {
+            do {
+                let body = jsonBody(from: request)
+                return jsonResponse(try plannerService.selectDatabasePayload(name: body["name"] as? String ?? ""))
+            } catch {
+                return jsonResponse(["error": error.localizedDescription], statusCode: 400)
+            }
+        }
+        if path == "/databases/delete", request.httpMethod == "POST" {
+            do {
+                let body = jsonBody(from: request)
+                return jsonResponse(try plannerService.deleteDatabasePayload(name: body["name"] as? String ?? ""))
+            } catch {
+                return jsonResponse(["error": error.localizedDescription], statusCode: 400)
+            }
+        }
+        if path == "/databases/restore-bundled", request.httpMethod == "POST" {
+            do {
+                return jsonResponse(try plannerService.restoreBundledDatabasePayload())
+            } catch {
+                return jsonResponse(["error": error.localizedDescription], statusCode: 400)
+            }
+        }
+        return jsonResponse(["error": "Database API not found"], statusCode: 404)
     }
 
     private func fr24Response(
@@ -492,14 +541,16 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
 
     private func tileResponse(for url: URL) -> SchemeResponse {
         let parts = normalizedAPIPath(url.path).split(separator: "/").map(String.init)
+        let coordinateStart = versionAdjustedIndex(in: parts, defaultIndex: 2)
         guard parts.count >= 5,
               parts[0] == "offline-maps",
               parts[1] == "tile",
-              let z = Int(parts[2]),
-              let x = Int(parts[3]) else {
+              parts.count > coordinateStart + 2,
+              let z = Int(parts[coordinateStart]),
+              let x = Int(parts[coordinateStart + 1]) else {
             return jsonResponse(["error": "Invalid tile path"], statusCode: 404)
         }
-        let yText = (parts[4] as NSString).deletingPathExtension
+        let yText = (parts[coordinateStart + 2] as NSString).deletingPathExtension
         guard let y = Int(yText),
               let tile = mapStore.activeTile(z: z, x: x, y: y) else {
             return placeholderTileResponse(cacheState: "MISS")
@@ -514,15 +565,17 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
 
     private func namedTileResponse(for url: URL) -> SchemeResponse {
         let parts = normalizedAPIPath(url.path).split(separator: "/").map(String.init)
+        let coordinateStart = versionAdjustedIndex(in: parts, defaultIndex: 3)
         guard parts.count >= 6,
               parts[0] == "offline-maps",
               parts[1] == "resource",
-              let z = Int(parts[3]),
-              let x = Int(parts[4]) else {
+              parts.count > coordinateStart + 2,
+              let z = Int(parts[coordinateStart]),
+              let x = Int(parts[coordinateStart + 1]) else {
             return jsonResponse(["error": "Invalid offline resource tile path"], statusCode: 404)
         }
         let name = parts[2].removingPercentEncoding ?? parts[2]
-        let yText = (parts[5] as NSString).deletingPathExtension
+        let yText = (parts[coordinateStart + 2] as NSString).deletingPathExtension
         guard let y = Int(yText),
               let tile = mapStore.resourceTile(name: name, z: z, x: x, y: y) else {
             return placeholderTileResponse(cacheState: "MISS")
@@ -536,12 +589,13 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
     }
 
     private func pmtilesResponse(for request: URLRequest, pathComponents: [String]) -> SchemeResponse {
-        guard pathComponents.count == 3,
+        let filenameIndex = versionAdjustedIndex(in: pathComponents, defaultIndex: 2)
+        guard pathComponents.count > filenameIndex,
               pathComponents[0] == "offline-maps",
               pathComponents[1] == "pmtiles" else {
             return jsonResponse(["error": "Invalid PMTiles path"], statusCode: 404)
         }
-        let filename = pathComponents[2].removingPercentEncoding ?? pathComponents[2]
+        let filename = pathComponents[filenameIndex].removingPercentEncoding ?? pathComponents[filenameIndex]
         guard filename.hasSuffix(".pmtiles") else {
             return jsonResponse(["error": "Invalid PMTiles filename"], statusCode: 404)
         }
@@ -558,6 +612,14 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
             data: result.data,
             headers: cacheHeaders.merging(result.headers) { _, new in new }
         )
+    }
+
+    private func versionAdjustedIndex(in parts: [String], defaultIndex: Int) -> Int {
+        guard parts.indices.contains(defaultIndex),
+              parts[defaultIndex].hasPrefix("_v") else {
+            return defaultIndex
+        }
+        return defaultIndex + 1
     }
 
     private func jsonResponse(_ object: Any, statusCode: Int = 200) -> SchemeResponse {
