@@ -37,5 +37,8 @@ NavPlanner-web/map_offline/
 .env
 .env.*
 
+# Local Codex handoff notes and long-form implementation logs.
+codex/
+
 docs/Obsolete/
 NavPlanner/Resources/Database
