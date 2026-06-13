@@ -1,4 +1,6 @@
 import Foundation
+import ImageIO
+import UniformTypeIdentifiers
 import WebKit
 
 enum FR24SessionStore {
@@ -108,10 +110,14 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
     private let mapStore: MapStore
     private let onlineTileCache = OnlineTileCache()
     private let fr24Service = FR24Service()
-    private let workQueue = DispatchQueue(label: "com.navplanner.web-bridge", qos: .userInitiated)
+    private let workQueue = DispatchQueue(
+        label: "com.navplanner.web-bridge",
+        qos: .userInitiated,
+        attributes: .concurrent
+    )
     private let lock = NSLock()
     private var stoppedTasks = Set<ObjectIdentifier>()
-    private static let transparentTile = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=") ?? Data()
+    private static let transparentTile = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==") ?? Data()
 
     init(plannerService: PlannerService, mapStore: MapStore) {
         self.plannerService = plannerService
@@ -334,7 +340,7 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
             return jsonResponse(["error": "Invalid map tile coordinate"], statusCode: 404)
         }
 
-        switch onlineTileCache.tile(providerKey: providerKey, z: z, x: x, y: y) {
+        switch onlineTileCache.tile(providerKey: providerKey, z: z, x: x, y: y, waitForDownload: 2.4) {
         case let .hit(data, contentType):
             return SchemeResponse(
                 statusCode: 200,
@@ -462,7 +468,11 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
             return jsonResponse(payload, statusCode: payload["error"] == nil ? 200 : 404)
         }
         if path == "/fr24/cache/clear", request.httpMethod == "POST" {
-            return jsonResponse(fr24Service.clearCachePayload())
+            let body = jsonBody(from: request)
+            let includeFavorites = body["include_favorites"] as? Bool
+                ?? body["includeFavorites"] as? Bool
+                ?? false
+            return jsonResponse(fr24Service.clearCachePayload(includeFavorites: includeFavorites))
         }
         if path == "/fr24/access/status" {
             return jsonResponse(fr24Service.accessStatusPayload())
@@ -1263,7 +1273,7 @@ private final class FR24Service {
         FR24SessionStore.clearAccessPayload(userDefaults: userDefaults)
     }
 
-    func clearCachePayload() -> [String: Any] {
+    func clearCachePayload(includeFavorites: Bool = false) -> [String: Any] {
         let favoriteKeys = Set(cachedFlightItems()
             .filter { ($0["favorite"] as? Bool) == true }
             .map { Self.stringValue($0["cache_key"]) }
@@ -1277,7 +1287,7 @@ private final class FR24Service {
             for item in items {
                 let filename = item.deletingPathExtension().lastPathComponent
                 let cacheKey = filename.replacingOccurrences(of: ".meta", with: "")
-                if favoriteKeys.contains(cacheKey) {
+                if !includeFavorites && favoriteKeys.contains(cacheKey) {
                     preservedFavorites += 1
                     continue
                 }
@@ -1287,8 +1297,8 @@ private final class FR24Service {
         try? fileManager.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
         var payload = cacheStatusPayload()
         payload["preserved_favorite_file_count"] = preservedFavorites
-        payload["favorite_count"] = favoriteKeys.count
-        payload["message"] = "已清理 FR24 轨迹缓存。"
+        payload["favorite_count"] = includeFavorites ? 0 : favoriteKeys.count
+        payload["message"] = includeFavorites ? "已清理全部 FR24 轨迹缓存。" : "已清理 FR24 轨迹缓存。"
         return payload
     }
 
@@ -2930,28 +2940,78 @@ private final class OnlineTileCache {
         case failed
     }
 
+    private struct TilePayload {
+        let data: Data
+        let contentType: String
+        let rewroteData: Bool
+    }
+
     private let fileManager: FileManager
     private let rootDirectory: URL
+    private let previousRootDirectory: URL
+    private let legacyRootDirectory: URL
     private let session: URLSession
     private let lock = NSLock()
     private var pendingKeys = Set<String>()
     private var failedAtByKey: [String: Date] = [:]
-    private let failureCooldown: TimeInterval = 30
+    private let failureCooldown: TimeInterval = 8
 
     private let providers: [String: OnlineTileProvider] = [
+        "arcgis": OnlineTileProvider(
+            key: "arcgis",
+            format: "jpg",
+            contentType: "image/jpeg",
+            templates: [
+                "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}"
+            ],
+            maxZoom: 20
+        ),
+        "openstreetmap": OnlineTileProvider(
+            key: "openstreetmap",
+            format: "png",
+            contentType: "image/png",
+            templates: [
+                "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+            ],
+            maxZoom: 19
+        ),
+        "opentopomap": OnlineTileProvider(
+            key: "opentopomap",
+            format: "png",
+            contentType: "image/png",
+            templates: [
+                "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
+                "https://b.tile.opentopomap.org/{z}/{x}/{y}.png",
+                "https://c.tile.opentopomap.org/{z}/{x}/{y}.png"
+            ],
+            maxZoom: 17
+        ),
+        "google": OnlineTileProvider(
+            key: "google",
+            format: "jpg",
+            contentType: "image/jpeg",
+            templates: [
+                "https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&hl=en&gl=US",
+                "https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&hl=en&gl=US",
+                "https://mt2.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&hl=en&gl=US",
+                "https://mt3.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&hl=en&gl=US"
+            ],
+            maxZoom: 20
+        ),
         "google_terrain": OnlineTileProvider(
             key: "google_terrain",
             format: "jpg",
             contentType: "image/jpeg",
             templates: [
+                "https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&hl=en&gl=US",
                 "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+                "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
                 "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
                 "https://b.tile.opentopomap.org/{z}/{x}/{y}.png",
                 "https://c.tile.opentopomap.org/{z}/{x}/{y}.png",
-                "https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}",
-                "https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}",
-                "https://mt2.google.com/vt/lyrs=p&x={x}&y={y}&z={z}",
-                "https://mt3.google.com/vt/lyrs=p&x={x}&y={y}&z={z}"
+                "https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&hl=en&gl=US",
+                "https://mt2.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&hl=en&gl=US",
+                "https://mt3.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&hl=en&gl=US"
             ],
             maxZoom: 20
         ),
@@ -2971,20 +3031,26 @@ private final class OnlineTileCache {
         self.fileManager = fileManager
         let cacheRoot = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? fileManager.temporaryDirectory
-        self.rootDirectory = cacheRoot
+        self.legacyRootDirectory = cacheRoot
             .appendingPathComponent("NavPlanner", isDirectory: true)
             .appendingPathComponent("MapCache", isDirectory: true)
+        self.previousRootDirectory = cacheRoot
+            .appendingPathComponent("NavPlanner", isDirectory: true)
+            .appendingPathComponent("MapCacheV2", isDirectory: true)
+        self.rootDirectory = cacheRoot
+            .appendingPathComponent("NavPlanner", isDirectory: true)
+            .appendingPathComponent("MapCacheV3", isDirectory: true)
 
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 12
-        configuration.timeoutIntervalForResource = 18
+        configuration.timeoutIntervalForRequest = 5
+        configuration.timeoutIntervalForResource = 8
         configuration.httpMaximumConnectionsPerHost = 6
         self.session = URLSession(configuration: configuration)
 
         try? fileManager.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
     }
 
-    func tile(providerKey: String, z: Int, x: Int, y: Int) -> TileState {
+    func tile(providerKey: String, z: Int, x: Int, y: Int, waitForDownload: TimeInterval = 0) -> TileState {
         guard let provider = providers[providerKey],
               z >= 0, z <= provider.maxZoom, x >= 0, y >= 0 else {
             return .failed
@@ -2995,8 +3061,11 @@ private final class OnlineTileCache {
         }
 
         let localURL = tileFileURL(provider: provider, z: z, x: x, y: y)
-        if let data = try? Data(contentsOf: localURL), !data.isEmpty {
-            return .hit(data: data, contentType: contentType(for: data) ?? provider.contentType)
+        if let payload = cachedTilePayload(provider: provider, localURL: localURL) {
+            if payload.rewroteData {
+                _ = writeCacheData(payload.data, to: localURL)
+            }
+            return .hit(data: payload.data, contentType: payload.contentType)
         }
 
         let key = cacheKey(provider: provider, z: z, x: x, y: y)
@@ -3014,9 +3083,17 @@ private final class OnlineTileCache {
             return nil
         }
         if let state {
+            if case .pending = state,
+               waitForDownload > 0,
+               let payload = waitForCachedTile(provider: provider, localURL: localURL, timeout: waitForDownload) {
+                return .hit(data: payload.data, contentType: payload.contentType)
+            }
             return state
         }
 
+        if waitForDownload > 0 {
+            return downloadTileSynchronously(provider: provider, remoteURLs: remoteURLs, localURL: localURL, key: key)
+        }
         downloadTile(provider: provider, remoteURLs: remoteURLs, localURL: localURL, key: key)
         return .queued
     }
@@ -3047,19 +3124,47 @@ private final class OnlineTileCache {
             pendingKeys.removeAll()
             failedAtByKey.removeAll()
         }
-        if let items = try? fileManager.contentsOfDirectory(
-            at: rootDirectory,
-            includingPropertiesForKeys: nil,
-            options: []
-        ) {
-            for item in items {
-                try? fileManager.removeItem(at: item)
+        for directory in [rootDirectory, previousRootDirectory, legacyRootDirectory] {
+            if let items = try? fileManager.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: nil,
+                options: []
+            ) {
+                for item in items {
+                    try? fileManager.removeItem(at: item)
+                }
             }
         }
         try? fileManager.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
         var payload = statusPayload()
         payload["message"] = "已清理在线地图缓存。"
         return payload
+    }
+
+    private func cachedTilePayload(provider: OnlineTileProvider, localURL: URL) -> TilePayload? {
+        guard let data = try? Data(contentsOf: localURL), !data.isEmpty else {
+            return nil
+        }
+        guard let payload = cacheTilePayload(from: data, provider: provider, isFromNetwork: false) else {
+            try? fileManager.removeItem(at: localURL)
+            return nil
+        }
+        return payload
+    }
+
+    private func waitForCachedTile(
+        provider: OnlineTileProvider,
+        localURL: URL,
+        timeout: TimeInterval
+    ) -> TilePayload? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.08)
+            if let payload = cachedTilePayload(provider: provider, localURL: localURL) {
+                return payload
+            }
+        }
+        return nil
     }
 
     private func downloadTile(provider: OnlineTileProvider, remoteURLs: [URL], localURL: URL, key: String) {
@@ -3077,14 +3182,7 @@ private final class OnlineTileCache {
             }
 
             let remoteURL = remoteURLs[index]
-            var request = URLRequest(url: remoteURL)
-            request.timeoutInterval = 12
-            request.cachePolicy = .reloadIgnoringLocalCacheData
-            request.setValue(
-                "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1 NavPlanner/1.0",
-                forHTTPHeaderField: "User-Agent"
-            )
-            request.setValue("image/jpeg,image/png,image/*;q=0.8,*/*;q=0.5", forHTTPHeaderField: "Accept")
+            let request = tileRequest(for: remoteURL)
 
             session.dataTask(with: request) { [weak self] data, response, _ in
                 guard let self else { return }
@@ -3092,27 +3190,17 @@ private final class OnlineTileCache {
                 guard let httpResponse = response as? HTTPURLResponse,
                       (200..<300).contains(httpResponse.statusCode),
                       let data,
-                      self.isValidTileData(data, provider: provider) else {
+                      let payload = self.cacheTilePayload(from: data, provider: provider, isFromNetwork: true) else {
                     attemptDownload(at: index + 1)
                     return
                 }
 
-                do {
-                    try self.fileManager.createDirectory(
-                        at: localURL.deletingLastPathComponent(),
-                        withIntermediateDirectories: true
-                    )
-                    let temporaryURL = localURL
-                        .deletingLastPathComponent()
-                        .appendingPathComponent(".\(localURL.lastPathComponent).\(UUID().uuidString).tmp")
-                    try data.write(to: temporaryURL, options: [.atomic])
-                    _ = try? self.fileManager.removeItem(at: localURL)
-                    try self.fileManager.moveItem(at: temporaryURL, to: localURL)
+                if self.writeCacheData(payload.data, to: localURL) {
                     self.lock.withLock {
                         _ = self.failedAtByKey.removeValue(forKey: key)
                     }
                     finishPending()
-                } catch {
+                } else {
                     attemptDownload(at: index + 1)
                 }
             }.resume()
@@ -3121,10 +3209,128 @@ private final class OnlineTileCache {
         attemptDownload(at: 0)
     }
 
+    private func downloadTileSynchronously(
+        provider: OnlineTileProvider,
+        remoteURLs: [URL],
+        localURL: URL,
+        key: String
+    ) -> TileState {
+        defer {
+            lock.withLock {
+                _ = pendingKeys.remove(key)
+            }
+        }
+
+        for remoteURL in remoteURLs {
+            guard let data = fetchRemoteTileData(from: remoteURL),
+                  let payload = cacheTilePayload(from: data, provider: provider, isFromNetwork: true),
+                  writeCacheData(payload.data, to: localURL) else {
+                continue
+            }
+            lock.withLock {
+                _ = failedAtByKey.removeValue(forKey: key)
+            }
+            return .hit(data: payload.data, contentType: payload.contentType)
+        }
+
+        markFailure(key: key)
+        return .failed
+    }
+
+    private func tileRequest(for remoteURL: URL) -> URLRequest {
+        var request = URLRequest(url: remoteURL)
+        request.timeoutInterval = 5
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue(
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1 NavPlanner/1.0",
+            forHTTPHeaderField: "User-Agent"
+        )
+        request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
+        request.setValue("image/jpeg,image/png,image/*;q=0.8,*/*;q=0.5", forHTTPHeaderField: "Accept")
+        return request
+    }
+
+    private func fetchRemoteTileData(from remoteURL: URL) -> Data? {
+        let semaphore = DispatchSemaphore(value: 0)
+        let request = tileRequest(for: remoteURL)
+        var resultData: Data?
+        var resultResponse: URLResponse?
+        let task = session.dataTask(with: request) { data, response, _ in
+            resultData = data
+            resultResponse = response
+            semaphore.signal()
+        }
+        task.resume()
+        guard semaphore.wait(timeout: .now() + 5.8) == .success else {
+            task.cancel()
+            return nil
+        }
+        guard let httpResponse = resultResponse as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode),
+              let resultData else {
+            return nil
+        }
+        return resultData
+    }
+
+    private func writeCacheData(_ data: Data, to localURL: URL) -> Bool {
+        do {
+            try fileManager.createDirectory(
+                at: localURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            let temporaryURL = localURL
+                .deletingLastPathComponent()
+                .appendingPathComponent(".\(localURL.lastPathComponent).\(UUID().uuidString).tmp")
+            try data.write(to: temporaryURL, options: [.atomic])
+            _ = try? fileManager.removeItem(at: localURL)
+            try fileManager.moveItem(at: temporaryURL, to: localURL)
+            return true
+        } catch {
+            return false
+        }
+    }
+
     private func markFailure(key: String) {
         lock.withLock {
             failedAtByKey[key] = Date()
         }
+    }
+
+    private func cacheTilePayload(from data: Data, provider: OnlineTileProvider, isFromNetwork: Bool) -> TilePayload? {
+        guard isValidTileData(data, provider: provider) else { return nil }
+        guard shouldNormalizeForWebContent(provider: provider) else {
+            return TilePayload(data: data, contentType: contentType(for: data) ?? provider.contentType, rewroteData: false)
+        }
+        if !isFromNetwork, isPNG(data) {
+            return TilePayload(data: data, contentType: "image/png", rewroteData: false)
+        }
+        guard let normalized = normalizedPNGData(from: data) else { return nil }
+        return TilePayload(data: normalized, contentType: "image/png", rewroteData: !isPNG(data))
+    }
+
+    private func shouldNormalizeForWebContent(provider: OnlineTileProvider) -> Bool {
+        provider.key != "terrain_terrarium"
+    }
+
+    private func normalizedPNGData(from data: Data) -> Data? {
+        let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, sourceOptions) else {
+            return nil
+        }
+        let output = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            output,
+            UTType.png.identifier as CFString,
+            1,
+            nil
+        ) else {
+            return nil
+        }
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return output as Data
     }
 
     private func isValidTileData(_ data: Data, provider: OnlineTileProvider) -> Bool {
@@ -3150,12 +3356,26 @@ private final class OnlineTileCache {
     }
 
     private func isJPEG(_ data: Data) -> Bool {
-        data.count >= 2 && data[data.startIndex] == 0xff && data[data.index(after: data.startIndex)] == 0xd8
+        guard data.count >= 4,
+              data.prefix(2).elementsEqual([0xff, 0xd8]) else {
+            return false
+        }
+        let tail = Array(data.suffix(min(data.count, 4096)))
+        guard tail.count >= 2 else { return false }
+        for index in stride(from: tail.count - 2, through: 0, by: -1) {
+            if tail[index] == 0xff && tail[index + 1] == 0xd9 {
+                return true
+            }
+        }
+        return false
     }
 
     private func isPNG(_ data: Data) -> Bool {
-        let signature: [UInt8] = [0x89, 0x50, 0x4e, 0x47]
-        return data.starts(with: signature)
+        let signature: [UInt8] = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+        let iendChunk: [UInt8] = [0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]
+        return data.count >= 20
+            && data.prefix(signature.count).elementsEqual(signature)
+            && data.suffix(iendChunk.count).elementsEqual(iendChunk)
     }
 
     private func cacheKey(provider: OnlineTileProvider, z: Int, x: Int, y: Int) -> String {
@@ -3167,7 +3387,11 @@ private final class OnlineTileCache {
             .appendingPathComponent(provider.key, isDirectory: true)
             .appendingPathComponent(String(format: "z%02d", z), isDirectory: true)
             .appendingPathComponent(String(format: "%04x", x >> 8), isDirectory: true)
-            .appendingPathComponent("\(String(format: "%08x", x))_\(String(format: "%08x", y)).\(provider.format)")
+            .appendingPathComponent("\(String(format: "%08x", x))_\(String(format: "%08x", y)).\(cacheFileExtension(for: provider))")
+    }
+
+    private func cacheFileExtension(for provider: OnlineTileProvider) -> String {
+        shouldNormalizeForWebContent(provider: provider) ? "png" : provider.format
     }
 
     private func diskUsage() -> (bytes: Int64, files: Int) {

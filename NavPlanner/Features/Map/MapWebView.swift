@@ -37,7 +37,7 @@ struct MapWebView: UIViewRepresentable {
         // 需要保持 scroll view 可用，WKWebView 才能把外接鼠标滚轮 / 触控板事件交给地图；页面级偏移仍由 Coordinator 锁定。
         webView.scrollView.isScrollEnabled = true
         webView.scrollView.delegate = context.coordinator
-        context.coordinator.locksOuterScroll = deviceClass == "phone"
+        context.coordinator.locksOuterScroll = true
         webView.scrollView.minimumZoomScale = 1
         webView.scrollView.maximumZoomScale = 1
         webView.scrollView.bounces = false
