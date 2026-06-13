@@ -1,6 +1,9 @@
 const savedThemeMode = readLocalStorageValue("navplannerThemeMode");
 const savedAppIconChoice = readLocalStorageValue("navplannerAppIconChoice");
 const savedLanguageMode = readLocalStorageValue("navplannerLanguageMode");
+const savedMapSourceMode = readLocalStorageValue("navplannerMapSourceMode");
+const savedOnlineMapProvider = readLocalStorageValue("navplannerOnlineMapProvider");
+const savedMapTileZoomOffset = readLocalStorageValue("navplannerMapTileZoomOffset");
 const NAVPLANNER_API_ORIGIN = (window.location.protocol === "navplanner:"
   || window.location.protocol === "about:"
   || window.location.protocol === "file:"
@@ -11,6 +14,44 @@ const apiResourceUrl = (path) => `${NAVPLANNER_API_ORIGIN}${path}`;
 const THEME_MODES = new Set(["system", "day", "night"]);
 const LANGUAGE_MODES = new Set(["system", "zh-Hans", "en"]);
 const APP_ICON_CHOICES = new Set(["day-high", "primary", "day-soft", "night-high", "night-medium", "night-soft"]);
+const MAP_SOURCE_MODES = new Set(["online", "offline"]);
+const MAP_TILE_ZOOM_OFFSETS = new Set([-1, 0, 1, 2]);
+const ONLINE_TILE_BASE_SIZE = 256;
+const LOCAL_SETTING_KEYS = Object.freeze([
+  "navplannerThemeMode",
+  "navplannerAppIconChoice",
+  "navplannerLanguageMode",
+  "navplannerMapSourceMode",
+  "navplannerOnlineMapProvider",
+  "navplannerMapTileZoomOffset",
+]);
+const ONLINE_MAP_PROVIDERS = Object.freeze({
+  arcgis: {
+    labelKey: "map.provider.arcgis",
+    titleKey: "map.provider.arcgisHint",
+    format: "jpg",
+    maxZoom: 20,
+  },
+  openstreetmap: {
+    labelKey: "map.provider.openstreetmap",
+    titleKey: "map.provider.openstreetmapHint",
+    format: "png",
+    maxZoom: 19,
+  },
+  opentopomap: {
+    labelKey: "map.provider.opentopomap",
+    titleKey: "map.provider.opentopomapHint",
+    format: "png",
+    maxZoom: 17,
+  },
+  google: {
+    labelKey: "map.provider.google",
+    titleKey: "map.provider.googleHint",
+    format: "jpg",
+    maxZoom: 20,
+  },
+});
+const ONLINE_MAP_PROVIDER_KEYS = new Set(Object.keys(ONLINE_MAP_PROVIDERS));
 const themeMediaQuery = typeof window.matchMedia === "function" ? window.matchMedia("(prefers-color-scheme: light)") : null;
 
 const TRANSLATIONS = {
@@ -89,8 +130,17 @@ const TRANSLATIONS = {
   "settings.languageHint": { "zh-Hans": "默认跟随系统语言；无论选择哪种语言，SID / STAR / APPROACH、DCT、IFR、AIRAC 等航空标识保持英文。", en: "Default follows the system language. SID / STAR / APPROACH, DCT, IFR, AIRAC, and other aviation identifiers remain in English." },
   "settings.appIcon": { "zh-Hans": "应用图标", en: "App Icon" },
   "settings.appIconHint": { "zh-Hans": "默认图标为日间均衡，夜间图标使用蓝黑反色地形、紫色层次和暗橙航路。", en: "The default icon is the balanced day variant. Night icons use blue-black terrain, purple relief, and dark amber routes." },
+  "settings.mapSelection": { "zh-Hans": "地图选择", en: "Map Selection" },
+  "settings.mapSelectionMode": { "zh-Hans": "地图模式", en: "Map mode" },
+  "settings.mapSelectionHint": { "zh-Hans": "在线地图作为增强底图；离线地图读取本机资源，断网时本地航路、程序和 nav-overlay 仍可使用。", en: "Online maps are enhanced base maps. Offline maps read local resources; routes, procedures, and nav-overlay remain local-first when offline." },
   "settings.offlineMaps": { "zh-Hans": "离线地图", en: "Offline Maps" },
   "settings.mapCache": { "zh-Hans": "在线地图缓存", en: "Online Map Cache" },
+  "settings.resetAll": { "zh-Hans": "重置与清理", en: "Reset & Cleanup" },
+  "settings.resetAllHint": { "zh-Hans": "恢复外观、语言、图标和地图设置默认值，并清理在线地图缓存与 FR24 轨迹缓存；不会删除导航数据库或离线地图包。", en: "Restore appearance, language, icon, and map settings to defaults, and clear online map plus FR24 track caches. Navigation databases and offline map packages are kept." },
+  "settings.resetAllButton": { "zh-Hans": "重置所有设置并删除全部缓存", en: "Reset All Settings & Delete All Caches" },
+  "settings.resetAllConfirm": { "zh-Hans": "确认重置所有设置并删除全部缓存？\n\n将恢复默认外观、语言、图标和地图设置，并清理在线地图缓存与 FR24 轨迹缓存；不会删除导航数据库或离线地图包。", en: "Reset all settings and delete all caches?\n\nThis restores default appearance, language, icon, and map settings, and clears online map plus FR24 track caches. Navigation databases and offline map packages are kept." },
+  "settings.resetAllWorking": { "zh-Hans": "正在重置...", en: "Resetting..." },
+  "settings.resetAllDone": { "zh-Hans": "已重置所有设置，并清理在线地图与 FR24 缓存。", en: "All settings reset. Online map and FR24 caches cleared." },
   "settings.copyright": { "zh-Hans": "版权与说明", en: "Copyright & Notes" },
   "settings.copyrightP1": { "zh-Hans": "NavPlanner 是面向航路规划和航图查看的本地优先工具，可在本机数据库上完成机场、航点、航路、SID / STAR / APPROACH 与 nav-overlay 查询。", en: "NavPlanner is a local-first route planning and chart inspection tool for airports, waypoints, routes, SID / STAR / APPROACH data, and nav-overlay queries from the on-device database." },
   "settings.copyrightP2": { "zh-Hans": "在计划页填写起降机场并生成航路，在机场页查看程序和跑道信息，在查询页检索并绘制 FR24 轨迹，在设置页管理数据库、离线地图、缓存、外观、语言和图标。", en: "Use Plan to enter airports and build routes, Airport to inspect procedures and runways, Query to find and draw FR24 tracks, and Settings to manage databases, offline maps, cache, appearance, language, and icons." },
@@ -258,13 +308,14 @@ const TRANSLATIONS = {
   "offline.downloadNotStarted": { "zh-Hans": "下载未启动：{message}", en: "Download did not start: {message}" },
   "offline.downloadEnded": { "zh-Hans": "离线地图下载已结束。", en: "Offline map download finished." },
   "offline.statusRefreshed": { "zh-Hans": "离线地图状态已刷新。", en: "Offline map status refreshed." },
-  "offline.unavailable": { "zh-Hans": "离线地形暂无可用的离线底图资源，已切回地形图。请在离线地图管理器中下载或启用一个栅格/矢量资源。", en: "Offline terrain has no usable offline base map resource. Switched back to Terrain. Download or enable a raster/vector resource in Offline Map Manager." },
+  "offline.unavailable": { "zh-Hans": "离线地形暂无可用的离线底图资源，已切回地形图。请在离线地图管理器中启用一个栅格/矢量资源。", en: "Offline terrain has no usable offline base map resource. Switched back to Terrain. Enable a raster/vector resource in Offline Map Manager." },
+  "offline.notInstalledPrompt": { "zh-Hans": "当前未安装离线地图，已打开离线地图管理器。请先下载或导入 PMTiles / MBTiles / SQLite 地图包。", en: "No offline map is installed. Offline Map Manager is open; download or import a PMTiles / MBTiles / SQLite map package first." },
   "cache.loading": { "zh-Hans": "正在统计缓存大小...", en: "Calculating cache size..." },
   "cache.clear": { "zh-Hans": "清理缓存", en: "Clear Cache" },
   "cache.refresh": { "zh-Hans": "刷新缓存", en: "Refresh Cache" },
   "cache.settingsHint": { "zh-Hans": "仅清理在线增强底图缓存，不影响本地导航数据库、离线地图包和航路叠加层。", en: "Only clears online enhanced base-map cache. Local navigation databases, offline map packages, and route overlays are not affected." },
   "cache.unread": { "zh-Hans": "缓存状态尚未读取。", en: "Cache status has not been read." },
-  "cache.summary": { "zh-Hans": "在线地形图缓存位于 App Caches；后台请求 {pending} 个，失败冷却 {failed} 个。", en: "Online terrain cache is stored in App Caches; {pending} background requests, {failed} failure cooldowns." },
+  "cache.summary": { "zh-Hans": "在线地图缓存位于 App Caches；后台请求 {pending} 个，失败冷却 {failed} 个。", en: "Online map cache is stored in App Caches; {pending} background requests, {failed} failure cooldowns." },
   "cache.status": { "zh-Hans": "地图缓存：{size}，{count} 个文件。", en: "Map cache: {size}, {count} files." },
   "cache.clearConfirm": { "zh-Hans": "确认清理在线地图缓存？离线地图包和航路数据不会被删除。", en: "Clear the online map cache? Offline map packages and route data will not be deleted." },
   "cache.cleared": { "zh-Hans": "已清理在线地图缓存。", en: "Online map cache cleared." },
@@ -283,6 +334,27 @@ const TRANSLATIONS = {
   "map.typeTitle": { "zh-Hans": "地图类型", en: "Map Type" },
   "map.terrain.label": { "zh-Hans": "地形图", en: "Terrain" },
   "map.terrain.title": { "zh-Hans": "在线缓存地形底图", en: "Cached online terrain base map" },
+  "map.source.online": { "zh-Hans": "在线地图", en: "Online Map" },
+  "map.source.onlineHint": { "zh-Hans": "选择在线底图来源", en: "Choose an online base-map source" },
+  "map.source.offline": { "zh-Hans": "离线地图", en: "Offline Map" },
+  "map.source.offlineHint": { "zh-Hans": "使用本机离线地图资源", en: "Use local offline map resources" },
+  "map.providerTitle": { "zh-Hans": "在线地图来源", en: "Online Map Source" },
+  "map.provider.arcgis": { "zh-Hans": "ArcGIS", en: "ArcGIS" },
+  "map.provider.arcgisHint": { "zh-Hans": "默认在线地形底图", en: "Default online topographic base map" },
+  "map.provider.openstreetmap": { "zh-Hans": "OpenStreetMap", en: "OpenStreetMap" },
+  "map.provider.openstreetmapHint": { "zh-Hans": "OSM 标准底图", en: "OSM standard base map" },
+  "map.provider.opentopomap": { "zh-Hans": "OpenTopoMap", en: "OpenTopoMap" },
+  "map.provider.opentopomapHint": { "zh-Hans": "开源地形底图", en: "Open topographic base map" },
+  "map.provider.google": { "zh-Hans": "Google", en: "Google" },
+  "map.provider.googleHint": { "zh-Hans": "Google 地形底图", en: "Google terrain base map" },
+  "map.zoomOffsetTitle": { "zh-Hans": "地图清晰度 Offset", en: "Map Clarity Offset" },
+  "map.zoomOffsetAria": { "zh-Hans": "在线地图瓦片缩放 Offset", en: "Online map tile zoom offset" },
+  "map.zoomOffsetHint": { "zh-Hans": "提高 Offset 会请求更高缩放级别的在线瓦片，文字和地形通常更清晰，但加载量会增加。", en: "Higher offsets request higher-zoom online tiles, usually making labels and terrain sharper while increasing tile loading." },
+  "map.zoomOffsetValue": { "zh-Hans": "当前 {value}", en: "Current {value}" },
+  "map.zoomOffsetDefault": { "zh-Hans": "默认", en: "Default" },
+  "map.sourceChanged": { "zh-Hans": "已切换为{mode}。", en: "Switched to {mode}." },
+  "map.providerChanged": { "zh-Hans": "已切换在线地图来源：{provider}。", en: "Online map source changed to {provider}." },
+  "map.zoomOffsetChanged": { "zh-Hans": "在线地图清晰度 Offset 已设为 {value}。", en: "Online map clarity offset set to {value}." },
   "map.vector.label": { "zh-Hans": "地形矢量", en: "Topo Vector" },
   "map.vector.title": { "zh-Hans": "山影与等高线", en: "Hillshade and contours" },
   "map.aero.label": { "zh-Hans": "航空图", en: "Aero" },
@@ -489,6 +561,14 @@ function writeLocalStorageValue(key, value) {
   }
 }
 
+function removeLocalStorageValue(key) {
+  try {
+    window.localStorage.removeItem(key);
+  } catch (_) {
+    // localStorage 在受限 WebView 中可能不可写；重置仍会应用到当前会话。
+  }
+}
+
 function systemLanguageCode() {
   const languages = Array.isArray(navigator.languages) && navigator.languages.length
     ? navigator.languages
@@ -619,7 +699,10 @@ const state = {
   offlineDownloadBounds: null,
   offlineBoundsSelecting: false,
   searchSuppressedUntil: 0,
-  baseMap: "terrain",
+  mapSourceMode: normalizeMapSourceMode(savedMapSourceMode),
+  baseMap: normalizeMapSourceMode(savedMapSourceMode) === "offline" ? "offline" : "terrain",
+  onlineMapProvider: normalizeOnlineMapProvider(savedOnlineMapProvider),
+  mapTileZoomOffset: normalizeMapTileZoomOffset(savedMapTileZoomOffset),
   mapOverlayVisibility: {
     baseMap: true,
     route: true,
@@ -687,6 +770,70 @@ const NAV_RUNWAY_LABEL_MIN_ZOOM = 11;
 const PROCEDURE_CACHE_LIMIT = 180;
 const EMPTY_LIST = Object.freeze([]);
 const versionPathSegment = (value) => `_v${encodeURIComponent(String(value || 0))}`;
+
+function normalizeMapSourceMode(mode) {
+  return MAP_SOURCE_MODES.has(mode) ? mode : "online";
+}
+
+function normalizeOnlineMapProvider(provider) {
+  return ONLINE_MAP_PROVIDER_KEYS.has(provider) ? provider : "arcgis";
+}
+
+function normalizeMapTileZoomOffset(value) {
+  const parsed = Number.parseInt(String(value), 10);
+  return MAP_TILE_ZOOM_OFFSETS.has(parsed) ? parsed : 0;
+}
+
+function mapTileZoomOffsetLabel(value = state.mapTileZoomOffset) {
+  const normalized = normalizeMapTileZoomOffset(value);
+  return normalized > 0 ? `+${normalized}` : String(normalized);
+}
+
+function mapTileZoomOffsetProgress(value = state.mapTileZoomOffset) {
+  const normalized = normalizeMapTileZoomOffset(value);
+  return `${((normalized + 1) / 3) * 100}%`;
+}
+
+function currentMapSourceMode() {
+  return normalizeMapSourceMode(state.mapSourceMode);
+}
+
+function mapSourceModeForBaseMap(type) {
+  return type === "offline" ? "offline" : "online";
+}
+
+function setMapSourceMode(mode, { persist = true } = {}) {
+  state.mapSourceMode = normalizeMapSourceMode(mode);
+  if (persist) {
+    writeLocalStorageValue("navplannerMapSourceMode", state.mapSourceMode);
+  }
+}
+
+function currentOnlineMapProviderConfig(provider = state.onlineMapProvider) {
+  return ONLINE_MAP_PROVIDERS[normalizeOnlineMapProvider(provider)] || ONLINE_MAP_PROVIDERS.arcgis;
+}
+
+function onlineMapTileUrl(provider = state.onlineMapProvider) {
+  const key = normalizeOnlineMapProvider(provider);
+  const config = currentOnlineMapProviderConfig(key);
+  return apiResourceUrl(`/api/map-cache/${key}/${versionPathSegment(state.mapCacheTileVersion)}/{z}/{x}/{y}.${config.format}`);
+}
+
+function onlineMapTileLayerOptions() {
+  const provider = currentOnlineMapProviderConfig();
+  const maxProviderZoom = provider.maxZoom || 20;
+  const zoomOffset = state.mapTileZoomOffset;
+  return {
+    maxZoom: 20,
+    maxNativeZoom: Math.max(0, maxProviderZoom - zoomOffset),
+    tileSize: Math.round(ONLINE_TILE_BASE_SIZE / Math.pow(2, zoomOffset)),
+    zoomOffset,
+  };
+}
+
+function onlineMapTileLayerSignature() {
+  return `${normalizeOnlineMapProvider(state.onlineMapProvider)}|${state.mapTileZoomOffset}`;
+}
 
 /**
  * 功能：判断当前是否运行在 iPhone 紧凑工作台。
@@ -882,6 +1029,14 @@ const elements = {
   themeChoiceButtons: document.querySelectorAll("[data-theme-choice]"),
   languageChoiceButtons: document.querySelectorAll("[data-language-choice]"),
   appIconChoiceButtons: document.querySelectorAll("[data-app-icon-choice]"),
+  mapSourceChoiceButtons: document.querySelectorAll("[data-map-source-choice]"),
+  onlineMapProviderButtons: document.querySelectorAll("[data-online-map-provider]"),
+  mapTileZoomOffsetSliderFrame: document.querySelector("#mapTileZoomOffsetSliderFrame"),
+  mapTileZoomOffsetInput: document.querySelector("#mapTileZoomOffsetInput"),
+  mapTileZoomOffsetValue: document.querySelector("#mapTileZoomOffsetValue"),
+  mapTileZoomOffsetScaleLabels: document.querySelectorAll("[data-zoom-offset-value]"),
+  onlineMapSettingsPanel: document.querySelector("#onlineMapSettingsPanel"),
+  offlineMapSettingsPanel: document.querySelector("#offlineMapSettingsPanel"),
   offlineMapSummaryTitle: document.querySelector("#offlineMapSummaryTitle"),
   offlineMapSummaryText: document.querySelector("#offlineMapSummaryText"),
   manageOfflineMapsButton: document.querySelector("#manageOfflineMapsButton"),
@@ -890,6 +1045,7 @@ const elements = {
   mapCacheSummaryText: document.querySelector("#mapCacheSummaryText"),
   refreshMapCacheButton: document.querySelector("#refreshMapCacheButton"),
   clearMapCacheButton: document.querySelector("#clearMapCacheButton"),
+  resetAllSettingsButton: document.querySelector("#resetAllSettingsButton"),
   fr24SearchButton: document.querySelector("#fr24SearchButton"),
   fr24ManualHistoryInput: document.querySelector("#fr24ManualHistoryInput"),
   fr24ManualHistoryButton: document.querySelector("#fr24ManualHistoryButton"),
@@ -980,6 +1136,7 @@ const baseLayers = {
   }),
 };
 
+let onlineBaseLayerSwap = null;
 let vectorMap = null;
 let vectorMapContainer = null;
 let vectorMapSyncFrame = 0;
@@ -1022,6 +1179,85 @@ function createAsyncCachedTileLayer(urlTemplate, options = {}) {
   return layer;
 }
 
+function createOnlineBaseLayer() {
+  const layer = createAsyncCachedTileLayer(onlineMapTileUrl(), {
+    ...onlineMapTileLayerOptions(),
+    updateWhenZooming: true,
+    updateWhenIdle: false,
+    updateInterval: 80,
+    keepBuffer: 5,
+    pane: "terrainPane",
+    attribution: "Map data: cached terrain",
+  });
+  layer._plannerLayerSignature = onlineMapTileLayerSignature();
+  return layer;
+}
+
+function clearOnlineBaseLayerSwap({ removePrevious = false } = {}) {
+  if (!onlineBaseLayerSwap) {
+    return;
+  }
+  const swap = onlineBaseLayerSwap;
+  onlineBaseLayerSwap = null;
+  swap.timers.forEach((timer) => window.clearTimeout(timer));
+  swap.layer.off("tileload", swap.onTileLoad);
+  swap.layer.off("tileerror", swap.onTileError);
+  swap.layer.off("load", swap.onLoad);
+  if (removePrevious && swap.previousLayer && map.hasLayer(swap.previousLayer)) {
+    map.removeLayer(swap.previousLayer);
+  }
+}
+
+function warmSwapOnlineBaseLayer(nextLayer, previousLayer) {
+  clearOnlineBaseLayerSwap({ removePrevious: true });
+  if (!previousLayer || previousLayer === nextLayer || !map.hasLayer(previousLayer)) {
+    return;
+  }
+
+  const timers = new Set();
+  let loadedTiles = 0;
+  let committed = false;
+  const schedule = (delay, callback) => {
+    const timer = window.setTimeout(() => {
+      timers.delete(timer);
+      callback();
+    }, delay);
+    timers.add(timer);
+  };
+  const commit = () => {
+    if (committed) {
+      return;
+    }
+    committed = true;
+    clearOnlineBaseLayerSwap();
+    if (map.hasLayer(previousLayer)) {
+      map.removeLayer(previousLayer);
+    }
+  };
+  const onTileLoad = () => {
+    loadedTiles += 1;
+    schedule(loadedTiles >= 4 ? 90 : 900, commit);
+  };
+  const onTileError = () => {
+    if (loadedTiles > 0) {
+      schedule(1200, commit);
+    }
+  };
+  const onLoad = () => schedule(80, commit);
+
+  onlineBaseLayerSwap = {
+    layer: nextLayer,
+    previousLayer,
+    timers,
+    onTileLoad,
+    onTileError,
+    onLoad,
+  };
+  nextLayer.on("tileload", onTileLoad);
+  nextLayer.on("tileerror", onTileError);
+  nextLayer.on("load", onLoad);
+}
+
 /**
  * 功能：取消一个异步缓存瓦片的后续轮询并释放对象 URL。
  * 输入：tile 为 createTile 创建的图片元素。
@@ -1062,6 +1298,36 @@ function scheduleAsyncCachedTileRetry(tile, attempt, requestTile) {
   }
   const delay = ASYNC_CACHED_TILE_RETRY_DELAYS_MS[Math.min(attempt, ASYNC_CACHED_TILE_RETRY_DELAYS_MS.length - 1)];
   tile._plannerRetryTimer = window.setTimeout(() => requestTile(attempt + 1), delay);
+}
+
+function isSupportedTileImageBuffer(buffer) {
+  const bytes = new Uint8Array(buffer || []);
+  if (bytes.length < 4) {
+    return false;
+  }
+  const isPNG = bytes.length >= 20
+    && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47
+    && bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a
+    && bytes[bytes.length - 12] === 0x00 && bytes[bytes.length - 11] === 0x00
+    && bytes[bytes.length - 10] === 0x00 && bytes[bytes.length - 9] === 0x00
+    && bytes[bytes.length - 8] === 0x49 && bytes[bytes.length - 7] === 0x45
+    && bytes[bytes.length - 6] === 0x4e && bytes[bytes.length - 5] === 0x44
+    && bytes[bytes.length - 4] === 0xae && bytes[bytes.length - 3] === 0x42
+    && bytes[bytes.length - 2] === 0x60 && bytes[bytes.length - 1] === 0x82;
+  if (isPNG) {
+    return true;
+  }
+  const isJPEG = bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8;
+  if (!isJPEG) {
+    return false;
+  }
+  const searchStart = Math.max(2, bytes.length - 4096);
+  for (let index = bytes.length - 2; index >= searchStart; index -= 1) {
+    if (bytes[index] === 0xff && bytes[index + 1] === 0xd9) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -1113,7 +1379,7 @@ const AsyncCachedTileLayer = L.TileLayer.extend({
         return;
       }
       try {
-        const response = await fetch(this.getTileUrl(coords), { cache: "default" });
+        const response = await fetch(this.getTileUrl(coords), { cache: "no-store" });
         if (isQueuedTileResponse(response)) {
           await response.arrayBuffer().catch(() => {});
           scheduleAsyncCachedTileRetry(tile, attempt, requestTile);
@@ -1122,7 +1388,11 @@ const AsyncCachedTileLayer = L.TileLayer.extend({
         if (!response.ok) {
           throw new Error(`Tile request failed: ${response.status}`);
         }
-        loadAsyncCachedTileBlob(tile, await response.blob(), done);
+        const buffer = await response.arrayBuffer();
+        if (!isSupportedTileImageBuffer(buffer)) {
+          throw new Error("Tile response is not a supported image.");
+        }
+        loadAsyncCachedTileBlob(tile, new Blob([buffer], { type: response.headers.get("Content-Type") || "image/png" }), done);
       } catch (_error) {
         scheduleAsyncCachedTileRetry(tile, attempt, requestTile);
       }
@@ -1133,19 +1403,10 @@ const AsyncCachedTileLayer = L.TileLayer.extend({
   },
 });
 
-baseLayers.terrain = createAsyncCachedTileLayer(apiResourceUrl(`/api/map-cache/google_terrain/${versionPathSegment(state.mapCacheTileVersion)}/{z}/{x}/{y}.jpg`), {
-  maxZoom: 20,
-  updateWhenZooming: true,
-  updateWhenIdle: false,
-  updateInterval: 80,
-  keepBuffer: 5,
-  pane: "terrainPane",
-  attribution: "Map data: cached terrain",
-});
+baseLayers.terrain = createOnlineBaseLayer();
 
 baseLayers.terrain.addTo(map);
 L.control.zoom({ position: "bottomright" }).addTo(map);
-createMapTypeControl().addTo(map);
 
 installSmoothWheelZoom(map);
 installTrackpadGestureZoom(map);
@@ -1221,6 +1482,10 @@ function activeOfflineResource(status = state.offlineMapStatus) {
     return null;
   }
   return (status.resources || []).find((resource) => resource.name === status.active) || null;
+}
+
+function hasOfflineResources(status = state.offlineMapStatus) {
+  return Array.isArray(status?.resources) && status.resources.length > 0;
 }
 
 /**
@@ -2232,6 +2497,9 @@ function setRasterBaseLayer(type) {
       map.removeLayer(layer);
     }
   });
+  if (type !== "terrain") {
+    clearOnlineBaseLayerSwap({ removePrevious: true });
+  }
 }
 
 /**
@@ -2262,6 +2530,72 @@ function refreshOfflineBaseLayer() {
 }
 
 /**
+ * 功能：刷新在线底图瓦片 URL，应用当前在线 provider 和缓存版本。
+ * 输入：bumpVersion 表示是否强制更新 cache-busting 版本。
+ * 输出：无返回值；仅影响在线底图层。
+ */
+function refreshOnlineBaseLayer({ bumpVersion = false } = {}) {
+  if (bumpVersion) {
+    state.mapCacheTileVersion = Date.now();
+  }
+  const nextSignature = onlineMapTileLayerSignature();
+  const shouldRebuildLayer = baseLayers.terrain?._plannerLayerSignature !== nextSignature || bumpVersion;
+  const wasShown = Boolean(baseLayers.terrain && map.hasLayer(baseLayers.terrain));
+  if (shouldRebuildLayer) {
+    const previousLayer = baseLayers.terrain;
+    const nextLayer = createOnlineBaseLayer();
+    baseLayers.terrain = nextLayer;
+    if (wasShown) {
+      nextLayer.addTo(map);
+      warmSwapOnlineBaseLayer(nextLayer, previousLayer);
+    }
+    return;
+  }
+  Object.assign(baseLayers.terrain.options, onlineMapTileLayerOptions());
+  baseLayers.terrain.setUrl(onlineMapTileUrl());
+  if (wasShown) {
+    baseLayers.terrain.redraw();
+  }
+}
+
+function updateMapTileZoomOffsetControl() {
+  const label = mapTileZoomOffsetLabel();
+  if (elements.mapTileZoomOffsetInput) {
+    elements.mapTileZoomOffsetInput.value = String(state.mapTileZoomOffset);
+    elements.mapTileZoomOffsetInput.style.setProperty("--zoom-offset-progress", mapTileZoomOffsetProgress());
+  }
+  if (elements.mapTileZoomOffsetSliderFrame) {
+    elements.mapTileZoomOffsetSliderFrame.style.setProperty("--zoom-offset-progress", mapTileZoomOffsetProgress());
+    elements.mapTileZoomOffsetSliderFrame.dataset.offsetValue = String(state.mapTileZoomOffset);
+  }
+  elements.mapTileZoomOffsetScaleLabels?.forEach((item) => {
+    item.classList.toggle("active", Number.parseInt(item.dataset.zoomOffsetValue || "", 10) === state.mapTileZoomOffset);
+  });
+  if (elements.mapTileZoomOffsetValue) {
+    elements.mapTileZoomOffsetValue.textContent = t("map.zoomOffsetValue", {
+      value: state.mapTileZoomOffset === 0 ? `${label} (${t("map.zoomOffsetDefault")})` : label,
+    });
+  }
+}
+
+function applyMapTileZoomOffset(value, { persist = true, announce = true } = {}) {
+  const normalized = normalizeMapTileZoomOffset(value);
+  if (normalized === state.mapTileZoomOffset) {
+    updateMapTileZoomOffsetControl();
+    return;
+  }
+  state.mapTileZoomOffset = normalized;
+  if (persist) {
+    writeLocalStorageValue("navplannerMapTileZoomOffset", String(normalized));
+  }
+  updateMapTileZoomOffsetControl();
+  refreshOnlineBaseLayer({ bumpVersion: true });
+  if (announce) {
+    setStatus(t("map.zoomOffsetChanged", { value: mapTileZoomOffsetLabel(normalized) }));
+  }
+}
+
+/**
  * 功能：同步地图类型菜单按钮的选中状态。
  * 输入：无。
  * 输出：无返回值；更新按钮 class 与 aria-pressed。
@@ -2272,6 +2606,18 @@ function updateMapTypeOptionState() {
     button.classList.toggle("active", active);
     button.setAttribute("aria-pressed", String(active));
   });
+  elements.mapSourceChoiceButtons.forEach((button) => {
+    const active = button.dataset.mapSourceChoice === currentMapSourceMode();
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  elements.onlineMapProviderButtons.forEach((button) => {
+    const active = button.dataset.onlineMapProvider === state.onlineMapProvider;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  elements.onlineMapSettingsPanel?.classList.toggle("hidden", currentMapSourceMode() !== "online");
+  elements.offlineMapSettingsPanel?.classList.toggle("hidden", currentMapSourceMode() !== "offline");
 }
 
 function updateMapTypeOptionLabels() {
@@ -2281,6 +2627,23 @@ function updateMapTypeOptionLabels() {
   });
   document.querySelectorAll(".map-type-option").forEach((button) => {
     const config = BASE_MAPS[button.dataset.mapType];
+    if (!config) {
+      return;
+    }
+    button.innerHTML = `
+      <span>${escapeHtml(t(config.labelKey))}</span>
+      <small>${escapeHtml(t(config.titleKey))}</small>
+    `;
+  });
+  elements.mapSourceChoiceButtons.forEach((button) => {
+    const isOffline = button.dataset.mapSourceChoice === "offline";
+    button.innerHTML = `
+      <span>${escapeHtml(t(isOffline ? "map.source.offline" : "map.source.online"))}</span>
+      <small>${escapeHtml(t(isOffline ? "map.source.offlineHint" : "map.source.onlineHint"))}</small>
+    `;
+  });
+  elements.onlineMapProviderButtons.forEach((button) => {
+    const config = ONLINE_MAP_PROVIDERS[button.dataset.onlineMapProvider];
     if (!config) {
       return;
     }
@@ -2321,10 +2684,13 @@ function removeMapAttribution(text) {
  * 输入：openManager 表示是否自动打开离线资源管理器。
  * 输出：无返回值；更新底图、控件和状态栏。
  */
-function handleOfflineTerrainUnavailable({ openManager = false } = {}) {
+function handleOfflineTerrainUnavailable({ openManager = false, preserveSettingsMode = false, messageKey = "offline.unavailable" } = {}) {
   if (state.baseMap === "offline") {
     state.baseMap = "terrain";
     map.getContainer().dataset.baseMap = "terrain";
+    if (!preserveSettingsMode) {
+      setMapSourceMode("online");
+    }
     hideVectorMap();
     removeMapAttribution(VECTOR_ATTRIBUTION);
     removeMapAttribution(OFFLINE_VECTOR_ATTRIBUTION);
@@ -2333,7 +2699,7 @@ function handleOfflineTerrainUnavailable({ openManager = false } = {}) {
     updateMapTypeOptionState();
     map.invalidateSize({ pan: false });
   }
-  setStatus(t("offline.unavailable"), true);
+  setStatus(t(messageKey), true);
   if (openManager) {
     state.offlineMapManagerTab = "manage";
     openOfflineMapManager();
@@ -2345,19 +2711,27 @@ function handleOfflineTerrainUnavailable({ openManager = false } = {}) {
  * 输入：type。
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
-function setBaseMap(type) {
+function setBaseMap(type, { preserveSettingsMode = false, openManagerWhenUnavailable = true } = {}) {
   if (!BASE_MAPS[type]) {
-    return;
+    return false;
   }
   if (state.baseMap === type && type !== "offline") {
-    return;
+    setMapSourceMode(mapSourceModeForBaseMap(type));
+    updateMapTypeOptionState();
+    return true;
   }
   if (type === "offline" && state.offlineMapStatus && !hasActiveOfflineDisplayResource(state.offlineMapStatus)) {
-    handleOfflineTerrainUnavailable({ openManager: true });
-    return;
+    const noInstalledOfflineMaps = !hasOfflineResources(state.offlineMapStatus);
+    handleOfflineTerrainUnavailable({
+      openManager: openManagerWhenUnavailable && noInstalledOfflineMaps,
+      preserveSettingsMode,
+      messageKey: noInstalledOfflineMaps ? "offline.notInstalledPrompt" : "offline.unavailable",
+    });
+    return false;
   }
   state.offlineSelectionRequested = type === "offline";
   state.baseMap = type;
+  setMapSourceMode(mapSourceModeForBaseMap(type));
   map.getContainer().dataset.baseMap = type;
   if (isVectorBaseMap(type)) {
     setRasterBaseLayer("");
@@ -2381,6 +2755,36 @@ function setBaseMap(type) {
   updateOfflineMapControlVisibility();
   updateMapTypeOptionState();
   map.invalidateSize({ pan: false });
+  return true;
+}
+
+function applyMapSourceChoice(mode) {
+  const normalized = normalizeMapSourceMode(mode);
+  setMapSourceMode(normalized);
+  updateMapTypeOptionState();
+  const didSwitch = setBaseMap(
+    normalized === "offline" ? "offline" : "terrain",
+    { preserveSettingsMode: normalized === "offline" },
+  );
+  updateMapTypeOptionState();
+  if (didSwitch && currentMapSourceMode() === normalized) {
+    setStatus(t("map.sourceChanged", {
+      mode: t(normalized === "offline" ? "map.source.offline" : "map.source.online"),
+    }));
+  }
+}
+
+function applyOnlineMapProvider(provider) {
+  const normalized = normalizeOnlineMapProvider(provider);
+  if (state.onlineMapProvider === normalized && currentMapSourceMode() === "online") {
+    return;
+  }
+  state.onlineMapProvider = normalized;
+  writeLocalStorageValue("navplannerOnlineMapProvider", normalized);
+  refreshOnlineBaseLayer({ bumpVersion: true });
+  setBaseMap("terrain");
+  updateMapTypeOptionState();
+  setStatus(t("map.providerChanged", { provider: t(currentOnlineMapProviderConfig(normalized).labelKey) }));
 }
 
 /**
@@ -2822,11 +3226,65 @@ async function clearMapCache() {
     const payload = await fetchJson("/api/map-cache/clear", { method: "POST" });
     state.mapCacheStatus = payload;
     updateMapCacheSummary(payload);
-    state.mapCacheTileVersion = Date.now();
-    baseLayers.terrain.setUrl(apiResourceUrl(`/api/map-cache/google_terrain/${versionPathSegment(state.mapCacheTileVersion)}/{z}/{x}/{y}.jpg`));
+    refreshOnlineBaseLayer({ bumpVersion: true });
     setStatus(currentLanguage() === "zh-Hans" && payload.message ? payload.message : t("cache.cleared"));
   } finally {
     elements.clearMapCacheButton.disabled = false;
+  }
+}
+
+async function resetAllSettingsAndCaches() {
+  if (!window.confirm(t("settings.resetAllConfirm"))) {
+    return;
+  }
+  const button = elements.resetAllSettingsButton;
+  if (button) {
+    button.disabled = true;
+    button.textContent = t("settings.resetAllWorking");
+  }
+  try {
+    LOCAL_SETTING_KEYS.forEach(removeLocalStorageValue);
+    const mapCachePayload = await fetchJson("/api/map-cache/clear", { method: "POST" });
+    const fr24CachePayload = await fetchJson("/api/fr24/cache/clear", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ include_favorites: true }),
+    });
+    state.mapCacheStatus = mapCachePayload;
+    state.fr24CacheStatus = fr24CachePayload;
+    state.onlineMapProvider = "arcgis";
+    setMapSourceMode("online", { persist: false });
+    state.baseMap = "terrain";
+    state.mapTileZoomOffset = 0;
+    state.themeMode = "system";
+    state.languageMode = "system";
+    state.effectiveLanguage = resolveLanguageMode("system");
+    state.appIconChoice = "primary";
+    state.fr24CacheItems = [];
+    state.fr24CacheFlights.clear();
+    updateMapCacheSummary(mapCachePayload);
+    updateFR24CacheSummary(fr24CachePayload);
+    renderFR24CacheFlights([]);
+    applyLanguageMode("system", { persist: false, refresh: true });
+    applyThemeMode("system", { persist: false });
+    applyAppIconChoice("primary", { persist: false, notifyNative: true });
+    updateMapTypeOptionLabels();
+    updateMapTileZoomOffsetControl();
+    map.getContainer().dataset.baseMap = "terrain";
+    hideVectorMap();
+    removeMapAttribution(VECTOR_ATTRIBUTION);
+    removeMapAttribution(OFFLINE_VECTOR_ATTRIBUTION);
+    setRasterBaseLayer("terrain");
+    updateOfflineMapControlVisibility();
+    updateMapTypeOptionState();
+    refreshOnlineBaseLayer({ bumpVersion: true });
+    map.invalidateSize({ pan: false });
+    setStatus(t("settings.resetAllDone"));
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = t("settings.resetAllButton");
+    }
   }
 }
 
@@ -3311,7 +3769,7 @@ function ensureOfflineBoundsMiniMap() {
       worldCopyJump: true,
     }).setView([20, 0], 1);
     disableDoubleTapZoom(offlineBoundsMiniMap);
-    createAsyncCachedTileLayer(apiResourceUrl("/api/map-cache/google_terrain/{z}/{x}/{y}.jpg"), {
+    createAsyncCachedTileLayer(onlineMapTileUrl(), {
       maxZoom: 6,
       minZoom: 0,
       keepBuffer: 2,
@@ -3874,9 +4332,14 @@ async function refreshOfflineMapStatus() {
   updateOfflineMapSettingsSummary(payload);
   renderOfflineMapModal();
   if (state.baseMap === "offline" && !hasActiveOfflineDisplayResource(payload)) {
-    const shouldOpenManager = state.offlineSelectionRequested;
+    const noInstalledOfflineMaps = !hasOfflineResources(payload);
+    const shouldOpenManager = state.offlineSelectionRequested && noInstalledOfflineMaps;
     state.offlineSelectionRequested = false;
-    handleOfflineTerrainUnavailable({ openManager: shouldOpenManager });
+    handleOfflineTerrainUnavailable({
+      openManager: shouldOpenManager,
+      preserveSettingsMode: shouldOpenManager || currentMapSourceMode() === "offline",
+      messageKey: noInstalledOfflineMaps ? "offline.notInstalledPrompt" : "offline.unavailable",
+    });
     scheduleOfflineMapPoll();
     return payload;
   }
@@ -5147,6 +5610,8 @@ async function handleNativeDatabaseSelected(payload = {}) {
 function refreshLocalizedDynamicText() {
   updateLayoutButtonLabels();
   updateMapTypeOptionLabels();
+  updateMapTypeOptionState();
+  updateMapTileZoomOffsetControl();
   updateMapOverlayControlLabels();
   updateOfflineMapControlLabel();
   if (state.databaseStatus) {
@@ -9971,6 +10436,9 @@ elements.refreshMapCacheButton?.addEventListener("click", () => {
 elements.clearMapCacheButton?.addEventListener("click", () => {
   clearMapCache().catch(setErrorStatus);
 });
+elements.resetAllSettingsButton?.addEventListener("click", () => {
+  resetAllSettingsAndCaches().catch(setErrorStatus);
+});
 elements.fr24SearchButton?.addEventListener("click", () => {
   searchFR24Flights().catch(setErrorStatus);
 });
@@ -10031,6 +10499,18 @@ elements.languageChoiceButtons.forEach((button) => {
 elements.appIconChoiceButtons.forEach((button) => {
   button.addEventListener("click", () => applyAppIconChoice(button.dataset.appIconChoice));
 });
+elements.mapSourceChoiceButtons.forEach((button) => {
+  button.addEventListener("click", () => applyMapSourceChoice(button.dataset.mapSourceChoice));
+});
+elements.onlineMapProviderButtons.forEach((button) => {
+  button.addEventListener("click", () => applyOnlineMapProvider(button.dataset.onlineMapProvider));
+});
+elements.mapTileZoomOffsetInput?.addEventListener("input", () => {
+  applyMapTileZoomOffset(elements.mapTileZoomOffsetInput.value, { announce: false });
+});
+elements.mapTileZoomOffsetInput?.addEventListener("change", () => {
+  applyMapTileZoomOffset(elements.mapTileZoomOffsetInput.value, { announce: true });
+});
 themeMediaQuery?.addEventListener?.("change", () => {
   if (state.themeMode === "system") {
     applyThemeMode("system", { persist: false });
@@ -10085,6 +10565,9 @@ async function init() {
   applyLanguageMode(state.languageMode, { persist: false, refresh: false });
   applyThemeMode(state.themeMode, { persist: false });
   applyAppIconChoice(state.appIconChoice, { persist: false, notifyNative: false });
+  updateMapTypeOptionLabels();
+  updateMapTypeOptionState();
+  updateMapTileZoomOffsetControl();
   setDetailTab("airport");
   setMobileBottomTab("plan");
   try {

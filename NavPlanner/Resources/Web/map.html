@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
     <base href="navplanner://app/" />
-    <meta name="navplanner-resource-version" content="20260611-map-zoom-input" />
+    <meta name="navplanner-resource-version" content="20260613-websafe-tiles-liquid-slider" />
     <title>航空航路规划器</title>
     <script>
       (() => {
@@ -375,16 +375,6 @@
           </div>
 
           <div class="settings-card">
-            <div class="subheading" data-i18n="settings.language">语言</div>
-            <div class="language-choice-group" role="radiogroup" aria-label="语言" data-i18n-aria-label="settings.language">
-              <button class="language-choice active" type="button" data-language-choice="system" data-i18n="language.system">系统语言</button>
-              <button class="language-choice" type="button" data-language-choice="zh-Hans" data-i18n="language.zhHans">简体中文</button>
-              <button class="language-choice" type="button" data-language-choice="en" data-i18n="language.en">English</button>
-            </div>
-            <div class="helper-text" data-i18n="settings.languageHint">默认跟随系统语言；无论选择哪种语言，SID / STAR / APPROACH、DCT、IFR、AIRAC 等航空标识保持英文。</div>
-          </div>
-
-          <div class="settings-card">
             <div class="subheading" data-i18n="settings.appIcon">应用图标</div>
             <div class="app-icon-choice-group" role="radiogroup" aria-label="应用图标" data-i18n-aria-label="settings.appIcon">
               <div class="app-icon-choice-section">
@@ -425,6 +415,99 @@
             <div class="helper-text" data-i18n="settings.appIconHint">默认图标为日间均衡，夜间图标使用蓝黑反色地形、紫色层次和暗橙航路。</div>
           </div>
 
+          <div class="settings-card map-selection-card">
+            <div class="subheading" data-i18n="settings.mapSelection">地图选择</div>
+            <div class="map-source-choice-group" role="radiogroup" aria-label="地图模式" data-i18n-aria-label="settings.mapSelectionMode">
+              <button class="map-source-choice active" type="button" data-map-source-choice="online" aria-pressed="true">
+                <span data-i18n="map.source.online">在线地图</span>
+                <small data-i18n="map.source.onlineHint">选择在线底图来源</small>
+              </button>
+              <button class="map-source-choice" type="button" data-map-source-choice="offline" aria-pressed="false">
+                <span data-i18n="map.source.offline">离线地图</span>
+                <small data-i18n="map.source.offlineHint">使用本机离线地图资源</small>
+              </button>
+            </div>
+            <div id="onlineMapSettingsPanel" class="map-choice-submenu">
+              <div class="subheading" data-i18n="map.providerTitle">在线地图来源</div>
+              <div class="online-map-provider-choice-group" role="radiogroup" aria-label="在线地图来源" data-i18n-aria-label="map.providerTitle">
+                <button class="online-map-provider-choice active" type="button" data-online-map-provider="arcgis" aria-pressed="true">
+                  <span data-i18n="map.provider.arcgis">ArcGIS</span>
+                  <small data-i18n="map.provider.arcgisHint">默认在线地形底图</small>
+                </button>
+                <button class="online-map-provider-choice" type="button" data-online-map-provider="openstreetmap" aria-pressed="false">
+                  <span data-i18n="map.provider.openstreetmap">OpenStreetMap</span>
+                  <small data-i18n="map.provider.openstreetmapHint">OSM 标准底图</small>
+                </button>
+                <button class="online-map-provider-choice" type="button" data-online-map-provider="opentopomap" aria-pressed="false">
+                  <span data-i18n="map.provider.opentopomap">OpenTopoMap</span>
+                  <small data-i18n="map.provider.opentopomapHint">开源地形底图</small>
+                </button>
+                <button class="online-map-provider-choice" type="button" data-online-map-provider="google" aria-pressed="false">
+                  <span data-i18n="map.provider.google">Google</span>
+                  <small data-i18n="map.provider.googleHint">Google 地形底图</small>
+                </button>
+              </div>
+              <div class="map-zoom-offset-control">
+                <div class="settings-row">
+                  <div>
+                    <strong data-i18n="map.zoomOffsetTitle">地图清晰度 Offset</strong>
+                    <span id="mapTileZoomOffsetValue" data-i18n="map.zoomOffsetValue">当前 0</span>
+                  </div>
+                </div>
+                <div id="mapTileZoomOffsetSliderFrame" class="map-zoom-offset-slider-frame">
+                  <input id="mapTileZoomOffsetInput" class="map-zoom-offset-slider" type="range" min="-1" max="2" step="1" value="0" aria-label="在线地图瓦片缩放 Offset" data-i18n-aria-label="map.zoomOffsetAria" />
+                  <div class="map-zoom-offset-ticks" aria-hidden="true">
+                    <span data-zoom-offset-value="-1"></span>
+                    <span data-zoom-offset-value="0"></span>
+                    <span data-zoom-offset-value="1"></span>
+                    <span data-zoom-offset-value="2"></span>
+                  </div>
+                  <div class="map-zoom-offset-scale" aria-hidden="true">
+                    <span data-zoom-offset-value="-1">-1</span>
+                    <span data-zoom-offset-value="0">0</span>
+                    <span data-zoom-offset-value="1">+1</span>
+                    <span data-zoom-offset-value="2">+2</span>
+                  </div>
+                </div>
+                <div class="helper-text" data-i18n="map.zoomOffsetHint">提高 Offset 会请求更高缩放级别的在线瓦片，文字和地形通常更清晰，但加载量会增加。</div>
+              </div>
+              <div class="settings-row map-cache-summary-row">
+                <div>
+                  <strong id="mapCacheSummaryTitle" data-i18n="settings.mapCache">在线地图缓存</strong>
+                  <span id="mapCacheSummaryText" data-i18n="cache.loading">正在统计缓存大小...</span>
+                </div>
+              </div>
+              <div class="settings-action-row settings-action-row-paired">
+                <button id="clearMapCacheButton" class="ghost-button compact-button" type="button" data-i18n="cache.clear">清理缓存</button>
+                <button id="refreshMapCacheButton" class="ghost-button compact-button" type="button" data-i18n="cache.refresh">刷新缓存</button>
+              </div>
+            </div>
+            <div id="offlineMapSettingsPanel" class="map-choice-submenu hidden">
+              <div class="settings-row">
+                <div>
+                  <strong id="offlineMapSummaryTitle" data-i18n="offline.loading">正在读取离线地图...</strong>
+                  <span id="offlineMapSummaryText" data-i18n="offline.summaryInitial">本地资源、下载任务和启用状态会在这里显示。</span>
+                </div>
+              </div>
+              <div class="settings-action-row settings-action-row-paired">
+                <button id="manageOfflineMapsButton" class="ghost-button compact-button" type="button" data-i18n="offline.manage">管理离线地图</button>
+                <button id="refreshOfflineMapsButton" class="ghost-button compact-button" type="button" data-i18n="common.refreshStatus">刷新状态</button>
+              </div>
+              <div class="helper-text" data-i18n="offline.settingsHint">离线地图从本机 Application Support/NavPlanner/MapOffline 读取，可在这里启用、删除、下载和查看下载进度。</div>
+            </div>
+            <div class="helper-text" data-i18n="settings.mapSelectionHint">在线地图作为增强底图；离线地图读取本机资源，断网时本地航路、程序和 nav-overlay 仍可使用。</div>
+          </div>
+
+          <div class="settings-card">
+            <div class="subheading" data-i18n="settings.language">语言</div>
+            <div class="language-choice-group" role="radiogroup" aria-label="语言" data-i18n-aria-label="settings.language">
+              <button class="language-choice active" type="button" data-language-choice="system" data-i18n="language.system">系统语言</button>
+              <button class="language-choice" type="button" data-language-choice="zh-Hans" data-i18n="language.zhHans">简体中文</button>
+              <button class="language-choice" type="button" data-language-choice="en" data-i18n="language.en">English</button>
+            </div>
+            <div class="helper-text" data-i18n="settings.languageHint">默认跟随系统语言；无论选择哪种语言，SID / STAR / APPROACH、DCT、IFR、AIRAC 等航空标识保持英文。</div>
+          </div>
+
           <div class="settings-card">
             <div class="subheading" data-i18n="settings.database">导航数据库</div>
             <div class="settings-row">
@@ -453,41 +536,17 @@
             </div>
           </div>
 
-          <div class="settings-card">
-            <div class="subheading" data-i18n="settings.offlineMaps">离线地图</div>
-            <div class="settings-row">
-              <div>
-                <strong id="offlineMapSummaryTitle" data-i18n="offline.loading">正在读取离线地图...</strong>
-                <span id="offlineMapSummaryText" data-i18n="offline.summaryInitial">本地资源、下载任务和启用状态会在这里显示。</span>
-              </div>
-            </div>
-            <div class="settings-action-row settings-action-row-paired">
-              <button id="manageOfflineMapsButton" class="ghost-button compact-button" type="button" data-i18n="offline.manage">管理离线地图</button>
-              <button id="refreshOfflineMapsButton" class="ghost-button compact-button" type="button" data-i18n="common.refreshStatus">刷新状态</button>
-            </div>
-            <div class="helper-text" data-i18n="offline.settingsHint">离线地图从本机 Application Support/NavPlanner/MapOffline 读取，可在这里启用、删除、下载和查看下载进度。</div>
-          </div>
-
-          <div class="settings-card">
-            <div class="subheading" data-i18n="settings.mapCache">在线地图缓存</div>
-            <div class="settings-row">
-              <div>
-                <strong id="mapCacheSummaryTitle" data-i18n="settings.mapCache">在线地图缓存</strong>
-                <span id="mapCacheSummaryText" data-i18n="cache.loading">正在统计缓存大小...</span>
-              </div>
-            </div>
-            <div class="settings-action-row settings-action-row-paired">
-              <button id="clearMapCacheButton" class="ghost-button compact-button" type="button" data-i18n="cache.clear">清理缓存</button>
-              <button id="refreshMapCacheButton" class="ghost-button compact-button" type="button" data-i18n="cache.refresh">刷新缓存</button>
-            </div>
-            <div class="helper-text" data-i18n="cache.settingsHint">仅清理在线增强底图缓存，不影响本地导航数据库、离线地图包和航路叠加层。</div>
-          </div>
-
           <div class="settings-card copyright-card">
             <div class="subheading" data-i18n="settings.copyright">版权与说明</div>
             <p data-i18n="settings.copyrightP1">NavPlanner 是面向航路规划和航图查看的本地优先工具，可在本机数据库上完成机场、航点、航路、SID / STAR / APPROACH 与 nav-overlay 查询。</p>
             <p data-i18n="settings.copyrightP2">在计划页填写起降机场并生成航路，在机场页查看程序和跑道信息，在查询页检索并绘制 FR24 轨迹，在设置页管理数据库、离线地图、缓存、外观、语言和图标。</p>
             <p data-i18n="settings.copyrightP3">地图底图、离线地图包和导航数据版权归各自数据来源所有；App 开发者为 MDX。</p>
+          </div>
+
+          <div class="settings-card reset-all-card">
+            <div class="subheading" data-i18n="settings.resetAll">重置与清理</div>
+            <div class="helper-text" data-i18n="settings.resetAllHint">恢复外观、语言、图标和地图设置默认值，并清理在线地图缓存与 FR24 轨迹缓存；不会删除导航数据库或离线地图包。</div>
+            <button id="resetAllSettingsButton" class="ghost-button compact-button danger-button reset-all-button" type="button" data-i18n="settings.resetAllButton">重置所有设置并删除全部缓存</button>
           </div>
         </section>
       </aside>
