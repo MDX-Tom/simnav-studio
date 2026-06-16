@@ -1909,30 +1909,8 @@ body.left-panel-expanded .selection-table {
   contain: layout paint;
 }
 
-.map-zoom-offset-visual-track {
-  position: absolute;
-  z-index: 1;
-  top: calc((var(--zoom-offset-slider-row-height) - var(--zoom-offset-track-height)) / 2);
-  left: calc(var(--zoom-offset-frame-padding) + var(--zoom-offset-track-inset));
-  right: calc(var(--zoom-offset-frame-padding) + var(--zoom-offset-track-inset));
-  height: var(--zoom-offset-track-height);
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--zoom-offset-track-rest);
-  pointer-events: none;
-}
-
-.map-zoom-offset-visual-track i {
-  display: block;
-  width: var(--zoom-offset-progress);
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(180deg, var(--zoom-offset-track-fill-top), var(--zoom-offset-track-fill-bottom));
-}
-
 .map-zoom-offset-slider {
   position: relative;
-  z-index: 2;
   align-self: center;
   display: block;
   width: 100%;
