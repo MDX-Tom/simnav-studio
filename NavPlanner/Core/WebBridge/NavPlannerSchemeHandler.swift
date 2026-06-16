@@ -1,6 +1,4 @@
 import Foundation
-import ImageIO
-import UniformTypeIdentifiers
 import WebKit
 
 enum FR24SessionStore {
@@ -2943,7 +2941,6 @@ private final class OnlineTileCache {
     private struct TilePayload {
         let data: Data
         let contentType: String
-        let rewroteData: Bool
     }
 
     private let fileManager: FileManager
@@ -3061,10 +3058,7 @@ private final class OnlineTileCache {
         }
 
         let localURL = tileFileURL(provider: provider, z: z, x: x, y: y)
-        if let payload = cachedTilePayload(provider: provider, localURL: localURL) {
-            if payload.rewroteData {
-                _ = writeCacheData(payload.data, to: localURL)
-            }
+        if let payload = cachedTilePayload(provider: provider, localURL: localURL, z: z, x: x, y: y) {
             return .hit(data: payload.data, contentType: payload.contentType)
         }
 
@@ -3145,11 +3139,22 @@ private final class OnlineTileCache {
         guard let data = try? Data(contentsOf: localURL), !data.isEmpty else {
             return nil
         }
-        guard let payload = cacheTilePayload(from: data, provider: provider, isFromNetwork: false) else {
+        guard let payload = cacheTilePayload(from: data, provider: provider) else {
             try? fileManager.removeItem(at: localURL)
             return nil
         }
         return payload
+    }
+
+    private func cachedTilePayload(provider: OnlineTileProvider, localURL: URL, z: Int, x: Int, y: Int) -> TilePayload? {
+        if let payload = cachedTilePayload(provider: provider, localURL: localURL) {
+            return payload
+        }
+        guard let legacyURL = legacyNormalizedTileFileURL(provider: provider, z: z, x: x, y: y),
+              legacyURL != localURL else {
+            return nil
+        }
+        return cachedTilePayload(provider: provider, localURL: legacyURL)
     }
 
     private func waitForCachedTile(
@@ -3190,7 +3195,7 @@ private final class OnlineTileCache {
                 guard let httpResponse = response as? HTTPURLResponse,
                       (200..<300).contains(httpResponse.statusCode),
                       let data,
-                      let payload = self.cacheTilePayload(from: data, provider: provider, isFromNetwork: true) else {
+                      let payload = self.cacheTilePayload(from: data, provider: provider) else {
                     attemptDownload(at: index + 1)
                     return
                 }
@@ -3223,7 +3228,7 @@ private final class OnlineTileCache {
 
         for remoteURL in remoteURLs {
             guard let data = fetchRemoteTileData(from: remoteURL),
-                  let payload = cacheTilePayload(from: data, provider: provider, isFromNetwork: true),
+                  let payload = cacheTilePayload(from: data, provider: provider),
                   writeCacheData(payload.data, to: localURL) else {
                 continue
             }
@@ -3297,40 +3302,9 @@ private final class OnlineTileCache {
         }
     }
 
-    private func cacheTilePayload(from data: Data, provider: OnlineTileProvider, isFromNetwork: Bool) -> TilePayload? {
+    private func cacheTilePayload(from data: Data, provider: OnlineTileProvider) -> TilePayload? {
         guard isValidTileData(data, provider: provider) else { return nil }
-        guard shouldNormalizeForWebContent(provider: provider) else {
-            return TilePayload(data: data, contentType: contentType(for: data) ?? provider.contentType, rewroteData: false)
-        }
-        if !isFromNetwork, isPNG(data) {
-            return TilePayload(data: data, contentType: "image/png", rewroteData: false)
-        }
-        guard let normalized = normalizedPNGData(from: data) else { return nil }
-        return TilePayload(data: normalized, contentType: "image/png", rewroteData: !isPNG(data))
-    }
-
-    private func shouldNormalizeForWebContent(provider: OnlineTileProvider) -> Bool {
-        provider.key != "terrain_terrarium"
-    }
-
-    private func normalizedPNGData(from data: Data) -> Data? {
-        let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
-        guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions),
-              let image = CGImageSourceCreateImageAtIndex(source, 0, sourceOptions) else {
-            return nil
-        }
-        let output = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(
-            output,
-            UTType.png.identifier as CFString,
-            1,
-            nil
-        ) else {
-            return nil
-        }
-        CGImageDestinationAddImage(destination, image, nil)
-        guard CGImageDestinationFinalize(destination) else { return nil }
-        return output as Data
+        return TilePayload(data: data, contentType: contentType(for: data) ?? provider.contentType)
     }
 
     private func isValidTileData(_ data: Data, provider: OnlineTileProvider) -> Bool {
@@ -3360,14 +3334,15 @@ private final class OnlineTileCache {
               data.prefix(2).elementsEqual([0xff, 0xd8]) else {
             return false
         }
-        let tail = Array(data.suffix(min(data.count, 4096)))
-        guard tail.count >= 2 else { return false }
-        for index in stride(from: tail.count - 2, through: 0, by: -1) {
-            if tail[index] == 0xff && tail[index + 1] == 0xd9 {
-                return true
+        var index = data.count - 1
+        while index > 2 {
+            let byte = data[index]
+            if byte != 0x00, byte != 0x0a, byte != 0x0d, byte != 0x20 {
+                break
             }
+            index -= 1
         }
-        return false
+        return index >= 3 && data[index - 1] == 0xff && data[index] == 0xd9
     }
 
     private func isPNG(_ data: Data) -> Bool {
@@ -3391,7 +3366,16 @@ private final class OnlineTileCache {
     }
 
     private func cacheFileExtension(for provider: OnlineTileProvider) -> String {
-        shouldNormalizeForWebContent(provider: provider) ? "png" : provider.format
+        provider.format
+    }
+
+    private func legacyNormalizedTileFileURL(provider: OnlineTileProvider, z: Int, x: Int, y: Int) -> URL? {
+        guard ["jpg", "jpeg"].contains(provider.format) else { return nil }
+        return rootDirectory
+            .appendingPathComponent(provider.key, isDirectory: true)
+            .appendingPathComponent(String(format: "z%02d", z), isDirectory: true)
+            .appendingPathComponent(String(format: "%04x", x >> 8), isDirectory: true)
+            .appendingPathComponent("\(String(format: "%08x", x))_\(String(format: "%08x", y)).png")
     }
 
     private func diskUsage() -> (bytes: Int64, files: Int) {

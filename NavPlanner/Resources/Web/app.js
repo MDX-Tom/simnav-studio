@@ -1321,29 +1321,26 @@ function isSupportedTileImageBuffer(buffer) {
   if (!isJPEG) {
     return false;
   }
-  const searchStart = Math.max(2, bytes.length - 4096);
-  for (let index = bytes.length - 2; index >= searchStart; index -= 1) {
-    if (bytes[index] === 0xff && bytes[index + 1] === 0xd9) {
-      return true;
-    }
+  let tailIndex = bytes.length - 1;
+  while (tailIndex > 2 && (bytes[tailIndex] === 0x00 || bytes[tailIndex] === 0x0a || bytes[tailIndex] === 0x0d || bytes[tailIndex] === 0x20)) {
+    tailIndex -= 1;
   }
-  return false;
+  return tailIndex >= 3 && bytes[tailIndex - 1] === 0xff && bytes[tailIndex] === 0xd9;
 }
 
 /**
- * 功能：把真实瓦片二进制写入图片元素，并在图片可显示后通知 Leaflet。
- * 输入：tile 为图片元素，blob 为真实瓦片数据，done 为 Leaflet 的加载完成回调。
+ * 功能：把已命中的真实瓦片 URL 写入图片元素，并在图片可显示后通知 Leaflet。
+ * 输入：tile 为图片元素，url 为本地瓦片 URL，done 为 Leaflet 的加载完成回调。
  * 输出：无返回值；成功后底图才会替换旧瓦片。
  */
-function loadAsyncCachedTileBlob(tile, blob, done) {
+function loadAsyncCachedTileUrl(tile, url, done) {
   if (tile._plannerCancelled) {
     return;
   }
   if (tile._plannerObjectUrl) {
     URL.revokeObjectURL(tile._plannerObjectUrl);
+    tile._plannerObjectUrl = "";
   }
-  const objectUrl = URL.createObjectURL(blob);
-  tile._plannerObjectUrl = objectUrl;
   tile.onload = () => {
     if (!tile._plannerCancelled && !tile._plannerDone) {
       tile._plannerDone = true;
@@ -1356,7 +1353,7 @@ function loadAsyncCachedTileBlob(tile, blob, done) {
       done(new Error("Tile image decode failed."), tile);
     }
   };
-  tile.src = objectUrl;
+  tile.src = url;
 }
 
 const AsyncCachedTileLayer = L.TileLayer.extend({
@@ -1378,8 +1375,9 @@ const AsyncCachedTileLayer = L.TileLayer.extend({
       if (tile._plannerCancelled || tile._plannerDone) {
         return;
       }
+      const tileUrl = this.getTileUrl(coords);
       try {
-        const response = await fetch(this.getTileUrl(coords), { cache: "no-store" });
+        const response = await fetch(tileUrl, { cache: "no-store" });
         if (isQueuedTileResponse(response)) {
           await response.arrayBuffer().catch(() => {});
           scheduleAsyncCachedTileRetry(tile, attempt, requestTile);
@@ -1392,7 +1390,7 @@ const AsyncCachedTileLayer = L.TileLayer.extend({
         if (!isSupportedTileImageBuffer(buffer)) {
           throw new Error("Tile response is not a supported image.");
         }
-        loadAsyncCachedTileBlob(tile, new Blob([buffer], { type: response.headers.get("Content-Type") || "image/png" }), done);
+        loadAsyncCachedTileUrl(tile, tileUrl, done);
       } catch (_error) {
         scheduleAsyncCachedTileRetry(tile, attempt, requestTile);
       }
@@ -5786,6 +5784,7 @@ function setDetailTab(tab) {
     panel.classList.toggle("hidden", panel.dataset.detailPanel !== normalized);
   });
   if (normalized === "settings") {
+    updateMapTileZoomOffsetControl();
     refreshDatabaseList().catch((error) => console.warn("本地数据库列表刷新失败", error));
     refreshOfflineMapStatus().catch((error) => console.warn("离线地图状态刷新失败", error));
     refreshMapCacheStatus().catch((error) => console.warn("在线地图缓存状态刷新失败", error));
@@ -5820,6 +5819,9 @@ function setMobileBottomTab(tab) {
   window.setTimeout(() => {
     map.invalidateSize({ pan: false });
     scheduleVectorMapResizeSync();
+    if (normalized === "settings") {
+      updateMapTileZoomOffsetControl();
+    }
   }, 90);
 }
 
@@ -10511,6 +10513,14 @@ elements.mapTileZoomOffsetInput?.addEventListener("input", () => {
 elements.mapTileZoomOffsetInput?.addEventListener("change", () => {
   applyMapTileZoomOffset(elements.mapTileZoomOffsetInput.value, { announce: true });
 });
+window.addEventListener("resize", () => {
+  updateMapTileZoomOffsetControl();
+}, { passive: true });
+window.addEventListener("orientationchange", () => {
+  window.setTimeout(() => {
+    updateMapTileZoomOffsetControl();
+  }, 180);
+}, { passive: true });
 themeMediaQuery?.addEventListener?.("change", () => {
   if (state.themeMode === "system") {
     applyThemeMode("system", { persist: false });
