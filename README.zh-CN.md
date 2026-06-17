@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  面向 iPhone 与 iPad 的本地优先航空航路规划工具。
+  面向 iPhone 与 iPad 的模拟飞行一站式航路规划与地图工作台。
   <br />
   <a href="README.md">English</a>
 </p>
@@ -16,9 +16,11 @@
   <img alt="NavPlanner iPad 地图工作台" src="Media/ipad-us.png" width="520" />
 </p>
 
-NavPlanner 是一款原生 iOS 航空航路规划与地图工作台 App。它把机场查询、航路规划、`SID` / `STAR` / `APPROACH` 查看、导航叠加层、离线地图、本地数据库管理和实际轨迹对照集中在一个 Universal App 中。
+NavPlanner 是一款面向模拟飞行的原生 iOS 一站式规划工具。它把机场查询、航路生成、`SID` / `STAR` / `APPROACH` 预览、nav-overlay 查看、离线地图包、导航数据库切换、地图缓存管理和可选 FR24 轨迹对照集中在一个 Universal App 中，让模拟飞行玩家可以从航线构思、程序查看到地图复盘都在 iPhone / iPad 上完成。
 
-App 采用 SwiftUI 原生外壳、WKWebView 地图工作台和 Swift 本地服务层。核心流程基于本机数据运行，航路规划、Procedure 查看、nav-overlay 渲染和离线地图显示不依赖 Python server、局域网服务或远程规划后端。
+App 采用 SwiftUI 原生外壳、WKWebView 地图工作台和随 App 打包的 Swift 服务层，定位于模拟飞行、学习研究和个人规划练习。
+
+**重要免责声明：** NavPlanner 不是认证航空软件，严禁用于真实飞行计划、真实导航、签派放行、运行决策或任何安全关键航空活动。
 
 ## 功能亮点
 
@@ -170,4 +172,4 @@ Media/                         README 截图和公开说明图片
 
 ## 数据与免责声明
 
-NavPlanner 是面向航路规划、数据查看和个人学习 / 辅助规划的工具。实际飞行请始终以官方航行资料、管制指令、适航设备和当前运行程序为准。地图底图、导航数据库、离线地图包和 FR24 数据版权归各自来源所有；请确认你有权在本机使用和分发相关数据。
+NavPlanner 仅用于模拟飞行规划、数据查看和个人学习，不得用于真实飞行计划、真实导航、签派放行、运行决策或任何安全关键航空活动。实际飞行必须始终以官方航行资料、管制指令、适航设备和当前运行程序为准。地图底图、导航数据库、离线地图包和 FR24 数据版权归各自来源所有；请确认你有权在本机使用和分发相关数据。

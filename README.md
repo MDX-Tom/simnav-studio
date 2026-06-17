@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  Offline-first aviation route planning for iPhone and iPad.
+  An all-in-one sim-flight planning desk for iPhone and iPad.
   <br />
   <a href="README.zh-CN.md">简体中文</a>
 </p>
@@ -16,9 +16,11 @@
   <img alt="iPad map workspace in NavPlanner" src="Media/ipad-us.png" width="520" />
 </p>
 
-NavPlanner is a native iOS route planning and map workspace for aviation data. It combines airport lookup, airway planning, `SID` / `STAR` / `APPROACH` inspection, navigation overlays, offline maps, local database management, and optional real-world track comparison in one Universal app.
+NavPlanner is a native iOS all-in-one companion for flight simulation planning. It brings airport lookup, airway route generation, `SID` / `STAR` / `APPROACH` preview, nav-overlay inspection, offline map packages, navigation database switching, map cache management, and optional FR24 track comparison into one Universal app, giving simulator pilots a compact planning desk from route idea to map review.
 
-The app is built around a SwiftUI shell, a WKWebView map workspace, and a Swift local service layer. Core workflows run from on-device data, so route planning, procedure viewing, nav-overlay rendering, and offline maps do not require a Python server, LAN service, or remote planning backend.
+NavPlanner is built around a SwiftUI shell, a WKWebView map workspace, and a Swift service layer packaged inside the app. It is designed for simulator flying, study, and personal planning practice.
+
+**Important safety notice:** NavPlanner is not certified aviation software. It is strictly prohibited to use NavPlanner for real-world flight planning, navigation, dispatch, operational decision-making, or any safety-critical aviation activity.
 
 ## Highlights
 
@@ -170,4 +172,4 @@ Media/                         README screenshots and public images
 
 ## Data Notice
 
-NavPlanner is a planning, inspection, and personal learning aid. For real-world aviation, always rely on official aeronautical publications, ATC instructions, certified avionics, and current operational procedures. Basemaps, navigation databases, offline map packages, and FR24 data belong to their respective providers; make sure you have permission to use and distribute any data you include.
+NavPlanner is a simulator-planning, inspection, and personal learning aid only. It must never be used for real-world flight planning, navigation, dispatch, operational decision-making, or any safety-critical aviation activity. For real-world aviation, always rely on official aeronautical publications, ATC instructions, certified avionics, and current operational procedures. Basemaps, navigation databases, offline map packages, and FR24 data belong to their respective providers; make sure you have permission to use and distribute any data you include.
