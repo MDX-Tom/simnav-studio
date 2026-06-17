@@ -16,7 +16,7 @@
   <img alt="iPad map workspace in NavPlanner" src="Media/ipad-us.png" width="520" />
 </p>
 
-NavPlanner is a native iOS all-in-one companion for flight simulation planning. It brings airport lookup, airway route generation, `SID` / `STAR` / `APPROACH` preview, nav-overlay inspection, offline map packages, navigation database switching, map cache management, and optional FR24 track comparison into one Universal app, giving simulator pilots a compact planning desk from route idea to map review.
+NavPlanner is a native iOS planning desk for flight simulation. It brings **route planning**, **airport and procedure inspection**, **offline maps**, **local navigation databases**, and optional **FR24 online track download, comparison, and matching** into one app, emphasizing **an integrated workflow from route idea to map review** and **offline availability**.
 
 NavPlanner is built around a SwiftUI shell, a WKWebView map workspace, and a Swift service layer packaged inside the app. It is designed for simulator flying, study, and personal planning practice.
 
@@ -31,8 +31,6 @@ NavPlanner is built around a SwiftUI shell, a WKWebView map workspace, and a Swi
 - **FR24 track comparison**: after syncing an in-app browser session, query recent flights on the planned city pair, view history, download and draw tracks, and match tracks back to local route data.
 - **Offline maps**: import or download PMTiles, MBTiles, SQLite tile stores, and legacy Web `tiles/` layouts; manage storage, active resources, download progress, and online tile cache separately.
 - **Local navigation databases**: import `.s3db`, `.sqlite`, `.sqlite3`, or `.db` files from Files, switch between local databases, remove unused copies, and restore the bundled database.
-- **Universal layout**: iPhone uses a map-first vertical workspace with a compact bottom tab bar; iPad and iPhone landscape use a multi-panel planning desk.
-- **Language and appearance**: follows the system language by default, with Simplified Chinese and English options; supports system, day, and night appearance plus alternate app icons.
 
 ## Using NavPlanner
 
@@ -172,4 +170,8 @@ Media/                         README screenshots and public images
 
 ## Data Notice
 
-NavPlanner is a simulator-planning, inspection, and personal learning aid only. It must never be used for real-world flight planning, navigation, dispatch, operational decision-making, or any safety-critical aviation activity. For real-world aviation, always rely on official aeronautical publications, ATC instructions, certified avionics, and current operational procedures. Basemaps, navigation databases, offline map packages, and FR24 data belong to their respective providers; make sure you have permission to use and distribute any data you include.
+NavPlanner is a simulator-planning, inspection, and personal learning aid only. It must never be used for real-world flight planning, navigation, dispatch, operational decision-making, or any safety-critical aviation activity. For real-world aviation, always rely on official aeronautical publications, ATC instructions, certified avionics, and current operational procedures.
+
+NavPlanner may use third-party or user-supplied data and resources, including basemaps, airport and procedure data, AIRAC / navigation databases, PMTiles / MBTiles / SQLite map packages, and flight data from FR24. These materials may be protected by copyright, database rights, trademarks, platform terms, or redistribution restrictions.
+This app does not provide data packages protected by copyright or database rights, and it makes no guarantee regarding the accuracy, completeness, availability, or legality of third-party data.
+You are responsible for confirming that you have the right to use, import, cache, and distribute the relevant data. Please make sure you have permission to use and distribute such data locally.
