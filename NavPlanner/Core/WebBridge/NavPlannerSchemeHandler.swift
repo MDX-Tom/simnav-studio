@@ -338,7 +338,7 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
             return jsonResponse(["error": "Invalid map tile coordinate"], statusCode: 404)
         }
 
-        switch onlineTileCache.tile(providerKey: providerKey, z: z, x: x, y: y, waitForDownload: 2.4) {
+        switch onlineTileCache.tile(providerKey: providerKey, z: z, x: x, y: y, waitForDownload: OnlineTileCache.tileRequestTimeout) {
         case let .hit(data, contentType):
             return SchemeResponse(
                 statusCode: 200,
@@ -2930,11 +2930,30 @@ private struct OnlineTileProvider {
     }
 }
 
+private extension Optional where Wrapped == Error {
+    var isURLErrorTimedOut: Bool {
+        guard let error = self else { return false }
+        if let urlError = error as? URLError {
+            return urlError.code == .timedOut
+        }
+        let nsError = error as NSError
+        return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorTimedOut
+    }
+}
+
 private final class OnlineTileCache {
     enum TileState {
         case hit(data: Data, contentType: String)
         case queued
         case pending
+        case failed
+    }
+
+    static let tileRequestTimeout: TimeInterval = 1.5
+
+    private enum RemoteTileFetchResult {
+        case success(Data)
+        case timeout
         case failed
     }
 
@@ -3039,8 +3058,8 @@ private final class OnlineTileCache {
             .appendingPathComponent("MapCacheV3", isDirectory: true)
 
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 5
-        configuration.timeoutIntervalForResource = 8
+        configuration.timeoutIntervalForRequest = Self.tileRequestTimeout
+        configuration.timeoutIntervalForResource = Self.tileRequestTimeout
         configuration.httpMaximumConnectionsPerHost = 6
         self.session = URLSession(configuration: configuration)
 
@@ -3179,9 +3198,11 @@ private final class OnlineTileCache {
             }
         }
 
-        func attemptDownload(at index: Int) {
+        func attemptDownload(at index: Int, sawTimeout: Bool = false) {
             guard index < remoteURLs.count else {
-                markFailure(key: key)
+                if !sawTimeout {
+                    markFailure(key: key)
+                }
                 finishPending()
                 return
             }
@@ -3189,14 +3210,15 @@ private final class OnlineTileCache {
             let remoteURL = remoteURLs[index]
             let request = tileRequest(for: remoteURL)
 
-            session.dataTask(with: request) { [weak self] data, response, _ in
+            session.dataTask(with: request) { [weak self] data, response, error in
                 guard let self else { return }
+                let timedOut = error.isURLErrorTimedOut
 
                 guard let httpResponse = response as? HTTPURLResponse,
                       (200..<300).contains(httpResponse.statusCode),
                       let data,
                       let payload = self.cacheTilePayload(from: data, provider: provider) else {
-                    attemptDownload(at: index + 1)
+                    attemptDownload(at: index + 1, sawTimeout: sawTimeout || timedOut)
                     return
                 }
 
@@ -3206,7 +3228,7 @@ private final class OnlineTileCache {
                     }
                     finishPending()
                 } else {
-                    attemptDownload(at: index + 1)
+                    attemptDownload(at: index + 1, sawTimeout: sawTimeout)
                 }
             }.resume()
         }
@@ -3226,10 +3248,15 @@ private final class OnlineTileCache {
             }
         }
 
+        var sawTimeout = false
         for remoteURL in remoteURLs {
-            guard let data = fetchRemoteTileData(from: remoteURL),
+            let result = fetchRemoteTileData(from: remoteURL)
+            guard case let .success(data) = result,
                   let payload = cacheTilePayload(from: data, provider: provider),
                   writeCacheData(payload.data, to: localURL) else {
+                if case .timeout = result {
+                    sawTimeout = true
+                }
                 continue
             }
             lock.withLock {
@@ -3238,13 +3265,16 @@ private final class OnlineTileCache {
             return .hit(data: payload.data, contentType: payload.contentType)
         }
 
-        markFailure(key: key)
-        return .failed
+        if !sawTimeout {
+            markFailure(key: key)
+            return .failed
+        }
+        return .queued
     }
 
     private func tileRequest(for remoteURL: URL) -> URLRequest {
         var request = URLRequest(url: remoteURL)
-        request.timeoutInterval = 5
+        request.timeoutInterval = Self.tileRequestTimeout
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue(
             "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1 NavPlanner/1.0",
@@ -3255,27 +3285,32 @@ private final class OnlineTileCache {
         return request
     }
 
-    private func fetchRemoteTileData(from remoteURL: URL) -> Data? {
+    private func fetchRemoteTileData(from remoteURL: URL) -> RemoteTileFetchResult {
         let semaphore = DispatchSemaphore(value: 0)
         let request = tileRequest(for: remoteURL)
         var resultData: Data?
         var resultResponse: URLResponse?
-        let task = session.dataTask(with: request) { data, response, _ in
+        var resultError: Error?
+        let task = session.dataTask(with: request) { data, response, error in
             resultData = data
             resultResponse = response
+            resultError = error
             semaphore.signal()
         }
         task.resume()
-        guard semaphore.wait(timeout: .now() + 5.8) == .success else {
+        guard semaphore.wait(timeout: .now() + Self.tileRequestTimeout + 0.2) == .success else {
             task.cancel()
-            return nil
+            return .timeout
+        }
+        if resultError.isURLErrorTimedOut {
+            return .timeout
         }
         guard let httpResponse = resultResponse as? HTTPURLResponse,
               (200..<300).contains(httpResponse.statusCode),
               let resultData else {
-            return nil
+            return .failed
         }
-        return resultData
+        return .success(resultData)
     }
 
     private func writeCacheData(_ data: Data, to localURL: URL) -> Bool {
