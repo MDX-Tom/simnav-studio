@@ -3405,6 +3405,59 @@ html[data-theme="day"] .offline-progress {
   color: #166aa0 !important;
 }
 
+.track-history-control {
+  display: grid;
+  border: 1px solid rgba(84, 189, 255, 0.24) !important;
+  border-radius: 12px !important;
+  background: transparent !important;
+  box-shadow: 0 14px 28px rgba(9, 18, 31, 0.25) !important;
+  overflow: hidden;
+}
+
+.track-history-button {
+  appearance: none;
+  -webkit-appearance: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid rgba(84, 189, 255, 0.2);
+  background: rgba(244, 249, 255, 0.94);
+  color: #173550;
+  cursor: pointer;
+  line-height: 1;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease,
+    opacity 0.16s ease;
+}
+
+.track-history-button:last-child {
+  border-bottom: 0;
+}
+
+.track-history-button:hover:not(:disabled) {
+  background: #ffffff;
+  color: #166aa0;
+}
+
+.track-history-button:disabled {
+  cursor: default;
+  color: rgba(23, 53, 80, 0.42);
+}
+
+.track-history-button svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .leaflet-control-attribution {
   display: none !important;
 }
@@ -5281,7 +5334,17 @@ html[data-theme="day"] .offline-progress {
     overflow: visible;
   }
 
+  html:not([data-device="pad"]) .track-history-control {
+    gap: 7px;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    overflow: visible;
+  }
+
   html:not([data-device="pad"]) .leaflet-control-zoom a,
+  html:not([data-device="pad"]) .track-history-button,
   html:not([data-device="pad"]) .map-type-toggle,
   html:not([data-device="pad"]) .map-overlay-toggle,
   html:not([data-device="pad"]) .offline-map-toggle {
@@ -5294,6 +5357,16 @@ html[data-theme="day"] .offline-progress {
   html:not([data-device="pad"]) .leaflet-control-zoom a {
     border: 1px solid rgba(84, 189, 255, 0.22) !important;
     box-shadow: 0 7px 16px rgba(9, 18, 31, 0.2) !important;
+  }
+
+  html:not([data-device="pad"]) .track-history-button {
+    border: 1px solid rgba(84, 189, 255, 0.22) !important;
+    box-shadow: 0 7px 16px rgba(9, 18, 31, 0.2) !important;
+  }
+
+  html:not([data-device="pad"]) .track-history-button svg {
+    width: 15px;
+    height: 15px;
   }
 
   html:not([data-device="pad"]) .leaflet-control-zoom a:first-child,

@@ -493,13 +493,23 @@ const TRANSLATIONS = {
   "query.accessSaved": { "zh-Hans": "已保存 FR24 Web 会话配置。", en: "FR24 Web session saved." },
   "query.accessCleared": { "zh-Hans": "已清除 FR24 Web 会话配置。", en: "FR24 Web session cleared." },
   "query.accessHint": { "zh-Hans": "在 App 内打开 FR24 验证页并正常完成验证，然后同步会话，即可查询 FR24 航班。", en: "Open FR24 verification inside the app, complete verification normally, then sync the session to query FR24 flights." },
-  "query.clearTrack": { "zh-Hans": "清除轨迹绘制", en: "Clear Track Drawing" },
+  "query.undoTrack": { "zh-Hans": "撤销上一步绘制", en: "Undo Last Drawing" },
+  "query.redoTrack": { "zh-Hans": "重做上次撤销", en: "Redo Last Undo" },
+  "query.clearTrack": { "zh-Hans": "清除绘制", en: "Clear Drawing" },
+  "query.clearAllTrack": { "zh-Hans": "清除全部绘制", en: "Clear All Drawings" },
   "query.restoreMatch": { "zh-Hans": "还原轨迹匹配", en: "Restore Match" },
   "query.clearCache": { "zh-Hans": "删除下载缓存", en: "Delete Download Cache" },
   "query.clearCacheConfirm": { "zh-Hans": "确认删除未收藏的 FR24 下载缓存？已收藏的 GPX、playback JSON 和 meta JSON 会保留。", en: "Delete non-favorited FR24 download cache? Favorited GPX, playback JSON, and meta JSON files will be kept." },
   "query.cacheCleared": { "zh-Hans": "已删除未收藏的 FR24 下载缓存。", en: "Non-favorited FR24 download cache deleted." },
-  "query.trackCleared": { "zh-Hans": "已清除 FR24 轨迹绘制。", en: "FR24 track drawing cleared." },
-  "query.noTrack": { "zh-Hans": "当前没有已绘制的 FR24 轨迹。", en: "No FR24 track is currently drawn." },
+  "query.fr24TrackCleared": { "zh-Hans": "已清除 FR24 轨迹绘制。", en: "FR24 track drawing cleared." },
+  "query.noFR24Track": { "zh-Hans": "当前没有已绘制的 FR24 轨迹。", en: "No FR24 track is currently drawn." },
+  "query.trackCleared": { "zh-Hans": "已清除全部绘制。", en: "All drawings cleared." },
+  "query.trackUndoRestored": { "zh-Hans": "已撤销上一步绘制。", en: "Undid the last drawing." },
+  "query.trackUndoCleared": { "zh-Hans": "已撤销到无绘制状态。", en: "Undid to no drawing." },
+  "query.trackRedoRestored": { "zh-Hans": "已重做绘制。", en: "Redid the drawing." },
+  "query.noTrackUndo": { "zh-Hans": "没有可撤销的绘制。", en: "No drawing to undo." },
+  "query.noTrackRedo": { "zh-Hans": "没有可重做的绘制。", en: "No drawing to redo." },
+  "query.noTrack": { "zh-Hans": "当前没有可清除的绘制。", en: "No drawing is currently visible." },
   "query.noRestore": { "zh-Hans": "没有可还原的轨迹匹配航路。", en: "No matched route to restore." },
   "query.restored": { "zh-Hans": "已还原轨迹匹配前的航路。", en: "Restored the route from before track matching." },
   "query.flightUnknown": { "zh-Hans": "未知航班", en: "Unknown Flight" },
@@ -689,6 +699,9 @@ const state = {
   fr24AccessStatus: null,
   fr24QueryBusy: false,
   fr24TrackPayload: null,
+  drawingUndoStack: [],
+  drawingRedoStack: [],
+  restoringDrawingSnapshot: false,
   currentRoutePayload: null,
   currentRouteAirports: null,
   preTrackMatchRoutePayload: null,
@@ -768,6 +781,7 @@ const NAV_AIRWAY_INTERACTIVE_MIN_ZOOM = 6;
 const NAV_TERMINAL_DETAIL_MIN_ZOOM = 9;
 const NAV_RUNWAY_LABEL_MIN_ZOOM = 11;
 const PROCEDURE_CACHE_LIMIT = 180;
+const DRAWING_HISTORY_LIMIT = 30;
 const EMPTY_LIST = Object.freeze([]);
 const versionPathSegment = (value) => `_v${encodeURIComponent(String(value || 0))}`;
 
@@ -936,7 +950,8 @@ const VECTOR_BASE_MAP_TYPES = new Set(["vector", "aero"]);
 const MAPLIBRE_ZOOM_OFFSET = 1;
 const VECTOR_PAN_BUFFER_MIN_PX = 520;
 const VECTOR_PAN_BUFFER_MAX_PX = 1120;
-const ASYNC_CACHED_TILE_RETRY_DELAYS_MS = [350, 800, 1600, 3200, 6400, 10000];
+const ASYNC_CACHED_TILE_REQUEST_TIMEOUT_MS = 1500;
+const ASYNC_CACHED_TILE_RETRY_DELAYS_MS = [0, 300, 800, 1600, 3200, 6400, 10000];
 const ROUTE_WORLD_COPY_OFFSETS = [-720, -360, 0, 360, 720];
 const FR24_TRACK_GAP_NM = 10;
 const FR24_TRACK_CURVE_MIN_NM = 4;
@@ -1159,6 +1174,7 @@ let vectorMapPanBufferPx = 0;
 let terrainDemSource = null;
 let pmtilesProtocol = null;
 let mapOverlayControlContainer = null;
+let trackHistoryControlContainer = null;
 let offlineMapControlContainer = null;
 let offlineMapModalElement = null;
 let offlineBoundsMiniMap = null;
@@ -1272,6 +1288,10 @@ function cancelAsyncCachedTile(tile) {
     window.clearTimeout(tile._plannerRetryTimer);
     tile._plannerRetryTimer = 0;
   }
+  if (tile._plannerAbortController) {
+    tile._plannerAbortController.abort();
+    tile._plannerAbortController = null;
+  }
   if (tile._plannerObjectUrl) {
     URL.revokeObjectURL(tile._plannerObjectUrl);
     tile._plannerObjectUrl = "";
@@ -1370,14 +1390,21 @@ const AsyncCachedTileLayer = L.TileLayer.extend({
     tile._plannerDone = false;
     tile._plannerObjectUrl = "";
     tile._plannerRetryTimer = 0;
+    tile._plannerAbortController = null;
 
     const requestTile = async (attempt = 0) => {
       if (tile._plannerCancelled || tile._plannerDone) {
         return;
       }
       const tileUrl = this.getTileUrl(coords);
+      const controller = new AbortController();
+      const timeoutTimer = window.setTimeout(() => controller.abort(), ASYNC_CACHED_TILE_REQUEST_TIMEOUT_MS);
+      tile._plannerAbortController = controller;
       try {
-        const response = await fetch(tileUrl, { cache: "no-store" });
+        const response = await fetch(tileUrl, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
         if (isQueuedTileResponse(response)) {
           await response.arrayBuffer().catch(() => {});
           scheduleAsyncCachedTileRetry(tile, attempt, requestTile);
@@ -1393,6 +1420,11 @@ const AsyncCachedTileLayer = L.TileLayer.extend({
         loadAsyncCachedTileUrl(tile, tileUrl, done);
       } catch (_error) {
         scheduleAsyncCachedTileRetry(tile, attempt, requestTile);
+      } finally {
+        window.clearTimeout(timeoutTimer);
+        if (tile._plannerAbortController === controller) {
+          tile._plannerAbortController = null;
+        }
       }
     };
 
@@ -1443,6 +1475,7 @@ const procedureLayerGroups = {
   approach: L.layerGroup().addTo(map),
 };
 createMapOverlayControl().addTo(map);
+createTrackHistoryControl().addTo(map);
 applyMapOverlayVisibility();
 
 /**
@@ -1705,7 +1738,7 @@ function ensureTerrainDemSource() {
     maxzoom: 13,
     worker: true,
     cacheSize: 96,
-    timeoutMs: 12000,
+    timeoutMs: ASYNC_CACHED_TILE_REQUEST_TIMEOUT_MS,
   });
   terrainDemSource.setupMaplibre(window.maplibregl);
   return terrainDemSource;
@@ -2992,6 +3025,366 @@ function createMapOverlayControl() {
     });
     updateMapOverlayControlLabels();
     updateMapOverlayControlState();
+    L.DomEvent.disableClickPropagation(container);
+    L.DomEvent.disableScrollPropagation(container);
+    return container;
+  };
+  return control;
+}
+
+function trackHistoryIconMarkup(action) {
+  switch (action) {
+    case "undo":
+      return `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M9.2 7.2 4.8 11.6l4.4 4.4" />
+          <path d="M5.4 11.6h8.4c3.1 0 5.4 2 5.4 4.9" />
+        </svg>
+      `;
+    case "redo":
+      return `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M14.8 7.2 19.2 11.6l-4.4 4.4" />
+          <path d="M18.6 11.6h-8.4c-3.1 0-5.4 2-5.4 4.9" />
+        </svg>
+      `;
+    case "clear":
+      return `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M6.3 7.2h11.4" />
+          <path d="M9.2 7.2V5.4h5.6v1.8" />
+          <path d="M8 9.7l.7 8.5h6.6l.7-8.5" />
+          <path d="M10.7 11.6v4.6" />
+          <path d="M13.3 11.6v4.6" />
+        </svg>
+      `;
+    default:
+      return "";
+  }
+}
+
+function updateTrackHistoryControlLabels() {
+  document.querySelectorAll("[data-track-history-action]").forEach((button) => {
+    const labelKey = button.dataset.trackHistoryLabelKey;
+    if (!labelKey) {
+      return;
+    }
+    const label = t(labelKey);
+    button.title = label;
+    button.setAttribute("aria-label", label);
+  });
+}
+
+function emptyDrawingSnapshot() {
+  return {
+    route: null,
+    procedures: {
+      sid: null,
+      star: null,
+      approach: null,
+    },
+    fr24Track: null,
+  };
+}
+
+function normalizeDrawingSnapshot(snapshot) {
+  const empty = emptyDrawingSnapshot();
+  if (!snapshot) {
+    return empty;
+  }
+  return {
+    route: snapshot.route || null,
+    procedures: {
+      sid: snapshot.procedures?.sid || null,
+      star: snapshot.procedures?.star || null,
+      approach: snapshot.procedures?.approach || null,
+    },
+    fr24Track: snapshot.fr24Track || null,
+  };
+}
+
+function cloneDrawingSnapshot(snapshot) {
+  return cloneJSON(normalizeDrawingSnapshot(snapshot));
+}
+
+function cloneRouteDrawingSnapshot() {
+  const payload = cloneJSON(state.currentRoutePayload);
+  if (!payload || !Array.isArray(payload.points) || payload.points.length < 2) {
+    return null;
+  }
+  return {
+    payload,
+    airports: cloneJSON(state.currentRouteAirports),
+    routeLayerKind: normalizeRouteLayerKind(state.currentRouteLayerKind),
+    lastRouteWasGenerated: Boolean(state.lastRouteWasGenerated),
+    lastGeneratedRouteDisplay: state.lastGeneratedRouteDisplay || "",
+    routeInputValue: elements.routeInput?.value || routeStringFromPayload(payload),
+  };
+}
+
+function cloneProcedureDrawingSnapshot(type) {
+  const selected = state.selectedProcedures[type];
+  if (!selected) {
+    return null;
+  }
+  const payload = state.procedureCache.get(procedureCacheKey(type, selected.airport, selected.procedure, selected.transition));
+  if (!payload) {
+    return null;
+  }
+  return {
+    selected: cloneJSON(selected),
+    payload: cloneJSON(payload),
+  };
+}
+
+function currentDrawingSnapshot() {
+  return {
+    route: cloneRouteDrawingSnapshot(),
+    procedures: {
+      sid: cloneProcedureDrawingSnapshot("sid"),
+      star: cloneProcedureDrawingSnapshot("star"),
+      approach: cloneProcedureDrawingSnapshot("approach"),
+    },
+    fr24Track: cloneFR24TrackPayload(),
+  };
+}
+
+function drawingSnapshotHasContent(snapshot) {
+  const normalized = normalizeDrawingSnapshot(snapshot);
+  return Boolean(
+    normalized.route ||
+    normalized.procedures.sid ||
+    normalized.procedures.star ||
+    normalized.procedures.approach ||
+    normalized.fr24Track,
+  );
+}
+
+function drawingSnapshotsEqual(left, right) {
+  return JSON.stringify(normalizeDrawingSnapshot(left)) === JSON.stringify(normalizeDrawingSnapshot(right));
+}
+
+function trimDrawingHistoryStack(stack) {
+  while (stack.length > DRAWING_HISTORY_LIMIT) {
+    stack.shift();
+  }
+}
+
+function pushDrawingUndoState() {
+  if (state.restoringDrawingSnapshot) {
+    return false;
+  }
+  const snapshot = currentDrawingSnapshot();
+  const lastSnapshot = state.drawingUndoStack.at(-1);
+  if (state.drawingUndoStack.length && drawingSnapshotsEqual(snapshot, lastSnapshot)) {
+    updateTrackHistoryControlState();
+    return false;
+  }
+  state.drawingUndoStack.push(cloneDrawingSnapshot(snapshot));
+  trimDrawingHistoryStack(state.drawingUndoStack);
+  state.drawingRedoStack = [];
+  updateTrackHistoryControlState();
+  return true;
+}
+
+function pushDrawingRedoState(snapshot) {
+  state.drawingRedoStack.push(cloneDrawingSnapshot(snapshot));
+  trimDrawingHistoryStack(state.drawingRedoStack);
+}
+
+function clearRouteDrawingState() {
+  autoRouteLayerGroup.clearLayers();
+  manualRouteLayerGroup.clearLayers();
+  markerLayerGroup.clearLayers();
+  clearLabels();
+  routeLayerGroup = autoRouteLayerGroup;
+  state.currentRoutePayload = null;
+  state.currentRouteAirports = null;
+  state.currentRouteLayerKind = "route";
+  state.lastRouteWasGenerated = false;
+  state.lastGeneratedRouteDisplay = "";
+  state.airportMarkers.clear();
+  resetAirportSlotMarkerKeys();
+  state.airwaySegmentLayers.clear();
+  state.airwayLegChips.clear();
+  state.hoveredAirwayKey = null;
+  renderLegs([]);
+}
+
+function clearProcedureDrawingState(type) {
+  state.procedureRequestVersion[type] += 1;
+  procedureLayerGroups[type].clearLayers();
+  state.procedureVisualLayers[type] = null;
+  state.selectedProcedures[type] = null;
+}
+
+function rerenderProcedureListsForLoadedAirports() {
+  if (state.departureAirport?.airport_identifier) {
+    rerenderProcedureLists("departure", state.departureAirport.airport_identifier);
+  }
+  if (state.arrivalAirport?.airport_identifier) {
+    rerenderProcedureLists("arrival", state.arrivalAirport.airport_identifier);
+  }
+  if (state.manualAirport?.airport_identifier) {
+    rerenderProcedureLists("manual", state.manualAirport.airport_identifier);
+  }
+}
+
+function restoreRouteDrawingSnapshot(routeSnapshot) {
+  if (!routeSnapshot?.payload) {
+    return;
+  }
+  const payload = cloneJSON(routeSnapshot.payload);
+  const routeLayerKind = normalizeRouteLayerKind(routeSnapshot.routeLayerKind || inferRouteLayerKind(payload));
+  drawRoute(payload, { routeLayerKind, fitBounds: false });
+  state.currentRoutePayload = payload;
+  state.currentRouteAirports = cloneJSON(routeSnapshot.airports);
+  state.currentRouteLayerKind = routeLayerKind;
+  state.lastRouteWasGenerated = Boolean(routeSnapshot.lastRouteWasGenerated);
+  state.lastGeneratedRouteDisplay = routeSnapshot.lastGeneratedRouteDisplay || "";
+  if (elements.routeInput && typeof routeSnapshot.routeInputValue === "string") {
+    elements.routeInput.value = routeSnapshot.routeInputValue;
+  }
+  renderLegs(payload.legs || []);
+}
+
+function restoreProcedureDrawingSnapshot(type, procedureSnapshot) {
+  if (!procedureSnapshot?.selected || !procedureSnapshot?.payload) {
+    return;
+  }
+  const selected = cloneJSON(procedureSnapshot.selected);
+  const payload = cloneJSON(procedureSnapshot.payload);
+  const points = (payload.items || []).filter((item) => item.waypoint_latitude !== null && item.waypoint_longitude !== null);
+  if (!points.length) {
+    return;
+  }
+  rememberProcedurePayload(procedureCacheKey(type, selected.airport, selected.procedure, selected.transition), payload);
+  if (type === "approach") {
+    drawApproach(payload.primary_path, payload.missed_path, points, { skipFitBounds: true });
+  } else {
+    drawProcedure(type, payload.path, points, type === "sid" ? MAP_COLORS.sid : MAP_COLORS.star, { skipFitBounds: true });
+  }
+  state.selectedProcedures[type] = selected;
+}
+
+function restoreDrawingSnapshot(snapshot) {
+  const normalized = normalizeDrawingSnapshot(snapshot);
+  state.restoringDrawingSnapshot = true;
+  try {
+    clearRouteDrawingState();
+    ["sid", "star", "approach"].forEach((type) => clearProcedureDrawingState(type));
+    fr24TrackLayerGroup.clearLayers();
+    state.fr24TrackPayload = null;
+
+    restoreRouteDrawingSnapshot(normalized.route);
+    ["sid", "star", "approach"].forEach((type) => {
+      restoreProcedureDrawingSnapshot(type, normalized.procedures[type]);
+    });
+    if (normalized.fr24Track) {
+      renderFR24TrackPayload(normalized.fr24Track, { fitBounds: false });
+    }
+
+    renderSelectedProcedures();
+    rerenderProcedureListsForLoadedAirports();
+    applyMapOverlayVisibility();
+  } finally {
+    state.restoringDrawingSnapshot = false;
+    updateTrackHistoryControlState();
+  }
+}
+
+function setDrawingHistoryStatus(message, isError = false) {
+  setFR24QueryStatus(message, isError);
+  setStatus(message, isError);
+}
+
+function clearAllMapDrawings(options = {}) {
+  const eventLike = options && typeof options === "object" && "target" in options;
+  const recordHistory = eventLike ? true : options.recordHistory !== false;
+  const snapshot = currentDrawingSnapshot();
+  if (!drawingSnapshotHasContent(snapshot)) {
+    setDrawingHistoryStatus(t("query.noTrack"), true);
+    updateTrackHistoryControlState();
+    return;
+  }
+  if (recordHistory) {
+    pushDrawingUndoState();
+  }
+  restoreDrawingSnapshot(emptyDrawingSnapshot());
+  setDrawingHistoryStatus(t("query.trackCleared"));
+}
+
+function undoMapDrawing() {
+  if (!state.drawingUndoStack.length) {
+    setDrawingHistoryStatus(t("query.noTrackUndo"), true);
+    updateTrackHistoryControlState();
+    return;
+  }
+  const current = currentDrawingSnapshot();
+  const previous = state.drawingUndoStack.pop();
+  pushDrawingRedoState(current);
+  restoreDrawingSnapshot(previous);
+  setDrawingHistoryStatus(drawingSnapshotHasContent(previous) ? t("query.trackUndoRestored") : t("query.trackUndoCleared"));
+}
+
+function redoMapDrawing() {
+  if (!state.drawingRedoStack.length) {
+    setDrawingHistoryStatus(t("query.noTrackRedo"), true);
+    updateTrackHistoryControlState();
+    return;
+  }
+  const current = currentDrawingSnapshot();
+  const next = state.drawingRedoStack.pop();
+  state.drawingUndoStack.push(cloneDrawingSnapshot(current));
+  trimDrawingHistoryStack(state.drawingUndoStack);
+  restoreDrawingSnapshot(next);
+  setDrawingHistoryStatus(drawingSnapshotHasContent(next) ? t("query.trackRedoRestored") : t("query.trackCleared"));
+}
+
+function updateTrackHistoryControlState() {
+  if (!trackHistoryControlContainer) {
+    return;
+  }
+  const hasDrawing = drawingSnapshotHasContent(currentDrawingSnapshot());
+  trackHistoryControlContainer.querySelectorAll("[data-track-history-action]").forEach((button) => {
+    const action = button.dataset.trackHistoryAction;
+    const disabled = action === "undo"
+      ? state.drawingUndoStack.length === 0
+      : action === "redo"
+        ? state.drawingRedoStack.length === 0
+        : !hasDrawing;
+    button.disabled = disabled;
+    button.setAttribute("aria-disabled", String(disabled));
+  });
+}
+
+function createTrackHistoryControl() {
+  const control = L.control({ position: "topright" });
+  control.onAdd = () => {
+    const container = L.DomUtil.create("div", "leaflet-control track-history-control");
+    trackHistoryControlContainer = container;
+    [
+      { action: "undo", labelKey: "query.undoTrack" },
+      { action: "redo", labelKey: "query.redoTrack" },
+      { action: "clear", labelKey: "query.clearAllTrack" },
+    ].forEach((config) => {
+      const button = L.DomUtil.create("button", `track-history-button track-history-${config.action}`, container);
+      button.type = "button";
+      button.dataset.trackHistoryAction = config.action;
+      button.dataset.trackHistoryLabelKey = config.labelKey;
+      button.innerHTML = trackHistoryIconMarkup(config.action);
+      button.addEventListener("click", () => {
+        if (config.action === "undo") {
+          undoMapDrawing();
+        } else if (config.action === "redo") {
+          redoMapDrawing();
+        } else {
+          clearAllMapDrawings();
+        }
+      });
+    });
+    updateTrackHistoryControlLabels();
+    updateTrackHistoryControlState();
     L.DomEvent.disableClickPropagation(container);
     L.DomEvent.disableScrollPropagation(container);
     return container;
@@ -5611,6 +6004,7 @@ function refreshLocalizedDynamicText() {
   updateMapTypeOptionState();
   updateMapTileZoomOffsetControl();
   updateMapOverlayControlLabels();
+  updateTrackHistoryControlLabels();
   updateOfflineMapControlLabel();
   if (state.databaseStatus) {
     updateDatabaseStatus(state.databaseStatus);
@@ -8778,7 +9172,9 @@ function drawRoute(payload, options = {}) {
     opacity: 0,
     interactive: false,
   }).addTo(routeLayerGroup);
-  map.fitBounds(boundsPolyline.getBounds(), { padding: [36, 36] });
+  if (options.fitBounds !== false) {
+    map.fitBounds(boundsPolyline.getBounds(), { padding: [36, 36] });
+  }
   applyMapOverlayVisibility();
 }
 
@@ -8787,7 +9183,10 @@ function drawRoute(payload, options = {}) {
  * 输入：type。
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
-function clearProcedure(type) {
+function clearProcedure(type, options = {}) {
+  if (options.recordHistory !== false && state.selectedProcedures[type]) {
+    pushDrawingUndoState();
+  }
   state.procedureRequestVersion[type] += 1;
   procedureLayerGroups[type].clearLayers();
   state.procedureVisualLayers[type] = null;
@@ -8812,6 +9211,7 @@ function clearProcedure(type) {
   if (state.manualAirport?.airport_identifier) {
     rerenderProcedureLists("manual", state.manualAirport.airport_identifier);
   }
+  updateTrackHistoryControlState();
 }
 
 /**
@@ -8819,10 +9219,13 @@ function clearProcedure(type) {
  * 输入：无。
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
-function clearAllProcedures() {
-  clearProcedure("sid");
-  clearProcedure("star");
-  clearProcedure("approach");
+function clearAllProcedures(options = {}) {
+  if (options.recordHistory !== false && ["sid", "star", "approach"].some((type) => state.selectedProcedures[type])) {
+    pushDrawingUndoState();
+  }
+  clearProcedure("sid", { recordHistory: false });
+  clearProcedure("star", { recordHistory: false });
+  clearProcedure("approach", { recordHistory: false });
 }
 
 /**
@@ -8830,12 +9233,15 @@ function clearAllProcedures() {
  * 输入：exceptType。
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
-function clearAutoSelectedProcedures(exceptType = "") {
+function clearAutoSelectedProcedures(exceptType = "", options = {}) {
+  if (options.recordHistory !== false && Object.entries(state.selectedProcedures).some(([type, value]) => value?.source === "auto" && type !== exceptType)) {
+    pushDrawingUndoState();
+  }
   Object.entries(state.selectedProcedures).forEach(([type, value]) => {
     if (!value || value.source !== "auto" || type === exceptType) {
       return;
     }
-    clearProcedure(type);
+    clearProcedure(type, { recordHistory: false });
   });
 }
 
@@ -9422,9 +9828,7 @@ async function loadProcedurePayload(type, airport, procedure, transition, option
  * 输出：Promise，解析为函数处理结果。
  */
 async function previewProcedure(type, airport, procedure, transition, options = {}) {
-  if ((options.source || "manual") !== "auto") {
-    clearAutoSelectedProcedures(type);
-  }
+  const source = options.source || "manual";
   const requestVersion = (state.procedureRequestVersion[type] += 1);
   try {
     const payload = await loadProcedurePayload(type, airport, procedure, transition, { signal: options.signal });
@@ -9438,6 +9842,12 @@ async function previewProcedure(type, airport, procedure, transition, options = 
       return;
     }
 
+    if (options.recordHistory !== false && source !== "auto") {
+      pushDrawingUndoState();
+    }
+    if (source !== "auto") {
+      clearAutoSelectedProcedures(type, { recordHistory: false });
+    }
     procedureLayerGroups[type].clearLayers();
     state.procedureVisualLayers[type] = null;
     state.selectedProcedures[type] = null;
@@ -9454,9 +9864,10 @@ async function previewProcedure(type, airport, procedure, transition, options = 
       airport,
       procedure,
       transition,
-      source: options.source || "manual",
+      source,
     };
     renderSelectedProcedures();
+    updateTrackHistoryControlState();
     if (state.departureAirport?.airport_identifier === airport) {
       rerenderProcedureLists("departure", airport);
     }
@@ -9485,7 +9896,7 @@ async function previewProcedure(type, airport, procedure, transition, options = 
  * 输出：Promise，解析为函数处理结果。
  */
 async function applyAutoSelectedProcedures(selectedProcedures = {}, options = {}) {
-  clearAllProcedures();
+  clearAllProcedures({ recordHistory: false });
   const order = ["sid", "star", "approach"];
   for (const type of order) {
     throwIfAborted(options.signal);
@@ -9540,6 +9951,9 @@ async function applyRoutePayload(payload, departure, arrival, options = {}) {
     rerenderProcedureLists("arrival", state.arrivalAirport.airport_identifier);
   }
   const routeLayerKind = normalizeRouteLayerKind(options.routeLayerKind || inferRouteLayerKind(payload));
+  if (options.recordHistory !== false) {
+    pushDrawingUndoState();
+  }
   drawRoute(payload, { routeLayerKind });
   renderLegs(payload.legs || []);
   elements.routeInput.value = routeStringFromPayload(payload);
@@ -9549,6 +9963,7 @@ async function applyRoutePayload(payload, departure, arrival, options = {}) {
   state.currentRouteAirports = { departure, arrival };
   state.currentRouteLayerKind = routeLayerKind;
   await applyAutoSelectedProcedures(payload.selected_procedures || {}, { signal: options.signal });
+  updateTrackHistoryControlState();
 }
 
 /**
@@ -10092,13 +10507,32 @@ async function fetchFR24TrackPayload(flight, options = {}) {
   });
 }
 
-function drawFR24TrackPoints(trackPoints, { fitBounds = true } = {}) {
-  const basePoints = withDisplayLongitudes((trackPoints || []).map((point) => ({
+function normalizedFR24TrackPoints(trackPoints) {
+  return withDisplayLongitudes((trackPoints || []).map((point) => ({
     lat: Number(point.lat ?? point.latitude),
     lon: Number(point.lon ?? point.lng ?? point.longitude),
   })).filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon)));
+}
+
+function cloneFR24TrackPayload(payload = state.fr24TrackPayload) {
+  if (!payload || !Array.isArray(payload.track_points) || payload.track_points.length < 2) {
+    return null;
+  }
+  return {
+    track_points: payload.track_points.map((point) => ({
+      lat: Number(point.lat),
+      lon: Number(point.lon),
+    })).filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon)),
+  };
+}
+
+function renderFR24TrackPayload(payload, { fitBounds = false } = {}) {
+  const basePoints = cloneFR24TrackPayload(payload)?.track_points || [];
   fr24TrackLayerGroup.clearLayers();
   if (basePoints.length < 2) {
+    state.fr24TrackPayload = null;
+    applyMapOverlayVisibility();
+    updateTrackHistoryControlState();
     return 0;
   }
   const segments = splitFR24TrackSegments(basePoints);
@@ -10118,7 +10552,7 @@ function drawFR24TrackPoints(trackPoints, { fitBounds = true } = {}) {
       layer.bringToFront();
     });
   });
-  state.fr24TrackPayload = { track_points: basePoints };
+  state.fr24TrackPayload = { track_points: cloneFR24TrackPayload({ track_points: basePoints }).track_points };
   if (fitBounds) {
     const bounds = L.polyline(basePoints.map(latLngForPoint), {
       pane: "routePane",
@@ -10129,7 +10563,19 @@ function drawFR24TrackPoints(trackPoints, { fitBounds = true } = {}) {
     }).addTo(fr24TrackLayerGroup).getBounds();
     map.fitBounds(bounds, { padding: [36, 36] });
   }
+  applyMapOverlayVisibility();
+  updateTrackHistoryControlState();
   return basePoints.length;
+}
+
+function drawFR24TrackPoints(trackPoints, { fitBounds = true, recordHistory = true } = {}) {
+  const basePoints = normalizedFR24TrackPoints(trackPoints);
+  if (recordHistory && (state.fr24TrackPayload || basePoints.length >= 2)) {
+    pushDrawingUndoState();
+  }
+  const count = renderFR24TrackPayload({ track_points: basePoints }, { fitBounds });
+  updateTrackHistoryControlState();
+  return count;
 }
 
 async function downloadAndDrawFR24Track(key) {
@@ -10211,17 +10657,24 @@ async function matchFR24FlightTrack(key) {
   }
 }
 
-function clearFR24TrackDrawing() {
+function clearFR24TrackDrawing(options = {}) {
+  const eventLike = options && typeof options === "object" && "target" in options;
+  const recordHistory = eventLike ? true : options.recordHistory !== false;
   if (!state.fr24TrackPayload) {
-    setFR24QueryStatus(t("query.noTrack"), true);
-    setStatus(t("query.noTrack"), true);
+    setFR24QueryStatus(t("query.noFR24Track"), true);
+    setStatus(t("query.noFR24Track"), true);
+    updateTrackHistoryControlState();
     return;
+  }
+  if (recordHistory) {
+    pushDrawingUndoState();
   }
   fr24TrackLayerGroup.clearLayers();
   state.fr24TrackPayload = null;
   applyMapOverlayVisibility();
-  setFR24QueryStatus(t("query.trackCleared"));
-  setStatus(t("query.trackCleared"));
+  updateTrackHistoryControlState();
+  setFR24QueryStatus(t("query.fr24TrackCleared"));
+  setStatus(t("query.fr24TrackCleared"));
 }
 
 async function restoreFR24MatchedRoute() {
@@ -10353,7 +10806,7 @@ function handleFR24FlightAction(event) {
 
 elements.planButton.addEventListener("click", buildRoute);
 elements.recalculateButton.addEventListener("click", () => buildRoute({ forceAuto: true }));
-elements.planClearTrackButton?.addEventListener("click", clearFR24TrackDrawing);
+elements.planClearTrackButton?.addEventListener("click", clearAllMapDrawings);
 elements.stopRequestButton.addEventListener("click", stopActiveRouteOperation);
 elements.mapExpandButton.addEventListener("click", () => {
   const expanded = !document.body.classList.contains("map-expanded");
