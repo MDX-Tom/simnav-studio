@@ -950,8 +950,8 @@ const VECTOR_BASE_MAP_TYPES = new Set(["vector", "aero"]);
 const MAPLIBRE_ZOOM_OFFSET = 1;
 const VECTOR_PAN_BUFFER_MIN_PX = 520;
 const VECTOR_PAN_BUFFER_MAX_PX = 1120;
-const ASYNC_CACHED_TILE_REQUEST_TIMEOUT_MS = 1500;
-const ASYNC_CACHED_TILE_RETRY_DELAYS_MS = [0, 300, 800, 1600, 3200, 6400, 10000];
+const ASYNC_CACHED_TILE_REQUEST_TIMEOUT_MS = 6500;
+const ASYNC_CACHED_TILE_RETRY_DELAYS_MS = [120, 260, 520, 1000, 1800, 3200, 5200, 8000];
 const ROUTE_WORLD_COPY_OFFSETS = [-720, -360, 0, 360, 720];
 const FR24_TRACK_GAP_NM = 10;
 const FR24_TRACK_CURVE_MIN_NM = 4;
@@ -1320,10 +1320,10 @@ function scheduleAsyncCachedTileRetry(tile, attempt, requestTile) {
   tile._plannerRetryTimer = window.setTimeout(() => requestTile(attempt + 1), delay);
 }
 
-function isSupportedTileImageBuffer(buffer) {
+function supportedTileImageMimeType(buffer) {
   const bytes = new Uint8Array(buffer || []);
   if (bytes.length < 4) {
-    return false;
+    return "";
   }
   const isPNG = bytes.length >= 20
     && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47
@@ -1335,22 +1335,22 @@ function isSupportedTileImageBuffer(buffer) {
     && bytes[bytes.length - 4] === 0xae && bytes[bytes.length - 3] === 0x42
     && bytes[bytes.length - 2] === 0x60 && bytes[bytes.length - 1] === 0x82;
   if (isPNG) {
-    return true;
+    return "image/png";
   }
   const isJPEG = bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8;
   if (!isJPEG) {
-    return false;
+    return "";
   }
   let tailIndex = bytes.length - 1;
   while (tailIndex > 2 && (bytes[tailIndex] === 0x00 || bytes[tailIndex] === 0x0a || bytes[tailIndex] === 0x0d || bytes[tailIndex] === 0x20)) {
     tailIndex -= 1;
   }
-  return tailIndex >= 3 && bytes[tailIndex - 1] === 0xff && bytes[tailIndex] === 0xd9;
+  return tailIndex >= 3 && bytes[tailIndex - 1] === 0xff && bytes[tailIndex] === 0xd9 ? "image/jpeg" : "";
 }
 
 /**
- * 功能：把已命中的真实瓦片 URL 写入图片元素，并在图片可显示后通知 Leaflet。
- * 输入：tile 为图片元素，url 为本地瓦片 URL，done 为 Leaflet 的加载完成回调。
+ * 功能：把已命中的真实瓦片 URL 或 blob URL 写入图片元素，并在图片可显示后通知 Leaflet。
+ * 输入：tile 为图片元素，url 为本地瓦片 URL / blob URL，done 为 Leaflet 的加载完成回调。
  * 输出：无返回值；成功后底图才会替换旧瓦片。
  */
 function loadAsyncCachedTileUrl(tile, url, done) {
@@ -1369,11 +1369,25 @@ function loadAsyncCachedTileUrl(tile, url, done) {
   };
   tile.onerror = () => {
     if (!tile._plannerCancelled && !tile._plannerDone) {
+      if (tile._plannerObjectUrl) {
+        URL.revokeObjectURL(tile._plannerObjectUrl);
+        tile._plannerObjectUrl = "";
+      }
       tile._plannerDone = true;
       done(new Error("Tile image decode failed."), tile);
     }
   };
   tile.src = url;
+}
+
+function loadAsyncCachedTileBuffer(tile, buffer, mimeType, done) {
+  if (tile._plannerCancelled) {
+    return;
+  }
+  const blob = new Blob([buffer], { type: mimeType || "image/png" });
+  const objectUrl = URL.createObjectURL(blob);
+  loadAsyncCachedTileUrl(tile, objectUrl, done);
+  tile._plannerObjectUrl = objectUrl;
 }
 
 const AsyncCachedTileLayer = L.TileLayer.extend({
@@ -1398,7 +1412,9 @@ const AsyncCachedTileLayer = L.TileLayer.extend({
       }
       const tileUrl = this.getTileUrl(coords);
       const controller = new AbortController();
-      const timeoutTimer = window.setTimeout(() => controller.abort(), ASYNC_CACHED_TILE_REQUEST_TIMEOUT_MS);
+      const timeoutTimer = ASYNC_CACHED_TILE_REQUEST_TIMEOUT_MS > 0
+        ? window.setTimeout(() => controller.abort(), ASYNC_CACHED_TILE_REQUEST_TIMEOUT_MS)
+        : 0;
       tile._plannerAbortController = controller;
       try {
         const response = await fetch(tileUrl, {
@@ -1414,14 +1430,17 @@ const AsyncCachedTileLayer = L.TileLayer.extend({
           throw new Error(`Tile request failed: ${response.status}`);
         }
         const buffer = await response.arrayBuffer();
-        if (!isSupportedTileImageBuffer(buffer)) {
+        const mimeType = supportedTileImageMimeType(buffer);
+        if (!mimeType) {
           throw new Error("Tile response is not a supported image.");
         }
-        loadAsyncCachedTileUrl(tile, tileUrl, done);
+        loadAsyncCachedTileBuffer(tile, buffer, mimeType, done);
       } catch (_error) {
         scheduleAsyncCachedTileRetry(tile, attempt, requestTile);
       } finally {
-        window.clearTimeout(timeoutTimer);
+        if (timeoutTimer) {
+          window.clearTimeout(timeoutTimer);
+        }
         if (tile._plannerAbortController === controller) {
           tile._plannerAbortController = null;
         }
