@@ -1504,12 +1504,31 @@ private final class FR24Service {
         }
         if let flightID = Self.extractFlightID(from: rawQuery),
            normalizedFlightToken(rawQuery).lowercased() == flightID.lowercased() {
+            var flight = manualFlightIDPayload(flightID: flightID)
+            var message = "已按 FR24 flightId 生成单条历史记录。"
+            do {
+                let playback = try webGet(path: "/common/v1/flight-playback.json", params: [
+                    ("flightId", flightID),
+                    ("timestamp", String(Int(Date().timeIntervalSince1970)))
+                ])
+                let trackPoints = extractPlaybackTrackPoints(playback)
+                flight = enrichedFlightPayload(
+                    flightID: flightID,
+                    flight: flight,
+                    playback: playback,
+                    trackPoints: trackPoints,
+                    routeAirports: routeAirports
+                )
+                message = "已按 FR24 flightId 读取航班基本信息。"
+            } catch {
+                flight["metadata_error"] = error.localizedDescription
+            }
             return [
                 "route": routeAirports,
-                "flights": [manualFlightIDPayload(flightID: flightID)],
+                "flights": [flight],
                 "cache": cacheStatusPayload(),
                 "access": accessStatusPayload(),
-                "message": "已按 FR24 flightId 生成单条历史记录。"
+                "message": message
             ]
         }
         return historyPayload(routeAirports: routeAirports, flightNumber: rawQuery, callsign: "", limit: limit)
@@ -1542,6 +1561,85 @@ private final class FR24Service {
             "duration_seconds": NSNull(),
             "source_provider": "Flightradar24 flightId"
         ]
+    }
+
+    private func enrichedFlightPayload(
+        flightID: String,
+        flight: [String: Any],
+        playback: [String: Any],
+        trackPoints: [[String: Any]],
+        routeAirports: [String: Any] = [:]
+    ) -> [String: Any] {
+        let departure = routeAirports["departure"] as? [String: Any] ?? [:]
+        let arrival = routeAirports["arrival"] as? [String: Any] ?? [:]
+        let candidates = playbackFlightInfoCandidates(playback)
+        let best = candidates
+            .map { normalizeOfficialFlight($0, departure: departure, arrival: arrival) }
+            .max { flightInfoScore($0) < flightInfoScore($1) }
+        var output = best ?? manualFlightIDPayload(flightID: flightID)
+        output["fr24_id"] = Self.stringValue(output["fr24_id"]).isEmpty ? flightID : Self.stringValue(output["fr24_id"])
+
+        for (key, value) in flight where !hasMeaningfulFlightValue(output[key]) && hasMeaningfulFlightValue(value) {
+            output[key] = value
+        }
+        if !hasMeaningfulFlightValue(output["timestamp"]),
+           let firstTimestamp = trackPoints.compactMap({ Self.intValue($0["timestamp"]) }).map(normalizedTimestamp).first {
+            output["timestamp"] = firstTimestamp
+        }
+        if !hasMeaningfulFlightValue(output["actual_departure"]),
+           let firstTimestamp = trackPoints.compactMap({ Self.intValue($0["timestamp"]) }).map(normalizedTimestamp).first {
+            output["actual_departure"] = firstTimestamp
+        }
+        if Self.stringValue(output["source_provider"]).isEmpty {
+            output["source_provider"] = "Flightradar24 playback"
+        }
+        return output
+    }
+
+    private func playbackFlightInfoCandidates(_ payload: [String: Any]) -> [[String: Any]] {
+        var candidates: [[String: Any]] = []
+        func visit(_ item: Any) {
+            guard candidates.count < 300 else { return }
+            if let dictionary = item as? [String: Any] {
+                candidates.append(dictionary)
+                dictionary.values.forEach(visit)
+            } else if let array = item as? [Any], array.count < 80 {
+                array.forEach(visit)
+            }
+        }
+        visit(payload)
+        return candidates
+    }
+
+    private func flightInfoScore(_ flight: [String: Any]) -> Int {
+        var score = 0
+        if !Self.stringValue(flight["flight"]).isEmpty { score += 6 }
+        if !Self.stringValue(flight["callsign"]).isEmpty { score += 4 }
+        if !Self.stringValue(flight["aircraft_registration"]).isEmpty { score += 5 }
+        if !Self.stringValue(flight["aircraft"]).isEmpty { score += 2 }
+        if !Self.stringValue(flight["airline"]).isEmpty { score += 2 }
+        if !Self.stringValue(flight["origin_icao"]).isEmpty || !Self.stringValue(flight["origin_iata"]).isEmpty { score += 2 }
+        if !Self.stringValue(flight["dest_icao"]).isEmpty || !Self.stringValue(flight["dest_iata"]).isEmpty { score += 2 }
+        if hasMeaningfulFlightValue(flight["actual_departure"]) || hasMeaningfulFlightValue(flight["scheduled_departure"]) { score += 3 }
+        if hasMeaningfulFlightValue(flight["timestamp"]) { score += 2 }
+        return score
+    }
+
+    private func hasMeaningfulFlightValue(_ value: Any?) -> Bool {
+        switch value {
+        case let value as String:
+            return !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case let value as NSNumber:
+            return value.doubleValue != 0
+        case let value as Int:
+            return value != 0
+        case let value as Double:
+            return value.isFinite && value != 0
+        case is NSNull, nil:
+            return false
+        default:
+            return !Self.stringValue(value).isEmpty
+        }
     }
 
     private func parseFlightHistoryPage(
@@ -2041,10 +2139,16 @@ private final class FR24Service {
                     "access": accessStatusPayload()
                 ]
             }
+            let enrichedFlight = enrichedFlightPayload(
+                flightID: flightID,
+                flight: flight,
+                playback: playback,
+                trackPoints: trackPoints
+            )
             return try cacheDownloadResponse(
                 flightID: flightID,
                 cacheKey: normalizedID,
-                flight: flight,
+                flight: enrichedFlight,
                 playback: playback,
                 trackPoints: trackPoints,
                 cacheHit: false
@@ -2418,7 +2522,8 @@ private final class FR24Service {
                 ["aircraft_code"],
                 ["type"],
                 ["model"],
-                ["aircraft", "model", "code"]
+                ["aircraft", "model", "code"],
+                ["aircraft", "model", "text"]
             ])),
             "aircraft_registration": Self.stringValue(Self.firstDeepValue(rawFlight, paths: [
                 ["flight", "aircraft", "identification", "registration"],
@@ -2426,6 +2531,7 @@ private final class FR24Service {
                 ["registration"],
                 ["reg"],
                 ["aircraft_registration"],
+                ["aircraft", "identification", "registration"],
                 ["aircraft", "registration"]
             ])),
             "origin_icao": originICAO.isEmpty ? Self.stringValue(departure["icao"]) : originICAO,
@@ -2925,6 +3031,13 @@ private final class FR24Service {
                 refreshedMeta["track_points"] = extractedPoints
                 writeCacheMeta(refreshedMeta, cacheKey: cacheKey)
             }
+            let flightID = Self.stringValue(cachedFlight["fr24_id"]).isEmpty ? cacheKey : Self.stringValue(cachedFlight["fr24_id"])
+            cachedFlight = enrichedFlightPayload(
+                flightID: flightID,
+                flight: cachedFlight,
+                playback: playback,
+                trackPoints: trackPoints
+            )
         }
         cachedFlight["favorite"] = (meta["favorite"] as? Bool) ?? (meta["favorite"] as? NSNumber)?.boolValue ?? false
         cachedFlight["cache_key"] = cacheKey
