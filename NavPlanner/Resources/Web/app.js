@@ -718,6 +718,8 @@ const state = {
   fr24ProfileCursorIndex: 0,
   fr24ProfileDragging: false,
   fr24ProfileLayout: null,
+  fr24ProfileResizeFrame: null,
+  fr24ProfileResizeObserver: null,
   drawingUndoStack: [],
   drawingRedoStack: [],
   restoringDrawingSnapshot: false,
@@ -1050,6 +1052,7 @@ const elements = {
   sidebarExpandButton: document.querySelector("#sidebarExpandButton"),
   detailModeTabButtons: document.querySelectorAll("[data-detail-tab]"),
   detailTabPanels: document.querySelectorAll("[data-detail-panel]"),
+  detailPanel: document.querySelector(".detail-panel"),
   mobileBottomTabButtons: document.querySelectorAll("[data-mobile-tab]"),
   mobilePanelDragHandle: document.querySelector("#mobilePanelDragHandle"),
   databaseNameText: document.querySelector("#databaseNameText"),
@@ -6233,6 +6236,8 @@ function setDetailTab(tab) {
   if (normalized === "query") {
     refreshFR24CacheStatus().catch((error) => console.warn("FR24 缓存状态刷新失败", error));
     refreshFR24AccessStatus().catch((error) => console.warn("FR24 访问状态刷新失败", error));
+    scheduleFR24ProfileChartResize();
+    scheduleFR24ProfileChartResize(180);
   }
 }
 
@@ -6262,6 +6267,9 @@ function setMobileBottomTab(tab) {
     scheduleVectorMapResizeSync();
     if (normalized === "settings") {
       updateMapTileZoomOffsetControl();
+    }
+    if (normalized === "query") {
+      scheduleFR24ProfileChartResize();
     }
   }, 90);
 }
@@ -10727,6 +10735,22 @@ function formatFR24ProfileTime(point, index, total) {
   return `${Math.round((index / denominator) * 100)}%`;
 }
 
+function formatFR24ProfileAxisTime(value) {
+  const timestamp = normalizeFlightTimestamp(value);
+  if (!timestamp) {
+    return "";
+  }
+  try {
+    return new Intl.DateTimeFormat(currentLanguage() === "zh-Hans" ? "zh-CN" : "en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(new Date(timestamp * 1000));
+  } catch (_error) {
+    return new Date(timestamp * 1000).toISOString().slice(11, 16);
+  }
+}
+
 function fr24ProfileDataPoints() {
   const points = state.fr24TrackPayload?.track_points || [];
   return points.map((point, index) => ({
@@ -10786,9 +10810,19 @@ function drawFR24ProfileChart() {
     return;
   }
 
-  const width = 640;
-  const height = 190;
-  const plot = { left: 50, right: 18, top: 18, bottom: 34 };
+  const chartElement = svg.parentElement || svg;
+  const chartRect = chartElement.getBoundingClientRect();
+  const width = Math.round(Math.max(320, chartRect.width || svg.clientWidth || 640));
+  const height = Math.round(Math.max(120, chartRect.height || svg.clientHeight || 190));
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  const labelFontSize = clampNumber(Math.min(width / 62, height / 15), 10, 12.5);
+  const xLabelFontSize = clampNumber(Math.min(width / 72, height / 17), 9.5, 11.5);
+  const plot = {
+    left: Math.round(clampNumber(width * 0.11, 54, 74)),
+    right: Math.round(clampNumber(width * 0.035, 18, 34)),
+    top: Math.round(clampNumber(height * 0.1, 16, 26)),
+    bottom: Math.round(clampNumber(height * 0.2, 36, 50)),
+  };
   const plotWidth = width - plot.left - plot.right;
   const plotHeight = height - plot.top - plot.bottom;
   const timestamps = profile.map((point) => point.timestamp).filter(Number.isFinite);
@@ -10828,31 +10862,51 @@ function drawFR24ProfileChart() {
   const axisStroke = dayTheme ? "rgba(43, 84, 112, 0.42)" : "rgba(148, 188, 218, 0.32)";
   const labelFill = dayTheme ? "rgba(39, 73, 98, 0.82)" : "rgba(203, 222, 238, 0.84)";
   const noDataFill = dayTheme ? "rgba(50, 80, 104, 0.72)" : "rgba(203, 222, 238, 0.72)";
-  const gridLevels = [0, 0.25, 0.5, 0.75, 1];
-  const grid = gridLevels.map((level) => {
+  const yTickCount = Math.round(clampNumber(plotHeight / 36, 4, 6));
+  const yGridLevels = Array.from({ length: yTickCount }, (_, index) => index / Math.max(1, yTickCount - 1));
+  const yGrid = yGridLevels.map((level) => {
     const y = plot.top + level * plotHeight;
     const altitude = altitudeRange.max - level * (altitudeRange.max - altitudeRange.min);
     const label = altitudeValues.length ? formatFR24Altitude(altitude) : "";
     return `
       <line x1="${plot.left}" y1="${y.toFixed(1)}" x2="${(width - plot.right).toFixed(1)}" y2="${y.toFixed(1)}" stroke="${gridStroke}" stroke-width="1" />
-      <text x="${(plot.left - 8).toFixed(1)}" y="${(y + 3).toFixed(1)}" fill="${labelFill}" font-size="10" font-weight="700" text-anchor="end">${escapeHtml(label)}</text>
+      <text x="${(plot.left - 8).toFixed(1)}" y="${(y + labelFontSize * 0.32).toFixed(1)}" fill="${labelFill}" font-size="${labelFontSize.toFixed(1)}" font-weight="700" text-anchor="end">${escapeHtml(label)}</text>
+    `;
+  }).join("");
+  const xTickCount = Math.round(clampNumber(plotWidth / 118 + 1, 3, 7));
+  const xLabelY = height - Math.max(8, plot.bottom * 0.3);
+  const xGrid = Array.from({ length: xTickCount }, (_, index) => {
+    const level = index / Math.max(1, xTickCount - 1);
+    const x = plot.left + level * plotWidth;
+    const label = useTimeAxis
+      ? formatFR24ProfileAxisTime(minTime + level * (maxTime - minTime))
+      : `${Math.round(level * 100)}%`;
+    return `
+      <line x1="${x.toFixed(1)}" y1="${plot.top}" x2="${x.toFixed(1)}" y2="${(height - plot.bottom).toFixed(1)}" stroke="${gridStroke}" stroke-width="1" />
+      <text x="${x.toFixed(1)}" y="${xLabelY.toFixed(1)}" fill="${labelFill}" font-size="${xLabelFontSize.toFixed(1)}" font-weight="700" text-anchor="middle">${escapeHtml(label)}</text>
     `;
   }).join("");
   const noData = !altitudeValues.length && !speedValues.length
-    ? `<text x="${width / 2}" y="${height / 2}" fill="${noDataFill}" font-size="14" font-weight="700" text-anchor="middle">${escapeHtml(t("query.profileNoData"))}</text>`
+    ? `<text x="${width / 2}" y="${height / 2}" fill="${noDataFill}" font-size="${clampNumber(width / 44, 12, 14).toFixed(1)}" font-weight="700" text-anchor="middle">${escapeHtml(t("query.profileNoData"))}</text>`
     : "";
+  const altitudeStrokeWidth = clampNumber(height / 54, 2.8, 3.8);
+  const speedStrokeWidth = clampNumber(height / 78, 1.9, 2.8);
+  const cursorStrokeWidth = clampNumber(height / 125, 1.2, 1.7);
+  const altitudeDotRadius = clampNumber(height / 42, 3.8, 5.2);
+  const speedDotRadius = clampNumber(height / 50, 3.4, 4.6);
 
   svg.innerHTML = `
     <rect x="0" y="0" width="${width}" height="${height}" fill="transparent" />
-    ${grid}
+    ${xGrid}
+    ${yGrid}
     <line x1="${plot.left}" y1="${plot.top}" x2="${plot.left}" y2="${height - plot.bottom}" stroke="${axisStroke}" stroke-width="1.2" />
     <line x1="${plot.left}" y1="${height - plot.bottom}" x2="${width - plot.right}" y2="${height - plot.bottom}" stroke="${axisStroke}" stroke-width="1.2" />
-    ${altitudePath ? `<path d="${altitudePath}" fill="none" stroke="#2f96ff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" />` : ""}
-    ${speedPath ? `<path d="${speedPath}" fill="none" stroke="rgba(255, 198, 86, 0.95)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />` : ""}
+    ${altitudePath ? `<path d="${altitudePath}" fill="none" stroke="#2f96ff" stroke-width="${altitudeStrokeWidth.toFixed(1)}" stroke-linecap="round" stroke-linejoin="round" />` : ""}
+    ${speedPath ? `<path d="${speedPath}" fill="none" stroke="rgba(255, 198, 86, 0.95)" stroke-width="${speedStrokeWidth.toFixed(1)}" stroke-linecap="round" stroke-linejoin="round" />` : ""}
     ${noData}
-    <line id="fr24ProfileCursorLine" x1="0" y1="${plot.top}" x2="0" y2="${height - plot.bottom}" stroke="rgba(237, 244, 255, 0.96)" stroke-width="1.4" stroke-dasharray="6 6" />
-    <circle id="fr24ProfileCursorAltitude" cx="0" cy="0" r="4.3" fill="#2f96ff" stroke="white" stroke-width="1.4" />
-    <circle id="fr24ProfileCursorSpeed" cx="0" cy="0" r="3.7" fill="#ffc656" stroke="rgba(20, 28, 38, 0.72)" stroke-width="1.2" />
+    <line id="fr24ProfileCursorLine" x1="0" y1="${plot.top}" x2="0" y2="${height - plot.bottom}" stroke="rgba(237, 244, 255, 0.96)" stroke-width="${cursorStrokeWidth.toFixed(1)}" stroke-dasharray="6 6" />
+    <circle id="fr24ProfileCursorAltitude" cx="0" cy="0" r="${altitudeDotRadius.toFixed(1)}" fill="#2f96ff" stroke="white" stroke-width="${cursorStrokeWidth.toFixed(1)}" />
+    <circle id="fr24ProfileCursorSpeed" cx="0" cy="0" r="${speedDotRadius.toFixed(1)}" fill="#ffc656" stroke="rgba(20, 28, 38, 0.72)" stroke-width="${Math.max(1, cursorStrokeWidth - 0.2).toFixed(1)}" />
   `;
 }
 
@@ -10952,6 +11006,40 @@ function updateFR24ProfilePanel() {
   }
   drawFR24ProfileChart();
   updateFR24ProfileCursor(state.fr24ProfileCursorIndex);
+}
+
+function scheduleFR24ProfileChartResize(delay = 0) {
+  if (delay > 0) {
+    window.setTimeout(() => scheduleFR24ProfileChartResize(), delay);
+    return;
+  }
+  if (state.fr24ProfileResizeFrame) {
+    window.cancelAnimationFrame(state.fr24ProfileResizeFrame);
+  }
+  state.fr24ProfileResizeFrame = window.requestAnimationFrame(() => {
+    state.fr24ProfileResizeFrame = null;
+    if (!state.fr24ProfilePoints.length || elements.fr24ProfileCard?.classList.contains("hidden")) {
+      return;
+    }
+    drawFR24ProfileChart();
+    updateFR24ProfileCursor(state.fr24ProfileCursorIndex);
+  });
+}
+
+function ensureFR24ProfileResizeObserver() {
+  if (state.fr24ProfileResizeObserver || !window.ResizeObserver) {
+    return;
+  }
+  const targets = new Set([
+    elements.detailPanel,
+    elements.fr24ProfileCard,
+    elements.fr24ProfileSvg?.parentElement,
+  ].filter(Boolean));
+  if (!targets.size) {
+    return;
+  }
+  state.fr24ProfileResizeObserver = new ResizeObserver(() => scheduleFR24ProfileChartResize());
+  targets.forEach((target) => state.fr24ProfileResizeObserver.observe(target));
 }
 
 function fr24ProfileIndexFromEvent(event) {
@@ -11323,8 +11411,10 @@ elements.mapExpandButton.addEventListener("click", () => {
   window.setTimeout(() => {
     map.invalidateSize();
     scheduleVectorMapResizeSync();
+    scheduleFR24ProfileChartResize();
     refreshNavOverlay();
   }, 180);
+  scheduleFR24ProfileChartResize(260);
 });
 elements.sidebarExpandButton.addEventListener("click", () => {
   const expanded = !document.body.classList.contains("left-panel-expanded");
@@ -11336,8 +11426,10 @@ elements.sidebarExpandButton.addEventListener("click", () => {
   window.setTimeout(() => {
     map.invalidateSize();
     scheduleVectorMapResizeSync();
+    scheduleFR24ProfileChartResize();
     refreshNavOverlay();
   }, 180);
+  scheduleFR24ProfileChartResize(260);
 });
 /**
  * 功能：执行 `focusAirportSlot` 对应的业务逻辑。
@@ -11472,6 +11564,7 @@ elements.fr24ProfileSvg?.addEventListener("pointerup", (event) => {
 elements.fr24ProfileSvg?.addEventListener("pointercancel", () => {
   state.fr24ProfileDragging = false;
 });
+ensureFR24ProfileResizeObserver();
 elements.themeChoiceButtons.forEach((button) => {
   button.addEventListener("click", () => applyThemeMode(button.dataset.themeChoice));
 });
@@ -11495,10 +11588,12 @@ elements.mapTileZoomOffsetInput?.addEventListener("change", () => {
 });
 window.addEventListener("resize", () => {
   updateMapTileZoomOffsetControl();
+  scheduleFR24ProfileChartResize();
 }, { passive: true });
 window.addEventListener("orientationchange", () => {
   window.setTimeout(() => {
     updateMapTileZoomOffsetControl();
+    scheduleFR24ProfileChartResize();
   }, 180);
 }, { passive: true });
 themeMediaQuery?.addEventListener?.("change", () => {

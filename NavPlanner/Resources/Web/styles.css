@@ -208,8 +208,11 @@ svg {
 
 .shell {
   --rail-width: 14px;
+  --planner-panel-width: 318px;
+  --detail-panel-width: 350px;
+  --planner-expanded-width: minmax(560px, 38vw);
   display: grid;
-  grid-template-columns: 318px var(--rail-width) minmax(0, 1fr) var(--rail-width) 318px;
+  grid-template-columns: var(--planner-panel-width) var(--rail-width) minmax(0, 1fr) var(--rail-width) var(--detail-panel-width);
   grid-template-rows: 1fr;
   grid-template-areas:
     "planner left-rail map right-rail detail";
@@ -374,6 +377,7 @@ html[data-theme-mode="day"] .layout-rail-button:hover {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -381,6 +385,7 @@ html[data-theme-mode="day"] .layout-rail-button:hover {
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -389,6 +394,7 @@ html[data-theme-mode="day"] .layout-rail-button:hover {
   flex-direction: column;
   gap: 10px;
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow-y: auto;
   padding-right: 6px;
@@ -431,15 +437,15 @@ html[data-theme-mode="day"] .layout-rail-button:hover {
 }
 
 body.map-expanded .shell {
-  grid-template-columns: 318px var(--rail-width) minmax(0, 1fr) var(--rail-width) 0;
+  grid-template-columns: var(--planner-panel-width) var(--rail-width) minmax(0, 1fr) var(--rail-width) 0;
 }
 
 body.left-panel-expanded .shell {
-  grid-template-columns: minmax(560px, 38vw) var(--rail-width) minmax(0, 1fr) var(--rail-width) 318px;
+  grid-template-columns: var(--planner-expanded-width) var(--rail-width) minmax(0, 1fr) var(--rail-width) var(--detail-panel-width);
 }
 
 body.left-panel-expanded.map-expanded .shell {
-  grid-template-columns: minmax(560px, 38vw) var(--rail-width) minmax(0, 1fr) var(--rail-width) 0;
+  grid-template-columns: var(--planner-expanded-width) var(--rail-width) minmax(0, 1fr) var(--rail-width) 0;
 }
 
 body.map-expanded .detail-panel {
@@ -1271,6 +1277,7 @@ body.left-panel-expanded .selection-table {
   gap: 7px;
   margin-bottom: 12px;
   flex: 0 0 auto;
+  min-width: 0;
 }
 
 .detail-mode-tab,
@@ -1331,6 +1338,7 @@ body.left-panel-expanded .selection-table {
 
 .settings-section {
   gap: 12px;
+  min-width: 0;
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 5px;
@@ -1355,6 +1363,7 @@ body.left-panel-expanded .selection-table {
 
 .query-section {
   gap: 10px;
+  min-width: 0;
   overflow-y: auto;
   overflow-x: hidden;
   overflow-x: clip;
@@ -1520,7 +1529,8 @@ body.left-panel-expanded .selection-table {
 
 .fr24-profile-chart {
   position: relative;
-  height: 150px;
+  height: clamp(180px, 20vh, 240px);
+  min-height: 170px;
   border: 1px solid rgba(84, 189, 255, 0.2);
   border-radius: 10px;
   overflow: hidden;
@@ -4199,7 +4209,9 @@ html[data-theme="day"] .offline-progress {
 
 @media (max-width: 1360px) {
   .shell {
-    grid-template-columns: 292px var(--rail-width) minmax(0, 1fr) var(--rail-width);
+    --planner-panel-width: 292px;
+    --planner-expanded-width: minmax(500px, 46vw);
+    grid-template-columns: var(--planner-panel-width) var(--rail-width) minmax(0, 1fr) var(--rail-width);
     grid-template-rows: 1fr 260px;
     grid-template-areas:
       "planner left-rail map right-rail"
@@ -4207,14 +4219,19 @@ html[data-theme="day"] .offline-progress {
   }
 
   body.map-expanded .shell {
-    grid-template-columns: 292px var(--rail-width) minmax(0, 1fr) var(--rail-width);
+    grid-template-columns: var(--planner-panel-width) var(--rail-width) minmax(0, 1fr) var(--rail-width);
     grid-template-areas:
       "planner left-rail map right-rail"
       "planner left-rail map right-rail";
   }
 
   body.left-panel-expanded .shell {
-    grid-template-columns: minmax(500px, 46vw) var(--rail-width) minmax(0, 1fr) var(--rail-width);
+    grid-template-columns: var(--planner-expanded-width) var(--rail-width) minmax(0, 1fr) var(--rail-width);
+  }
+
+  .fr24-profile-chart {
+    height: clamp(160px, 18vh, 210px);
+    min-height: 150px;
   }
 
   .airport-panels {
@@ -4970,6 +4987,7 @@ html[data-theme="day"] .offline-progress {
 
   html:not([data-device="pad"]) .fr24-profile-chart {
     height: 98px;
+    min-height: 98px;
     border-radius: 8px;
   }
 
