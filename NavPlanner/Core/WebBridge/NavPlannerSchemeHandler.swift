@@ -465,6 +465,12 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
             let payload = fr24Service.updateCacheFavoritePayload(cacheKey: cacheKey, favorite: favorite)
             return jsonResponse(payload, statusCode: payload["error"] == nil ? 200 : 404)
         }
+        if path == "/fr24/cache/share", request.httpMethod == "POST" {
+            let body = jsonBody(from: request)
+            let cacheKey = body["cache_key"] as? String ?? body["cacheKey"] as? String ?? ""
+            let payload = fr24Service.shareCacheItemPayload(cacheKey: cacheKey)
+            return jsonResponse(payload, statusCode: payload["error"] == nil ? 200 : 404)
+        }
         if path == "/fr24/cache/clear", request.httpMethod == "POST" {
             let body = jsonBody(from: request)
             let includeFavorites = body["include_favorites"] as? Bool
@@ -1276,6 +1282,9 @@ private final class FR24Service {
             .filter { ($0["favorite"] as? Bool) == true }
             .map { Self.stringValue($0["cache_key"]) }
             .filter { !$0.isEmpty })
+        let favoritePaths = Set(favoriteKeys.flatMap { cacheKey in
+            cacheFileURLs(cacheKey: cacheKey).map { $0.standardizedFileURL.path }
+        })
         var preservedFavorites = 0
         if let items = try? fileManager.contentsOfDirectory(
             at: rootDirectory,
@@ -1283,9 +1292,7 @@ private final class FR24Service {
             options: []
         ) {
             for item in items {
-                let filename = item.deletingPathExtension().lastPathComponent
-                let cacheKey = filename.replacingOccurrences(of: ".meta", with: "")
-                if !includeFavorites && favoriteKeys.contains(cacheKey) {
+                if !includeFavorites && favoritePaths.contains(item.standardizedFileURL.path) {
                     preservedFavorites += 1
                     continue
                 }
@@ -1339,6 +1346,63 @@ private final class FR24Service {
             "item": item,
             "cache": cacheStatusPayload(),
             "message": favorite ? "已收藏 FR24 缓存文件。" : "已取消收藏 FR24 缓存文件。"
+        ]
+    }
+
+    func shareCacheItemPayload(cacheKey: String) -> [String: Any] {
+        let normalizedKey = sanitizeCacheKey(cacheKey)
+        guard !normalizedKey.isEmpty else {
+            return ["error": "FR24 cache key missing.", "cache": cacheStatusPayload()]
+        }
+        guard var meta = readCacheMeta(cacheKey: normalizedKey) else {
+            return ["error": "FR24 cache item not found.", "cache": cacheStatusPayload()]
+        }
+        let trackPoints = meta["track_points"] as? [[String: Any]] ?? []
+        var flight = (meta["flight"] as? [String: Any]) ?? [:]
+        if Self.stringValue(flight["fr24_id"]).isEmpty {
+            flight["fr24_id"] = normalizedKey
+        }
+        flight["cache_key"] = normalizedKey
+        let targetURL: URL
+        if trackPoints.count >= 2,
+           let gpxURL = try? writeGPXCacheFile(
+            cacheKey: normalizedKey,
+            flight: flight,
+            trackPoints: trackPoints,
+            previousMeta: meta
+           ) {
+            meta["gpx_filename"] = gpxURL.lastPathComponent
+            meta["gpx_path"] = gpxURL.path
+            meta["flight"] = flight
+            writeCacheMeta(meta, cacheKey: normalizedKey)
+            targetURL = gpxURL
+        } else if let sourceURL = cacheGPXURL(cacheKey: normalizedKey, meta: meta),
+                  fileManager.fileExists(atPath: sourceURL.path) {
+            let shareDirectory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("NavPlannerFR24Share", isDirectory: true)
+            try? fileManager.createDirectory(at: shareDirectory, withIntermediateDirectories: true)
+            let filename = displayGPXFilename(cacheKey: normalizedKey, flight: flight, trackPoints: trackPoints)
+            let shareURL = shareDirectory.appendingPathComponent(filename)
+            try? fileManager.removeItem(at: shareURL)
+            do {
+                try fileManager.copyItem(at: sourceURL, to: shareURL)
+                targetURL = shareURL
+            } catch {
+                return [
+                    "error": "无法准备 FR24 GPX 分享文件：\(error.localizedDescription)",
+                    "cache": cacheStatusPayload()
+                ]
+            }
+        } else {
+            return ["error": "FR24 cache GPX file not found.", "cache": cacheStatusPayload()]
+        }
+        return [
+            "cache_key": normalizedKey,
+            "filename": targetURL.lastPathComponent,
+            "share_path": targetURL.path,
+            "gpx_path": targetURL.path,
+            "cache": cacheStatusPayload(),
+            "message": "已准备 FR24 GPX 分享文件。"
         ]
     }
 
@@ -2003,7 +2067,6 @@ private final class FR24Service {
         cacheHit: Bool
     ) throws -> [String: Any] {
         let jsonURL = rootDirectory.appendingPathComponent("\(cacheKey).json")
-        let gpxURL = rootDirectory.appendingPathComponent("\(cacheKey).gpx")
         let payload: [String: Any] = [
             "flight": flight,
             "track_points": trackPoints,
@@ -2012,19 +2075,20 @@ private final class FR24Service {
         if let payloadData = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted]) {
             try? payloadData.write(to: jsonURL, options: [.atomic])
         }
-        let gpxText = gpxDocument(
-            flightID: flightID,
-            flight: flight,
-            trackPoints: trackPoints
-        )
-        try gpxText.data(using: .utf8)?.write(to: gpxURL, options: [.atomic])
         var publicFlight = flight
         publicFlight["fr24_id"] = flightID
         publicFlight["cache_key"] = cacheKey
-        let existingFavorite = readCacheMeta(cacheKey: cacheKey).flatMap { meta -> Bool? in
+        let existingMeta = readCacheMeta(cacheKey: cacheKey)
+        let existingFavorite = existingMeta.flatMap { meta -> Bool? in
             (meta["favorite"] as? Bool) ?? (meta["favorite"] as? NSNumber)?.boolValue
         } ?? false
         publicFlight["favorite"] = existingFavorite
+        let gpxURL = try writeGPXCacheFile(
+            cacheKey: cacheKey,
+            flight: publicFlight,
+            trackPoints: trackPoints,
+            previousMeta: existingMeta
+        )
         let meta: [String: Any] = [
             "flight": publicFlight,
             "track_points": trackPoints,
@@ -2542,7 +2606,69 @@ private final class FR24Service {
         var candidateTracks: [[[String: Any]]] = []
 
         func normalizedTrack(_ items: [Any]) -> [[String: Any]] {
-            items.compactMap { item in
+            func firstFiniteDouble(_ values: [Any?]) -> Double? {
+                for value in values {
+                    if let number = Self.doubleValue(value), number.isFinite {
+                        return number
+                    }
+                }
+                return nil
+            }
+
+            func assignAltitude(_ altitudeFeet: Double?, _ altitudeMeters: Double?, to point: inout [String: Any]) {
+                if let altitudeFeet, altitudeFeet.isFinite {
+                    point["altitude"] = Int(altitudeFeet.rounded())
+                    point["altitude_ft"] = altitudeFeet
+                } else if let altitudeMeters, altitudeMeters.isFinite {
+                    point["altitude_m"] = altitudeMeters
+                    point["altitude_ft"] = altitudeMeters * 3.280839895
+                    point["altitude"] = Int((altitudeMeters * 3.280839895).rounded())
+                }
+            }
+
+            func assignSpeed(_ speedKnots: Double?, to point: inout [String: Any]) {
+                if let speedKnots, speedKnots.isFinite {
+                    point["speed"] = speedKnots
+                    point["speed_kt"] = speedKnots
+                }
+            }
+
+            func normalizedArrayPoint(_ array: [Any]) -> [String: Any]? {
+                let layouts: [(timestamp: Int?, lat: Int, lon: Int, altitude: Int?, speed: Int?)] = [
+                    (0, 1, 2, 3, 4),
+                    (2, 0, 1, 3, 4),
+                    (nil, 0, 1, 2, 3)
+                ]
+                for layout in layouts {
+                    guard array.count > layout.lon,
+                          let lat = Self.doubleValue(array[layout.lat]),
+                          let lon = Self.doubleValue(array[layout.lon]),
+                          lat.isFinite,
+                          lon.isFinite,
+                          abs(lat) <= 90,
+                          abs(lon) <= 360 else {
+                        continue
+                    }
+                    var point: [String: Any] = ["lat": lat, "lon": lon]
+                    if let timestampIndex = layout.timestamp,
+                       array.count > timestampIndex,
+                       let timestamp = Self.timestampValue(array[timestampIndex]) {
+                        point["timestamp"] = timestamp
+                    }
+                    let altitudeFeet = layout.altitude.flatMap { index -> Double? in
+                        array.count > index ? Self.doubleValue(array[index]) : nil
+                    }
+                    let speedKnots = layout.speed.flatMap { index -> Double? in
+                        array.count > index ? Self.doubleValue(array[index]) : nil
+                    }
+                    assignAltitude(altitudeFeet, nil, to: &point)
+                    assignSpeed(speedKnots, to: &point)
+                    return point
+                }
+                return nil
+            }
+
+            return items.compactMap { item -> [String: Any]? in
                 if let dictionary = item as? [String: Any] {
                     let lat = Self.doubleValue(dictionary["lat"])
                         ?? Self.doubleValue(dictionary["latitude"])
@@ -2564,26 +2690,46 @@ private final class FR24Service {
                         ?? Self.timestampValue(dictionary["time"]) {
                         point["timestamp"] = timestamp
                     }
-                    if let altitude = Self.intValue(dictionary["altitude"])
-                        ?? Self.intValue(dictionary["alt"])
-                        ?? Self.intValue(Self.deepValue(dictionary, path: ["altitude", "feet"]))
-                        ?? Self.intValue(Self.deepValue(dictionary, path: ["altitude", "meters"])) {
-                        point["altitude"] = altitude
-                    }
+                    let altitudeFeet = firstFiniteDouble([
+                        dictionary["altitude"],
+                        dictionary["alt"],
+                        dictionary["alt_ft"],
+                        dictionary["altitude_ft"],
+                        dictionary["altitudeFt"],
+                        dictionary["altitude_feet"],
+                        Self.deepValue(dictionary, path: ["altitude", "feet"]),
+                        Self.deepValue(dictionary, path: ["altitude", "ft"])
+                    ])
+                    let altitudeMeters = firstFiniteDouble([
+                        dictionary["altitude_m"],
+                        dictionary["alt_m"],
+                        dictionary["altitudeMeters"],
+                        dictionary["altitude_meter"],
+                        Self.deepValue(dictionary, path: ["altitude", "meters"]),
+                        Self.deepValue(dictionary, path: ["altitude", "m"])
+                    ])
+                    assignAltitude(altitudeFeet, altitudeMeters, to: &point)
+                    let speedKnots = firstFiniteDouble([
+                        dictionary["speed"],
+                        dictionary["spd"],
+                        dictionary["speed_kt"],
+                        dictionary["speed_kts"],
+                        dictionary["speedKt"],
+                        dictionary["speedKts"],
+                        dictionary["ground_speed"],
+                        dictionary["groundspeed"],
+                        dictionary["groundSpeed"],
+                        dictionary["ground_speed_kt"],
+                        dictionary["gs"],
+                        Self.deepValue(dictionary, path: ["speed", "kts"]),
+                        Self.deepValue(dictionary, path: ["speed", "knots"]),
+                        Self.deepValue(dictionary, path: ["groundSpeed", "knots"])
+                    ])
+                    assignSpeed(speedKnots, to: &point)
                     return point
                 }
-                if let array = item as? [Any], array.count >= 3 {
-                    let timestamp = Self.intValue(array[0])
-                    let lat = Self.doubleValue(array[1])
-                    let lon = Self.doubleValue(array[2])
-                    guard let lat, let lon, lat.isFinite, lon.isFinite, abs(lat) <= 90, abs(lon) <= 360 else {
-                        return nil
-                    }
-                    var point: [String: Any] = ["lat": lat, "lon": lon]
-                    if let timestamp {
-                        point["timestamp"] = timestamp
-                    }
-                    return point
+                if let array = item as? [Any], array.count >= 2 {
+                    return normalizedArrayPoint(array)
                 }
                 return nil
             }
@@ -2606,11 +2752,22 @@ private final class FR24Service {
     }
 
     private func cacheFileURLs(cacheKey: String) -> [URL] {
-        [
+        var urls = [
             rootDirectory.appendingPathComponent("\(cacheKey).gpx"),
             rootDirectory.appendingPathComponent("\(cacheKey).json"),
             rootDirectory.appendingPathComponent("\(cacheKey).meta.json")
         ]
+        if let meta = readCacheMeta(cacheKey: cacheKey),
+           let gpxURL = cacheGPXURL(cacheKey: cacheKey, meta: meta) {
+            urls.append(gpxURL)
+        }
+        var seen: Set<String> = []
+        return urls.filter { url in
+            let path = url.standardizedFileURL.path
+            guard !seen.contains(path) else { return false }
+            seen.insert(path)
+            return true
+        }
     }
 
     private func readCacheMeta(cacheKey: String) -> [String: Any]? {
@@ -2627,6 +2784,79 @@ private final class FR24Service {
         if let metaData = try? JSONSerialization.data(withJSONObject: meta, options: [.prettyPrinted]) {
             try? metaData.write(to: metaURL, options: [.atomic])
         }
+    }
+
+    private func cacheGPXURL(cacheKey: String, meta: [String: Any]?) -> URL? {
+        if let path = meta.flatMap({ Self.stringValue($0["gpx_path"]) }), !path.isEmpty {
+            return URL(fileURLWithPath: path)
+        }
+        if let filename = meta.flatMap({ Self.stringValue($0["gpx_filename"]) }), !filename.isEmpty {
+            return rootDirectory.appendingPathComponent(filename)
+        }
+        return rootDirectory.appendingPathComponent("\(cacheKey).gpx")
+    }
+
+    private func displayGPXFilename(
+        cacheKey: String,
+        flight: [String: Any],
+        trackPoints: [[String: Any]]
+    ) -> String {
+        let timestamp = [
+            Self.intValue(flight["actual_departure"]),
+            Self.intValue(flight["scheduled_departure"]),
+            Self.intValue(flight["timestamp"]),
+            trackPoints.compactMap { Self.intValue($0["timestamp"]) }.first
+        ].compactMap { $0 }.map(normalizedTimestamp).first ?? Int(Date().timeIntervalSince1970)
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone.current
+        formatter.dateFormat = "yyyy-MM-dd'T'HHmmZ"
+        let dateToken = formatter.string(from: Date(timeIntervalSince1970: TimeInterval(timestamp)))
+        let flightToken = normalizedFlightToken(Self.stringValue(flight["flight"])).isEmpty
+            ? normalizedFlightToken(Self.stringValue(flight["callsign"]))
+            : normalizedFlightToken(Self.stringValue(flight["flight"]))
+        let registration = filenameToken(Self.stringValue(flight["aircraft_registration"]), fallback: "REG")
+        let identifier = filenameToken(Self.stringValue(flight["fr24_id"]).isEmpty ? cacheKey : Self.stringValue(flight["fr24_id"]), fallback: cacheKey)
+        return "\(dateToken)_\(flightToken.isEmpty ? "FR24" : flightToken)_\(registration)_\(identifier).gpx"
+    }
+
+    private func filenameToken(_ value: String, fallback: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        var output = ""
+        for scalar in trimmed.unicodeScalars {
+            if allowed.contains(scalar) {
+                output += String(scalar)
+            }
+        }
+        return output.isEmpty ? fallback : output
+    }
+
+    private func writeGPXCacheFile(
+        cacheKey: String,
+        flight: [String: Any],
+        trackPoints: [[String: Any]],
+        previousMeta: [String: Any]? = nil
+    ) throws -> URL {
+        try fileManager.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
+        let filename = displayGPXFilename(cacheKey: cacheKey, flight: flight, trackPoints: trackPoints)
+        let gpxURL = rootDirectory.appendingPathComponent(filename)
+        let gpxText = gpxDocument(
+            flightID: Self.stringValue(flight["fr24_id"]).isEmpty ? cacheKey : Self.stringValue(flight["fr24_id"]),
+            flight: flight,
+            trackPoints: trackPoints
+        )
+        try gpxText.data(using: .utf8)?.write(to: gpxURL, options: [.atomic])
+
+        let oldURLs = [
+            rootDirectory.appendingPathComponent("\(cacheKey).gpx"),
+            cacheGPXURL(cacheKey: cacheKey, meta: previousMeta)
+        ].compactMap { $0 }
+        for oldURL in oldURLs where oldURL.standardizedFileURL.path != gpxURL.standardizedFileURL.path {
+            try? fileManager.removeItem(at: oldURL)
+        }
+        return gpxURL
     }
 
     private func cachedFlightItems() -> [[String: Any]] {
@@ -2656,7 +2886,8 @@ private final class FR24Service {
 
     private func cacheItem(cacheKey: String, meta: [String: Any]) -> [String: Any]? {
         let trackPoints = meta["track_points"] as? [[String: Any]] ?? []
-        let gpxURL = rootDirectory.appendingPathComponent("\(cacheKey).gpx")
+        let gpxURL = cacheGPXURL(cacheKey: cacheKey, meta: meta)
+            ?? rootDirectory.appendingPathComponent("\(cacheKey).gpx")
         let jsonURL = rootDirectory.appendingPathComponent("\(cacheKey).json")
         guard fileManager.fileExists(atPath: gpxURL.path) || fileManager.fileExists(atPath: jsonURL.path) || !trackPoints.isEmpty else {
             return nil
@@ -2670,21 +2901,45 @@ private final class FR24Service {
         item["favorite"] = (meta["favorite"] as? Bool) ?? (meta["favorite"] as? NSNumber)?.boolValue ?? false
         item["downloaded_at"] = Self.intValue(meta["downloaded_at"]) ?? NSNull()
         item["track_point_count"] = trackPoints.count
-        item["gpx_filename"] = Self.stringValue(meta["gpx_filename"]).isEmpty ? gpxURL.lastPathComponent : Self.stringValue(meta["gpx_filename"])
-        item["gpx_path"] = Self.stringValue(meta["gpx_path"]).isEmpty ? gpxURL.path : Self.stringValue(meta["gpx_path"])
+        item["gpx_filename"] = gpxURL.lastPathComponent
+        item["gpx_path"] = gpxURL.path
         item["json_filename"] = Self.stringValue(meta["json_filename"]).isEmpty ? jsonURL.lastPathComponent : Self.stringValue(meta["json_filename"])
         return item
     }
 
     private func cachedDownloadPayload(cacheKey: String, flight: [String: Any]) -> [String: Any]? {
         guard let meta = readCacheMeta(cacheKey: cacheKey),
-              let trackPoints = meta["track_points"] as? [[String: Any]],
+              var trackPoints = meta["track_points"] as? [[String: Any]],
               trackPoints.count >= 2 else {
             return nil
         }
+        var refreshedMeta = meta
         var cachedFlight = (meta["flight"] as? [String: Any]) ?? flight
+        let jsonURL = rootDirectory.appendingPathComponent("\(cacheKey).json")
+        if let data = try? Data(contentsOf: jsonURL),
+           let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let playback = payload["playback"] as? [String: Any] {
+            let extractedPoints = extractPlaybackTrackPoints(playback)
+            if extractedPoints.count >= 2 {
+                trackPoints = extractedPoints
+                refreshedMeta["track_points"] = extractedPoints
+                writeCacheMeta(refreshedMeta, cacheKey: cacheKey)
+            }
+        }
         cachedFlight["favorite"] = (meta["favorite"] as? Bool) ?? (meta["favorite"] as? NSNumber)?.boolValue ?? false
         cachedFlight["cache_key"] = cacheKey
+        if let gpxURL = try? writeGPXCacheFile(
+            cacheKey: cacheKey,
+            flight: cachedFlight,
+            trackPoints: trackPoints,
+            previousMeta: meta
+        ) {
+            refreshedMeta["gpx_filename"] = gpxURL.lastPathComponent
+            refreshedMeta["gpx_path"] = gpxURL.path
+            refreshedMeta["track_points"] = trackPoints
+            refreshedMeta["flight"] = cachedFlight
+            writeCacheMeta(refreshedMeta, cacheKey: cacheKey)
+        }
         return downloadResponse(
             cacheKey: cacheKey,
             flight: cachedFlight,
@@ -2699,7 +2954,9 @@ private final class FR24Service {
         trackPoints: [[String: Any]],
         cacheHit: Bool
     ) -> [String: Any] {
-        let gpxURL = rootDirectory.appendingPathComponent("\(cacheKey).gpx")
+        let meta = readCacheMeta(cacheKey: cacheKey)
+        let gpxURL = cacheGPXURL(cacheKey: cacheKey, meta: meta)
+            ?? rootDirectory.appendingPathComponent("\(cacheKey).gpx")
         return [
             "flight": flight,
             "track_points": trackPoints,
@@ -2729,13 +2986,38 @@ private final class FR24Service {
             let lat = Self.doubleValue(point["lat"]) ?? 0
             let lon = Self.doubleValue(point["lon"]) ?? 0
             let time = Self.intValue(point["timestamp"]).map { normalizedTimestamp($0) }
+            let altitudeFeet = Self.doubleValue(point["altitude_ft"]) ?? Self.doubleValue(point["altitude"])
+            let speedKnots = Self.doubleValue(point["speed_kt"]) ?? Self.doubleValue(point["speed"])
+            var children: [String] = []
+            if let altitudeFeet, altitudeFeet.isFinite {
+                children.append("<ele>\(gpxNumber(altitudeFeet * 0.3048, decimals: 1))</ele>")
+            }
+            if let time {
+                children.append("<time>\(xmlEscape(isoFormatter.string(from: Date(timeIntervalSince1970: TimeInterval(time)))))</time>")
+            }
+            var extensionChildren: [String] = []
+            if let altitudeFeet, altitudeFeet.isFinite {
+                extensionChildren.append("<navplanner:altitude_ft>\(gpxNumber(altitudeFeet, decimals: 0))</navplanner:altitude_ft>")
+            }
+            if let speedKnots, speedKnots.isFinite {
+                extensionChildren.append("<navplanner:speed_kt>\(gpxNumber(speedKnots, decimals: 1))</navplanner:speed_kt>")
+                extensionChildren.append("<navplanner:speed_mps>\(gpxNumber(speedKnots * 0.514444, decimals: 2))</navplanner:speed_mps>")
+            }
+            if !extensionChildren.isEmpty {
+                children.append("""
+                <extensions>
+                  \(extensionChildren.joined(separator: "\n          "))
+                </extensions>
+                """)
+            }
+            let content = children.isEmpty ? "" : "\n        \(children.joined(separator: "\n        "))\n      "
             return """
-            <trkpt lat="\(lat)" lon="\(lon)">\(time.map { "<time>\(xmlEscape(isoFormatter.string(from: Date(timeIntervalSince1970: TimeInterval($0)))))</time>" } ?? "")</trkpt>
+            <trkpt lat="\(lat)" lon="\(lon)">\(content)</trkpt>
             """
         }.joined(separator: "\n")
         return """
         <?xml version="1.0" encoding="UTF-8"?>
-        <gpx version="1.1" creator="NavPlanner" xmlns="http://www.topografix.com/GPX/1/1">
+        <gpx version="1.1" creator="NavPlanner" xmlns="http://www.topografix.com/GPX/1/1" xmlns:navplanner="https://navplanner.app/gpx/1/0">
           <trk>
             <name>\(xmlEscape(name))</name>
             <trkseg>
@@ -2788,6 +3070,20 @@ private final class FR24Service {
 
     private func normalizedTimestamp(_ value: Int) -> Int {
         value > 1_000_000_000_000 ? value / 1000 : value
+    }
+
+    private func gpxNumber(_ value: Double, decimals: Int) -> String {
+        let locale = Locale(identifier: "en_US_POSIX")
+        switch decimals {
+        case 0:
+            return String(format: "%.0f", locale: locale, value)
+        case 1:
+            return String(format: "%.1f", locale: locale, value)
+        case 2:
+            return String(format: "%.2f", locale: locale, value)
+        default:
+            return String(format: "%.3f", locale: locale, value)
+        }
     }
 
     private func xmlEscape(_ value: String) -> String {

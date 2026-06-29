@@ -7,6 +7,8 @@ final class MapBridgeScriptHandler: NSObject, WKScriptMessageHandler {
     var setAppIconHandler: ((String) -> Void)?
     var openFR24VerificationHandler: (() -> Void)?
     var syncFR24SessionHandler: (() -> Void)?
+    var openFR24CacheDirectoryHandler: (() -> Void)?
+    var shareFileHandler: ((String, String) -> Void)?
 
     init(environment: AppEnvironment) {
         self.environment = environment
@@ -31,6 +33,15 @@ final class MapBridgeScriptHandler: NSObject, WKScriptMessageHandler {
             }
             if type == "syncFR24Session" {
                 self?.syncFR24SessionHandler?()
+                return
+            }
+            if type == "openFR24CacheDirectory" {
+                self?.openFR24CacheDirectoryHandler?()
+                return
+            }
+            if type == "shareFile" {
+                let payload = event["payload"] as? [String: Any] ?? [:]
+                self?.shareFileHandler?(navString(payload["path"]), navString(payload["title"]))
                 return
             }
             self?.environment?.handleMapEvent(event)

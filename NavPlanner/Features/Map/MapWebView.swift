@@ -64,10 +64,11 @@ struct MapWebView: UIViewRepresentable {
 
     func updateUIView(_ webView: WKWebView, context: Context) {}
 
-    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, UIDocumentPickerDelegate, UIScrollViewDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, UIDocumentPickerDelegate, UIDocumentInteractionControllerDelegate, UIScrollViewDelegate {
         let scriptHandler: MapBridgeScriptHandler
         weak var webView: WKWebView?
         private weak var environment: AppEnvironment?
+        private var documentInteractionController: UIDocumentInteractionController?
         var locksOuterScroll = false
 
         init(environment: AppEnvironment) {
@@ -85,6 +86,12 @@ struct MapWebView: UIViewRepresentable {
             }
             self.scriptHandler.syncFR24SessionHandler = { [weak self] in
                 self?.syncFR24SessionFromBrowser { _ in }
+            }
+            self.scriptHandler.openFR24CacheDirectoryHandler = { [weak self] in
+                self?.openFR24CacheDirectory()
+            }
+            self.scriptHandler.shareFileHandler = { [weak self] path, title in
+                self?.shareFile(path: path, title: title)
             }
         }
 
@@ -219,6 +226,92 @@ struct MapWebView: UIViewRepresentable {
                 navigation.modalPresentationStyle = .fullScreen
             }
             topViewController()?.present(navigation, animated: true)
+        }
+
+        private func openFR24CacheDirectory() {
+            let cacheRoot = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+                ?? FileManager.default.temporaryDirectory
+            let directory = cacheRoot
+                .appendingPathComponent("NavPlanner", isDirectory: true)
+                .appendingPathComponent("FR24", isDirectory: true)
+            do {
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            } catch {
+                notifyFR24CacheDirectoryOpened([
+                    "error": true,
+                    "path": directory.path,
+                    "message": "无法创建 FR24 缓存目录：\(error.localizedDescription)"
+                ])
+                return
+            }
+
+            UIApplication.shared.open(directory, options: [:]) { [weak self] opened in
+                guard let self else { return }
+                if opened {
+                    self.notifyFR24CacheDirectoryOpened([
+                        "path": directory.path,
+                        "message": "已打开 FR24 缓存目录。"
+                    ])
+                    return
+                }
+                if self.presentFR24CacheDirectoryOptions(directory) {
+                    self.notifyFR24CacheDirectoryOpened([
+                        "path": directory.path,
+                        "message": "已显示 FR24 缓存目录操作面板。"
+                    ])
+                } else {
+                    self.notifyFR24CacheDirectoryOpened([
+                        "error": true,
+                        "path": directory.path,
+                        "message": "无法直接打开 FR24 缓存目录。"
+                    ])
+                }
+            }
+        }
+
+        private func presentFR24CacheDirectoryOptions(_ directory: URL) -> Bool {
+            guard let top = topViewController(), let view = top.view else {
+                return false
+            }
+            let controller = UIDocumentInteractionController(url: directory)
+            controller.delegate = self
+            documentInteractionController = controller
+            return controller.presentOptionsMenu(from: view.bounds, in: view, animated: true)
+        }
+
+        func documentInteractionControllerDidDismissOptionsMenu(_ controller: UIDocumentInteractionController) {
+            if documentInteractionController === controller {
+                documentInteractionController = nil
+            }
+        }
+
+        private func notifyFR24CacheDirectoryOpened(_ payload: [String: Any]) {
+            notifyJavaScript(functionName: "window.navplannerNativeFR24CacheDirectoryOpened", payload: payload)
+        }
+
+        private func shareFile(path: String, title: String) {
+            guard !path.isEmpty else { return }
+            let url = URL(fileURLWithPath: path)
+            guard FileManager.default.fileExists(atPath: url.path),
+                  let top = topViewController(),
+                  let sourceView = top.view else {
+                return
+            }
+            let controller = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+            if !title.isEmpty {
+                controller.setValue(title, forKey: "subject")
+            }
+            if let popover = controller.popoverPresentationController {
+                popover.sourceView = sourceView
+                popover.sourceRect = CGRect(
+                    x: sourceView.bounds.midX,
+                    y: sourceView.bounds.maxY - 44,
+                    width: 1,
+                    height: 1
+                )
+                popover.permittedArrowDirections = []
+            }
+            top.present(controller, animated: true)
         }
 
         private func syncFR24SessionFromBrowser(
@@ -471,11 +564,13 @@ private final class FR24VerificationViewController: UIViewController, WKNavigati
                     ? "FR24 会话同步完成。"
                     : navString(payload["message"])
                 self.statusLabel.text = message
+                let hasError = (payload["error"] as? Bool) ?? false
+                guard hasError else {
+                    self.dismiss(animated: true)
+                    return
+                }
                 let alert = UIAlertController(title: "FR24", message: message, preferredStyle: .alert)
                 alert.addAction(UIAlertAction(title: "继续", style: .default))
-                alert.addAction(UIAlertAction(title: "完成", style: .default) { [weak self] _ in
-                    self?.dismiss(animated: true)
-                })
                 self.present(alert, animated: true)
             }
         }
