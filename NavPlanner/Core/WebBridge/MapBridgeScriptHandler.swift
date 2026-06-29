@@ -4,6 +4,7 @@ import WebKit
 final class MapBridgeScriptHandler: NSObject, WKScriptMessageHandler {
     weak var environment: AppEnvironment?
     var selectDatabaseHandler: (() -> Void)?
+    var importFR24GPXHandler: (() -> Void)?
     var setAppIconHandler: ((String) -> Void)?
     var openFR24VerificationHandler: (() -> Void)?
     var syncFR24SessionHandler: (() -> Void)?
@@ -20,6 +21,10 @@ final class MapBridgeScriptHandler: NSObject, WKScriptMessageHandler {
             let type = navString(event["type"])
             if type == "selectDatabase" {
                 self?.selectDatabaseHandler?()
+                return
+            }
+            if type == "importFR24GPX" {
+                self?.importFR24GPXHandler?()
                 return
             }
             if type == "setAppIcon" {

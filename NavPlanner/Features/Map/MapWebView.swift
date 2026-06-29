@@ -69,7 +69,13 @@ struct MapWebView: UIViewRepresentable {
         weak var webView: WKWebView?
         private weak var environment: AppEnvironment?
         private var documentInteractionController: UIDocumentInteractionController?
+        private var documentPickerPurpose: DocumentPickerPurpose = .database
         var locksOuterScroll = false
+
+        private enum DocumentPickerPurpose {
+            case database
+            case fr24GPX
+        }
 
         init(environment: AppEnvironment) {
             self.environment = environment
@@ -77,6 +83,9 @@ struct MapWebView: UIViewRepresentable {
             super.init()
             self.scriptHandler.selectDatabaseHandler = { [weak self] in
                 self?.presentDatabasePicker()
+            }
+            self.scriptHandler.importFR24GPXHandler = { [weak self] in
+                self?.presentFR24GPXPicker()
             }
             self.scriptHandler.setAppIconHandler = { [weak self] choice in
                 self?.setAppIconChoice(choice)
@@ -96,6 +105,7 @@ struct MapWebView: UIViewRepresentable {
         }
 
         private func presentDatabasePicker() {
+            documentPickerPurpose = .database
             let types = [
                 UTType(filenameExtension: "s3db") ?? .data,
                 UTType(filenameExtension: "sqlite") ?? .data,
@@ -108,8 +118,23 @@ struct MapWebView: UIViewRepresentable {
             topViewController()?.present(picker, animated: true)
         }
 
+        private func presentFR24GPXPicker() {
+            documentPickerPurpose = .fr24GPX
+            let types = [
+                UTType(filenameExtension: "gpx") ?? .xml,
+                .xml,
+                .data
+            ]
+            let picker = UIDocumentPickerViewController(forOpeningContentTypes: types, asCopy: true)
+            picker.delegate = self
+            picker.allowsMultipleSelection = false
+            topViewController()?.present(picker, animated: true)
+        }
+
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
             guard let url = urls.first else { return }
+            let purpose = documentPickerPurpose
+            documentPickerPurpose = .database
             let canAccess = url.startAccessingSecurityScopedResource()
             Task { @MainActor in
                 defer {
@@ -117,17 +142,32 @@ struct MapWebView: UIViewRepresentable {
                         url.stopAccessingSecurityScopedResource()
                     }
                 }
-                guard let environment = self.environment else { return }
-                let payload = environment.importDatabase(from: url)
-                self.notifyDatabaseSelection(payload)
+                switch purpose {
+                case .database:
+                    guard let environment = self.environment else { return }
+                    let payload = environment.importDatabase(from: url)
+                    self.notifyDatabaseSelection(payload)
+                case .fr24GPX:
+                    self.importFR24GPX(from: url)
+                }
             }
         }
 
         func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-            notifyDatabaseSelection([
-                "local_status": "cancelled",
-                "message": "已取消选择数据库文件"
-            ])
+            let purpose = documentPickerPurpose
+            documentPickerPurpose = .database
+            switch purpose {
+            case .database:
+                notifyDatabaseSelection([
+                    "local_status": "cancelled",
+                    "message": "已取消选择数据库文件"
+                ])
+            case .fr24GPX:
+                notifyFR24GPXImported([
+                    "error": true,
+                    "message": "已取消选择 GPX 文件。"
+                ])
+            }
         }
 
         func webView(
@@ -202,6 +242,37 @@ struct MapWebView: UIViewRepresentable {
 
         private func notifyDatabaseSelection(_ payload: [String: Any]) {
             notifyJavaScript(functionName: "window.navplannerNativeDatabaseSelected", payload: payload)
+        }
+
+        private func importFR24GPX(from url: URL) {
+            do {
+                let data = try Data(contentsOf: url)
+                let trackPoints = try GPXTrackPointParser.parse(data: data)
+                guard trackPoints.count >= 2 else {
+                    notifyFR24GPXImported([
+                        "error": true,
+                        "filename": url.lastPathComponent,
+                        "message": "GPX 文件中的轨迹点不足，无法绘制。"
+                    ])
+                    return
+                }
+                notifyFR24GPXImported([
+                    "filename": url.lastPathComponent,
+                    "track_points": trackPoints,
+                    "track_point_count": trackPoints.count,
+                    "message": "已导入 GPX 轨迹。"
+                ])
+            } catch {
+                notifyFR24GPXImported([
+                    "error": true,
+                    "filename": url.lastPathComponent,
+                    "message": "无法读取 GPX 文件：\(error.localizedDescription)"
+                ])
+            }
+        }
+
+        private func notifyFR24GPXImported(_ payload: [String: Any]) {
+            notifyJavaScript(functionName: "window.navplannerNativeFR24GPXImported", payload: payload)
         }
 
         private func setAppIconChoice(_ choice: String) {
@@ -467,6 +538,102 @@ struct MapWebView: UIViewRepresentable {
             }
             return top
         }
+    }
+}
+
+private final class GPXTrackPointParser: NSObject, XMLParserDelegate {
+    private var points: [[String: Any]] = []
+    private var currentPoint: [String: Any]?
+    private var textBuffer = ""
+    private var currentElement = ""
+    private var parseError: Error?
+    private static let isoFormatter = ISO8601DateFormatter()
+
+    static func parse(data: Data) throws -> [[String: Any]] {
+        let parserDelegate = GPXTrackPointParser()
+        let parser = XMLParser(data: data)
+        parser.delegate = parserDelegate
+        guard parser.parse() else {
+            throw parser.parserError ?? parserDelegate.parseError ?? NSError(
+                domain: "NavPlanner.GPX",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "GPX parse failed."]
+            )
+        }
+        if let parseError = parserDelegate.parseError {
+            throw parseError
+        }
+        return parserDelegate.points
+    }
+
+    func parser(
+        _ parser: XMLParser,
+        didStartElement elementName: String,
+        namespaceURI: String?,
+        qualifiedName qName: String?,
+        attributes attributeDict: [String: String] = [:]
+    ) {
+        let name = (qName ?? elementName).lowercased()
+        currentElement = name
+        textBuffer = ""
+        guard name == "trkpt" else { return }
+        if let lat = Double(attributeDict["lat"] ?? ""),
+           let lon = Double(attributeDict["lon"] ?? ""),
+           lat.isFinite,
+           lon.isFinite {
+            currentPoint = ["lat": lat, "lon": lon]
+        } else {
+            currentPoint = nil
+        }
+    }
+
+    func parser(_ parser: XMLParser, foundCharacters string: String) {
+        textBuffer += string
+    }
+
+    func parser(
+        _ parser: XMLParser,
+        didEndElement elementName: String,
+        namespaceURI: String?,
+        qualifiedName qName: String?
+    ) {
+        let name = (qName ?? elementName).lowercased()
+        let text = textBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
+        defer {
+            textBuffer = ""
+            currentElement = ""
+        }
+        guard var point = currentPoint else { return }
+
+        if name == "trkpt" {
+            points.append(point)
+            currentPoint = nil
+            return
+        }
+        guard !text.isEmpty else { return }
+        if name == "ele", let meters = Double(text), meters.isFinite {
+            let feet = meters * 3.280839895
+            point["altitude_m"] = meters
+            point["altitude_ft"] = feet
+            point["altitude"] = feet
+        } else if name == "time", let date = Self.isoFormatter.date(from: text) {
+            point["timestamp"] = Int(date.timeIntervalSince1970)
+        } else if name.contains("altitude_ft"), let feet = Double(text), feet.isFinite {
+            point["altitude_ft"] = feet
+            point["altitude"] = feet
+        } else if name.contains("speed_kt") || name.contains("speed_knot"), let knots = Double(text), knots.isFinite {
+            point["speed_kt"] = knots
+            point["speed"] = knots
+        } else if name.contains("speed_mps") || name.contains("speed"), let metersPerSecond = Double(text), metersPerSecond.isFinite {
+            let knots = metersPerSecond / 0.514444
+            point["speed_kt"] = knots
+            point["speed"] = knots
+        }
+        currentPoint = point
+    }
+
+    func parser(_ parser: XMLParser, parseErrorOccurred parseError: Error) {
+        self.parseError = parseError
     }
 }
 

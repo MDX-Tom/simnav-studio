@@ -1356,11 +1356,17 @@ body.left-panel-expanded .selection-table {
 .query-section {
   gap: 10px;
   overflow-y: auto;
+  overflow-x: hidden;
+  overflow-x: clip;
   padding-right: 5px;
 }
 
 .query-card,
 .query-flight-card {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-x: clip;
   border: 1px solid var(--border-soft);
   border-radius: 12px;
   background:
@@ -1394,6 +1400,23 @@ body.left-panel-expanded .selection-table {
   word-break: normal;
 }
 
+.query-card .settings-row {
+  min-width: 0;
+}
+
+.query-card .settings-row > div {
+  min-width: 0;
+}
+
+.query-card .settings-row span,
+.query-card .helper-text,
+.query-cache-card span,
+.query-cache-card strong {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
 .query-primary-actions {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
@@ -1417,10 +1440,17 @@ body.left-panel-expanded .selection-table {
   grid-template-columns: minmax(0, 1fr) minmax(88px, auto);
   gap: 8px;
   align-items: center;
+  min-width: 0;
 }
 
 .query-manual-flight-grid input {
+  min-width: 0;
   margin: 0;
+}
+
+.query-manual-flight-grid .compact-button {
+  min-width: 0;
+  white-space: normal;
 }
 
 .query-access-grid {

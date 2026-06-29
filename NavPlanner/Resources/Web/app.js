@@ -426,6 +426,9 @@ const TRANSLATIONS = {
   "track.stopped": { "zh-Hans": "轨迹匹配已停止。", en: "Track match stopped." },
   "query.title": { "zh-Hans": "FR24 航班查询", en: "FR24 Flight Query" },
   "query.search": { "zh-Hans": "查询", en: "Search" },
+  "query.importGPX": { "zh-Hans": "手动导入", en: "Import GPX" },
+  "query.importGPXOpening": { "zh-Hans": "请选择 GPX 轨迹文件。", en: "Choose a GPX track file." },
+  "query.importGPXDrawn": { "zh-Hans": "已导入并绘制 {filename}，共 {count} 个点。", en: "Imported and drawn {filename} with {count} points." },
   "query.hint": { "zh-Hans": "", en: "" },
   "query.statusInitial": { "zh-Hans": "填好起飞和到达机场后，可查询该航线的最新 FR24 航班。", en: "Enter departure and arrival first, then search recent FR24 flights on this route." },
   "query.manualHistoryTitle": { "zh-Hans": "手动航班历史", en: "Manual Flight History" },
@@ -1078,6 +1081,7 @@ const elements = {
   clearMapCacheButton: document.querySelector("#clearMapCacheButton"),
   resetAllSettingsButton: document.querySelector("#resetAllSettingsButton"),
   fr24SearchButton: document.querySelector("#fr24SearchButton"),
+  fr24ImportGPXButton: document.querySelector("#fr24ImportGPXButton"),
   fr24ManualHistoryInput: document.querySelector("#fr24ManualHistoryInput"),
   fr24ManualHistoryButton: document.querySelector("#fr24ManualHistoryButton"),
   fr24QueryStatus: document.querySelector("#fr24QueryStatus"),
@@ -10079,6 +10083,7 @@ function setFR24QueryBusy(isBusy) {
   state.fr24QueryBusy = Boolean(isBusy);
   [
     elements.fr24SearchButton,
+    elements.fr24ImportGPXButton,
     elements.fr24ManualHistoryButton,
     elements.fr24CacheSearchButton,
     elements.fr24OpenCacheDirectoryButton,
@@ -10388,6 +10393,17 @@ function openFR24CacheDirectory() {
   setStatus(t("query.cacheDirectoryOpening"));
 }
 
+function importFR24GPX() {
+  if (!window.webkit?.messageHandlers?.navplanner) {
+    setFR24QueryStatus(t("database.iosOnly"), true);
+    setStatus(t("database.iosOnly"), true);
+    return;
+  }
+  postNativeEvent("importFR24GPX");
+  setFR24QueryStatus(t("query.importGPXOpening"));
+  setStatus(t("query.importGPXOpening"));
+}
+
 function handleNativeFR24SessionUpdated(payload = {}) {
   updateFR24AccessSummary(payload);
   const message = fr24NativeSessionMessage(payload);
@@ -10402,6 +10418,23 @@ function handleNativeFR24CacheDirectoryOpened(payload = {}) {
     : (currentLanguage() === "zh-Hans" && rawMessage ? rawMessage : t("query.cacheDirectoryOpened"));
   setFR24QueryStatus(message, Boolean(payload.error));
   setStatus(message, Boolean(payload.error));
+}
+
+function handleNativeFR24GPXImported(payload = {}) {
+  if (payload.error) {
+    const rawMessage = cleanErrorMessage(payload.message || "");
+    const message = currentLanguage() === "zh-Hans" && rawMessage ? rawMessage : localizedErrorMessage(rawMessage);
+    setFR24QueryStatus(message, true);
+    setStatus(message, true);
+    return;
+  }
+  const count = drawFR24TrackPoints(payload.track_points || [], { fitBounds: true });
+  const message = t("query.importGPXDrawn", {
+    filename: payload.filename || "GPX",
+    count: formatCount(count),
+  });
+  setFR24QueryStatus(message);
+  setStatus(message);
 }
 
 async function refreshFR24CacheStatus() {
@@ -11369,6 +11402,7 @@ elements.resetAllSettingsButton?.addEventListener("click", () => {
 elements.fr24SearchButton?.addEventListener("click", () => {
   searchFR24Flights().catch(setErrorStatus);
 });
+elements.fr24ImportGPXButton?.addEventListener("click", importFR24GPX);
 elements.fr24ManualHistoryButton?.addEventListener("click", () => {
   searchFR24ManualHistory().catch(setErrorStatus);
 });
@@ -11481,6 +11515,7 @@ window.navplannerNativeDatabaseSelected = handleNativeDatabaseSelected;
 window.navplannerNativeAppIconChanged = handleNativeAppIconChanged;
 window.navplannerNativeFR24SessionUpdated = handleNativeFR24SessionUpdated;
 window.navplannerNativeFR24CacheDirectoryOpened = handleNativeFR24CacheDirectoryOpened;
+window.navplannerNativeFR24GPXImported = handleNativeFR24GPXImported;
 
 elements.departureInput.addEventListener(
   "input",
