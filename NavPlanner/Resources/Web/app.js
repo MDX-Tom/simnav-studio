@@ -450,6 +450,11 @@ const TRANSLATIONS = {
   "query.drawn": { "zh-Hans": "已绘制 FR24 GPX 轨迹，共 {count} 个点。", en: "FR24 GPX track drawn with {count} points." },
   "query.matching": { "zh-Hans": "正在使用本地 airway 图匹配 FR24 轨迹...", en: "Matching FR24 track with the local airway graph..." },
   "query.matched": { "zh-Hans": "{message} 已匹配 {distance}nm。", en: "{message} Matched {distance}nm." },
+  "query.profileTitle": { "zh-Hans": "FR24 高度剖面", en: "FR24 Altitude Profile" },
+  "query.profileAria": { "zh-Hans": "FR24 轨迹高度和速度剖面", en: "FR24 track altitude and speed profile" },
+  "query.profileSlider": { "zh-Hans": "轨迹时间位置", en: "Track time position" },
+  "query.profileReadout": { "zh-Hans": "{time} / 高度 {altitude} / 速度 {speed}", en: "{time} / Alt {altitude} / Speed {speed}" },
+  "query.profileNoData": { "zh-Hans": "该轨迹暂无高度或速度数据。", en: "No altitude or speed data in this track." },
   "query.cache": { "zh-Hans": "FR24 轨迹缓存", en: "FR24 Track Cache" },
   "query.cacheStatus": { "zh-Hans": "正在读取缓存...", en: "Reading cache..." },
   "query.cacheInitial": { "zh-Hans": "GPX、playback JSON 和 meta JSON 缓存在 App Caches 中。", en: "GPX, playback JSON, and meta JSON are stored in App Caches." },
@@ -462,6 +467,9 @@ const TRANSLATIONS = {
   "query.cacheLoaded": { "zh-Hans": "已找到 {count} 条已下载轨迹。", en: "Found {count} downloaded tracks." },
   "query.cacheEmpty": { "zh-Hans": "没有匹配的已下载轨迹。", en: "No matching downloaded tracks." },
   "query.cacheDraw": { "zh-Hans": "绘制路径", en: "Draw Track" },
+  "query.cacheShare": { "zh-Hans": "分享", en: "Share" },
+  "query.cacheSharing": { "zh-Hans": "正在准备 FR24 GPX 分享文件...", en: "Preparing FR24 GPX share file..." },
+  "query.cacheShareReady": { "zh-Hans": "已打开 FR24 GPX 分享面板。", en: "FR24 GPX share sheet opened." },
   "query.cacheDelete": { "zh-Hans": "删除文件", en: "Delete File" },
   "query.cacheFavorite": { "zh-Hans": "收藏", en: "Favorite" },
   "query.cacheUnfavorite": { "zh-Hans": "取消收藏", en: "Unfavorite" },
@@ -472,6 +480,10 @@ const TRANSLATIONS = {
   "query.cacheFavorited": { "zh-Hans": "已收藏 FR24 缓存文件。", en: "FR24 cached files favorited." },
   "query.cacheUnfavorited": { "zh-Hans": "已取消收藏 FR24 缓存文件。", en: "FR24 cached files unfavorited." },
   "query.cacheClearedWithFavorites": { "zh-Hans": "已删除未收藏的 FR24 缓存，保留 {count} 个收藏。", en: "Deleted non-favorited FR24 cache and kept {count} favorites." },
+  "query.openCacheDirectory": { "zh-Hans": "打开目录", en: "Open Folder" },
+  "query.cacheDirectoryOpening": { "zh-Hans": "正在打开 FR24 缓存目录...", en: "Opening FR24 cache folder..." },
+  "query.cacheDirectoryOpened": { "zh-Hans": "已打开 FR24 缓存目录。", en: "FR24 cache folder opened." },
+  "query.cacheDirectoryFailed": { "zh-Hans": "无法打开 FR24 缓存目录。", en: "Could not open the FR24 cache folder." },
   "query.access": { "zh-Hans": "FR24 网络访问", en: "FR24 Network Access" },
   "query.accessInitial": { "zh-Hans": "浏览器会话未同步。", en: "Browser session not synced." },
   "query.accessSummary": { "zh-Hans": "浏览器会话{state}。", en: "Browser session {state}." },
@@ -699,6 +711,10 @@ const state = {
   fr24AccessStatus: null,
   fr24QueryBusy: false,
   fr24TrackPayload: null,
+  fr24ProfilePoints: [],
+  fr24ProfileCursorIndex: 0,
+  fr24ProfileDragging: false,
+  fr24ProfileLayout: null,
   drawingUndoStack: [],
   drawingRedoStack: [],
   restoringDrawingSnapshot: false,
@@ -1065,6 +1081,10 @@ const elements = {
   fr24ManualHistoryInput: document.querySelector("#fr24ManualHistoryInput"),
   fr24ManualHistoryButton: document.querySelector("#fr24ManualHistoryButton"),
   fr24QueryStatus: document.querySelector("#fr24QueryStatus"),
+  fr24ProfileCard: document.querySelector("#fr24ProfileCard"),
+  fr24ProfileSvg: document.querySelector("#fr24ProfileSvg"),
+  fr24ProfileSlider: document.querySelector("#fr24ProfileSlider"),
+  fr24ProfileReadout: document.querySelector("#fr24ProfileReadout"),
   fr24FlightList: document.querySelector("#fr24FlightList"),
   fr24CacheSearchInput: document.querySelector("#fr24CacheSearchInput"),
   fr24CacheSearchButton: document.querySelector("#fr24CacheSearchButton"),
@@ -1083,6 +1103,7 @@ const elements = {
   fr24RestoreMatchButton: document.querySelector("#fr24RestoreMatchButton"),
   fr24ClearCacheButton: document.querySelector("#fr24ClearCacheButton"),
   fr24RefreshCacheButton: document.querySelector("#fr24RefreshCacheButton"),
+  fr24OpenCacheDirectoryButton: document.querySelector("#fr24OpenCacheDirectoryButton"),
 };
 
 function applyStaticTranslations() {
@@ -1470,6 +1491,7 @@ const autoRouteLayerGroup = L.layerGroup().addTo(map);
 const manualRouteLayerGroup = L.layerGroup().addTo(map);
 let routeLayerGroup = autoRouteLayerGroup;
 const fr24TrackLayerGroup = L.layerGroup().addTo(map);
+let fr24TrackCursorMarker = null;
 let navAirwayLayerGroup = L.layerGroup().addTo(map);
 let navAirwayLabelLayerGroup = L.layerGroup().addTo(map);
 let navLayerGroup = L.layerGroup().addTo(map);
@@ -3009,6 +3031,7 @@ function applyMapOverlayVisibility() {
     setLayerGroupVisible(group, isMapOverlayVisible("procedures"));
   });
   setLayerGroupVisible(fr24TrackLayerGroup, isMapOverlayVisible("fr24"));
+  updateFR24ProfilePanel();
   setLayerGroupVisible(navTerminalLayerGroup, isMapOverlayVisible("terminalWaypoints"));
   setLayerGroupVisible(navTerminalLabelLayerGroup, isMapOverlayVisible("terminalWaypoints"));
   setLayerGroupVisible(navPointLayerGroup, isMapOverlayVisible("otherWaypoints"));
@@ -6034,6 +6057,7 @@ function refreshLocalizedDynamicText() {
   updateMapCacheSummary(state.mapCacheStatus);
   updateFR24CacheSummary(state.fr24CacheStatus || {});
   updateFR24AccessSummary(state.fr24AccessStatus || {});
+  updateFR24ProfilePanel();
   renderFR24Flights(state.fr24SearchFlights);
   updateAirportPanelVisibility();
   AIRPORT_SLOTS.forEach((slot) => {
@@ -10057,6 +10081,7 @@ function setFR24QueryBusy(isBusy) {
     elements.fr24SearchButton,
     elements.fr24ManualHistoryButton,
     elements.fr24CacheSearchButton,
+    elements.fr24OpenCacheDirectoryButton,
     ...Array.from(elements.fr24FlightList?.querySelectorAll("[data-fr24-action]") || []),
     ...Array.from(elements.fr24CacheList?.querySelectorAll("[data-fr24-action]") || []),
   ].forEach((button) => {
@@ -10182,6 +10207,7 @@ function renderFR24CacheActions(flight, key) {
   return `
     <div class="query-flight-actions query-cache-actions">
       <button class="ghost-button compact-button" type="button" data-fr24-action="draw" data-fr24-key="${escapeHtml(key)}">${escapeHtml(t("query.cacheDraw"))}</button>
+      <button class="ghost-button compact-button" type="button" data-fr24-action="share-cache" data-fr24-key="${escapeHtml(key)}">${escapeHtml(t("query.cacheShare"))}</button>
       <button class="ghost-button compact-button" type="button" data-fr24-action="favorite-cache" data-fr24-key="${escapeHtml(key)}" data-fr24-favorite="${isFavorite ? "false" : "true"}">${escapeHtml(favoriteLabel)}</button>
       <button class="ghost-button compact-button danger-button" type="button" data-fr24-action="delete-cache" data-fr24-key="${escapeHtml(key)}">${escapeHtml(t("query.cacheDelete"))}</button>
     </div>
@@ -10351,9 +10377,29 @@ function syncFR24BrowserSession() {
   setStatus(t("query.accessSyncing"));
 }
 
+function openFR24CacheDirectory() {
+  if (!window.webkit?.messageHandlers?.navplanner) {
+    setFR24QueryStatus(t("database.iosOnly"), true);
+    setStatus(t("database.iosOnly"), true);
+    return;
+  }
+  postNativeEvent("openFR24CacheDirectory");
+  setFR24QueryStatus(t("query.cacheDirectoryOpening"));
+  setStatus(t("query.cacheDirectoryOpening"));
+}
+
 function handleNativeFR24SessionUpdated(payload = {}) {
   updateFR24AccessSummary(payload);
   const message = fr24NativeSessionMessage(payload);
+  setFR24QueryStatus(message, Boolean(payload.error));
+  setStatus(message, Boolean(payload.error));
+}
+
+function handleNativeFR24CacheDirectoryOpened(payload = {}) {
+  const rawMessage = cleanErrorMessage(payload.message || "");
+  const message = payload.error
+    ? (currentLanguage() === "zh-Hans" && rawMessage ? rawMessage : t("query.cacheDirectoryFailed"))
+    : (currentLanguage() === "zh-Hans" && rawMessage ? rawMessage : t("query.cacheDirectoryOpened"));
   setFR24QueryStatus(message, Boolean(payload.error));
   setStatus(message, Boolean(payload.error));
 }
@@ -10526,11 +10572,77 @@ async function fetchFR24TrackPayload(flight, options = {}) {
   });
 }
 
+function finiteFR24Number(...values) {
+  for (const value of values) {
+    const number = Number(value);
+    if (Number.isFinite(number)) {
+      return number;
+    }
+  }
+  return null;
+}
+
 function normalizedFR24TrackPoints(trackPoints) {
-  return withDisplayLongitudes((trackPoints || []).map((point) => ({
-    lat: Number(point.lat ?? point.latitude),
-    lon: Number(point.lon ?? point.lng ?? point.longitude),
-  })).filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon)));
+  return withDisplayLongitudes((trackPoints || []).map((point) => {
+    const source = point || {};
+    const lat = finiteFR24Number(source.lat, source.latitude, source.position?.lat);
+    const lon = finiteFR24Number(source.lon, source.lng, source.longitude, source.position?.lng, source.position?.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return null;
+    }
+    const output = { lat, lon };
+    const timestamp = finiteFR24Number(source.timestamp, source.ts, source.time);
+    if (Number.isFinite(timestamp)) {
+      output.timestamp = timestamp > 1_000_000_000_000 ? Math.floor(timestamp / 1000) : Math.floor(timestamp);
+    }
+    const altitude = finiteFR24Number(
+      source.altitude_ft,
+      source.altitude,
+      source.alt,
+      source.alt_ft,
+      source.altitudeFt,
+      source.altitude_feet,
+      source.altitude?.feet,
+      source.altitude?.ft,
+    );
+    const altitudeMeters = finiteFR24Number(
+      source.altitude_m,
+      source.alt_m,
+      source.altitudeMeters,
+      source.altitude_meter,
+      source.altitude?.meters,
+      source.altitude?.m,
+    );
+    if (Number.isFinite(altitude)) {
+      output.altitude = altitude;
+      output.altitude_ft = altitude;
+    } else if (Number.isFinite(altitudeMeters)) {
+      output.altitude_m = altitudeMeters;
+      output.altitude_ft = altitudeMeters * 3.280839895;
+      output.altitude = output.altitude_ft;
+    }
+    const speed = finiteFR24Number(
+      source.speed_kt,
+      source.speed_kts,
+      source.speed,
+      source.spd,
+      source.speedKt,
+      source.speedKts,
+      source.ground_speed,
+      source.groundspeed,
+      source.groundSpeed,
+      source.ground_speed_kt,
+      source.gs,
+      source.speed?.kts,
+      source.speed?.knots,
+      source.groundSpeed?.knots,
+    );
+    if (Number.isFinite(speed)) {
+      output.speed = speed;
+      output.speed_kt = speed;
+    }
+    return output;
+  }).filter(Boolean));
 }
 
 function cloneFR24TrackPayload(payload = state.fr24TrackPayload) {
@@ -10541,8 +10653,302 @@ function cloneFR24TrackPayload(payload = state.fr24TrackPayload) {
     track_points: payload.track_points.map((point) => ({
       lat: Number(point.lat),
       lon: Number(point.lon),
-    })).filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon)),
+      timestamp: finiteFR24Number(point.timestamp),
+      altitude: finiteFR24Number(point.altitude, point.altitude_ft),
+      altitude_ft: finiteFR24Number(point.altitude_ft, point.altitude),
+      altitude_m: finiteFR24Number(point.altitude_m),
+      speed: finiteFR24Number(point.speed, point.speed_kt),
+      speed_kt: finiteFR24Number(point.speed_kt, point.speed),
+    })).filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon)).map((point) => {
+      Object.keys(point).forEach((key) => {
+        if (point[key] === null || point[key] === undefined || !Number.isFinite(point[key])) {
+          delete point[key];
+        }
+      });
+      return point;
+    }),
   };
+}
+
+function formatFR24Altitude(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return "--";
+  }
+  return `${Math.round(number).toLocaleString(currentLanguage() === "zh-Hans" ? "zh-CN" : "en-US")} ft`;
+}
+
+function formatFR24Speed(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return "--";
+  }
+  return `${Math.round(number)} kt`;
+}
+
+function formatFR24ProfileTime(point, index, total) {
+  if (Number.isFinite(point?.timestamp)) {
+    return formatFlightTime(point.timestamp);
+  }
+  const denominator = Math.max(1, total - 1);
+  return `${Math.round((index / denominator) * 100)}%`;
+}
+
+function fr24ProfileDataPoints() {
+  const points = state.fr24TrackPayload?.track_points || [];
+  return points.map((point, index) => ({
+    ...point,
+    index,
+    timestamp: finiteFR24Number(point.timestamp),
+    altitude: finiteFR24Number(point.altitude_ft, point.altitude),
+    speed: finiteFR24Number(point.speed_kt, point.speed),
+  }));
+}
+
+function shouldShowFR24ProfilePanel() {
+  return Boolean(state.fr24TrackPayload && isMapOverlayVisible("fr24"));
+}
+
+function paddedRange(values, fallbackPadding) {
+  if (!values.length) {
+    return { min: 0, max: 1 };
+  }
+  let min = Math.min(...values);
+  let max = Math.max(...values);
+  if (min === max) {
+    min -= fallbackPadding;
+    max += fallbackPadding;
+  } else {
+    const padding = Math.max(fallbackPadding, (max - min) * 0.08);
+    min -= padding;
+    max += padding;
+  }
+  return { min, max };
+}
+
+function svgPathForProfile(points, yKey) {
+  let started = false;
+  let path = "";
+  points.forEach((point) => {
+    const x = point.x;
+    const y = point[yKey];
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      started = false;
+      return;
+    }
+    path += `${started ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)} `;
+    started = true;
+  });
+  return path.trim();
+}
+
+function drawFR24ProfileChart() {
+  const svg = elements.fr24ProfileSvg;
+  const profile = state.fr24ProfilePoints;
+  if (!svg || profile.length < 2) {
+    state.fr24ProfileLayout = null;
+    if (svg) {
+      svg.innerHTML = "";
+    }
+    return;
+  }
+
+  const width = 640;
+  const height = 190;
+  const plot = { left: 50, right: 18, top: 18, bottom: 34 };
+  const plotWidth = width - plot.left - plot.right;
+  const plotHeight = height - plot.top - plot.bottom;
+  const timestamps = profile.map((point) => point.timestamp).filter(Number.isFinite);
+  const minTime = timestamps.length ? Math.min(...timestamps) : 0;
+  const maxTime = timestamps.length ? Math.max(...timestamps) : 0;
+  const useTimeAxis = timestamps.length >= 2 && maxTime > minTime;
+  const altitudeValues = profile.map((point) => point.altitude).filter(Number.isFinite);
+  const speedValues = profile.map((point) => point.speed).filter(Number.isFinite);
+  const altitudeRange = paddedRange(altitudeValues, 500);
+  const speedRange = paddedRange(speedValues, 20);
+  const xForPoint = (point, index) => {
+    if (useTimeAxis && Number.isFinite(point.timestamp)) {
+      return plot.left + ((point.timestamp - minTime) / Math.max(1, maxTime - minTime)) * plotWidth;
+    }
+    return plot.left + (index / Math.max(1, profile.length - 1)) * plotWidth;
+  };
+  const yForAltitude = (altitude) => plot.top + (1 - ((altitude - altitudeRange.min) / Math.max(1, altitudeRange.max - altitudeRange.min))) * plotHeight;
+  const yForSpeed = (speed) => plot.top + (1 - ((speed - speedRange.min) / Math.max(1, speedRange.max - speedRange.min))) * plotHeight;
+  const plotted = profile.map((point, index) => ({
+    ...point,
+    x: xForPoint(point, index),
+    altitudeY: Number.isFinite(point.altitude) ? yForAltitude(point.altitude) : null,
+    speedY: Number.isFinite(point.speed) ? yForSpeed(point.speed) : null,
+  }));
+  state.fr24ProfileLayout = {
+    width,
+    height,
+    plotLeft: plot.left,
+    plotRight: width - plot.right,
+    points: plotted,
+  };
+
+  const altitudePath = svgPathForProfile(plotted, "altitudeY");
+  const speedPath = svgPathForProfile(plotted, "speedY");
+  const dayTheme = document.documentElement.dataset.theme === "day";
+  const gridStroke = dayTheme ? "rgba(70, 111, 139, 0.22)" : "rgba(148, 188, 218, 0.18)";
+  const axisStroke = dayTheme ? "rgba(43, 84, 112, 0.42)" : "rgba(148, 188, 218, 0.32)";
+  const labelFill = dayTheme ? "rgba(39, 73, 98, 0.82)" : "rgba(203, 222, 238, 0.84)";
+  const noDataFill = dayTheme ? "rgba(50, 80, 104, 0.72)" : "rgba(203, 222, 238, 0.72)";
+  const gridLevels = [0, 0.25, 0.5, 0.75, 1];
+  const grid = gridLevels.map((level) => {
+    const y = plot.top + level * plotHeight;
+    const altitude = altitudeRange.max - level * (altitudeRange.max - altitudeRange.min);
+    const label = altitudeValues.length ? formatFR24Altitude(altitude) : "";
+    return `
+      <line x1="${plot.left}" y1="${y.toFixed(1)}" x2="${(width - plot.right).toFixed(1)}" y2="${y.toFixed(1)}" stroke="${gridStroke}" stroke-width="1" />
+      <text x="${(plot.left - 8).toFixed(1)}" y="${(y + 3).toFixed(1)}" fill="${labelFill}" font-size="10" font-weight="700" text-anchor="end">${escapeHtml(label)}</text>
+    `;
+  }).join("");
+  const noData = !altitudeValues.length && !speedValues.length
+    ? `<text x="${width / 2}" y="${height / 2}" fill="${noDataFill}" font-size="14" font-weight="700" text-anchor="middle">${escapeHtml(t("query.profileNoData"))}</text>`
+    : "";
+
+  svg.innerHTML = `
+    <rect x="0" y="0" width="${width}" height="${height}" fill="transparent" />
+    ${grid}
+    <line x1="${plot.left}" y1="${plot.top}" x2="${plot.left}" y2="${height - plot.bottom}" stroke="${axisStroke}" stroke-width="1.2" />
+    <line x1="${plot.left}" y1="${height - plot.bottom}" x2="${width - plot.right}" y2="${height - plot.bottom}" stroke="${axisStroke}" stroke-width="1.2" />
+    ${altitudePath ? `<path d="${altitudePath}" fill="none" stroke="#2f96ff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" />` : ""}
+    ${speedPath ? `<path d="${speedPath}" fill="none" stroke="rgba(255, 198, 86, 0.95)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />` : ""}
+    ${noData}
+    <line id="fr24ProfileCursorLine" x1="0" y1="${plot.top}" x2="0" y2="${height - plot.bottom}" stroke="rgba(237, 244, 255, 0.96)" stroke-width="1.4" stroke-dasharray="6 6" />
+    <circle id="fr24ProfileCursorAltitude" cx="0" cy="0" r="4.3" fill="#2f96ff" stroke="white" stroke-width="1.4" />
+    <circle id="fr24ProfileCursorSpeed" cx="0" cy="0" r="3.7" fill="#ffc656" stroke="rgba(20, 28, 38, 0.72)" stroke-width="1.2" />
+  `;
+}
+
+function updateFR24TrackCursorMarker(point) {
+  if (!point || !shouldShowFR24ProfilePanel()) {
+    if (fr24TrackCursorMarker) {
+      fr24TrackLayerGroup.removeLayer(fr24TrackCursorMarker);
+    }
+    return;
+  }
+  const latlng = latLngForPoint(point);
+  if (!fr24TrackCursorMarker) {
+    fr24TrackCursorMarker = L.marker(latlng, {
+      pane: "routePane",
+      interactive: false,
+      keyboard: false,
+      icon: L.divIcon({
+        className: "fr24-track-position-icon",
+        html: "<span></span>",
+        iconSize: [18, 18],
+        iconAnchor: [9, 9],
+      }),
+    });
+  } else {
+    fr24TrackCursorMarker.setLatLng(latlng);
+  }
+  if (!fr24TrackLayerGroup.hasLayer(fr24TrackCursorMarker)) {
+    fr24TrackCursorMarker.addTo(fr24TrackLayerGroup);
+  }
+}
+
+function updateFR24ProfileCursor(index) {
+  const profile = state.fr24ProfilePoints;
+  if (!profile.length) {
+    updateFR24TrackCursorMarker(null);
+    if (elements.fr24ProfileReadout) {
+      elements.fr24ProfileReadout.textContent = "--";
+    }
+    return;
+  }
+  const clampedIndex = Math.round(clampNumber(index, 0, profile.length - 1));
+  state.fr24ProfileCursorIndex = clampedIndex;
+  if (elements.fr24ProfileSlider) {
+    elements.fr24ProfileSlider.max = String(profile.length - 1);
+    elements.fr24ProfileSlider.value = String(clampedIndex);
+  }
+  const point = profile[clampedIndex];
+  if (elements.fr24ProfileReadout) {
+    elements.fr24ProfileReadout.textContent = t("query.profileReadout", {
+      time: formatFR24ProfileTime(point, clampedIndex, profile.length),
+      altitude: formatFR24Altitude(point.altitude),
+      speed: formatFR24Speed(point.speed),
+    });
+  }
+  const plotted = state.fr24ProfileLayout?.points?.[clampedIndex];
+  if (elements.fr24ProfileSvg && plotted) {
+    const line = elements.fr24ProfileSvg.querySelector("#fr24ProfileCursorLine");
+    const altitudeDot = elements.fr24ProfileSvg.querySelector("#fr24ProfileCursorAltitude");
+    const speedDot = elements.fr24ProfileSvg.querySelector("#fr24ProfileCursorSpeed");
+    [line].forEach((element) => {
+      if (!element) return;
+      element.setAttribute("x1", plotted.x.toFixed(1));
+      element.setAttribute("x2", plotted.x.toFixed(1));
+    });
+    if (altitudeDot) {
+      altitudeDot.setAttribute("cx", plotted.x.toFixed(1));
+      altitudeDot.setAttribute("cy", Number.isFinite(plotted.altitudeY) ? plotted.altitudeY.toFixed(1) : "0");
+      altitudeDot.setAttribute("visibility", Number.isFinite(plotted.altitudeY) ? "visible" : "hidden");
+    }
+    if (speedDot) {
+      speedDot.setAttribute("cx", plotted.x.toFixed(1));
+      speedDot.setAttribute("cy", Number.isFinite(plotted.speedY) ? plotted.speedY.toFixed(1) : "0");
+      speedDot.setAttribute("visibility", Number.isFinite(plotted.speedY) ? "visible" : "hidden");
+    }
+  }
+  updateFR24TrackCursorMarker(point);
+}
+
+function updateFR24ProfilePanel() {
+  if (!elements.fr24ProfileCard) {
+    return;
+  }
+  const visible = shouldShowFR24ProfilePanel();
+  const points = visible ? fr24ProfileDataPoints() : [];
+  state.fr24ProfilePoints = points;
+  elements.fr24ProfileCard.classList.toggle("hidden", points.length < 2);
+  if (points.length < 2) {
+    state.fr24ProfileLayout = null;
+    if (elements.fr24ProfileSvg) {
+      elements.fr24ProfileSvg.innerHTML = "";
+    }
+    if (elements.fr24ProfileReadout) {
+      elements.fr24ProfileReadout.textContent = "--";
+    }
+    updateFR24TrackCursorMarker(null);
+    return;
+  }
+  drawFR24ProfileChart();
+  updateFR24ProfileCursor(state.fr24ProfileCursorIndex);
+}
+
+function fr24ProfileIndexFromEvent(event) {
+  const layout = state.fr24ProfileLayout;
+  const svg = elements.fr24ProfileSvg;
+  if (!layout || !svg) {
+    return 0;
+  }
+  const rect = svg.getBoundingClientRect();
+  const x = rect.width > 0
+    ? ((event.clientX - rect.left) / rect.width) * layout.width
+    : layout.plotLeft;
+  let bestIndex = 0;
+  let bestDistance = Infinity;
+  layout.points.forEach((point, index) => {
+    const distance = Math.abs(point.x - x);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  });
+  return bestIndex;
+}
+
+function handleFR24ProfilePointer(event) {
+  if (!state.fr24ProfilePoints.length) {
+    return;
+  }
+  event.preventDefault();
+  updateFR24ProfileCursor(fr24ProfileIndexFromEvent(event));
 }
 
 function renderFR24TrackPayload(payload, { fitBounds = false } = {}) {
@@ -10550,6 +10956,8 @@ function renderFR24TrackPayload(payload, { fitBounds = false } = {}) {
   fr24TrackLayerGroup.clearLayers();
   if (basePoints.length < 2) {
     state.fr24TrackPayload = null;
+    state.fr24ProfileCursorIndex = 0;
+    updateFR24ProfilePanel();
     applyMapOverlayVisibility();
     updateTrackHistoryControlState();
     return 0;
@@ -10572,6 +10980,7 @@ function renderFR24TrackPayload(payload, { fitBounds = false } = {}) {
     });
   });
   state.fr24TrackPayload = { track_points: cloneFR24TrackPayload({ track_points: basePoints }).track_points };
+  state.fr24ProfileCursorIndex = clampNumber(state.fr24ProfileCursorIndex, 0, basePoints.length - 1);
   if (fitBounds) {
     const bounds = L.polyline(basePoints.map(latLngForPoint), {
       pane: "routePane",
@@ -10582,6 +10991,7 @@ function renderFR24TrackPayload(payload, { fitBounds = false } = {}) {
     }).addTo(fr24TrackLayerGroup).getBounds();
     map.fitBounds(bounds, { padding: [36, 36] });
   }
+  updateFR24ProfilePanel();
   applyMapOverlayVisibility();
   updateTrackHistoryControlState();
   return basePoints.length;
@@ -10690,6 +11100,8 @@ function clearFR24TrackDrawing(options = {}) {
   }
   fr24TrackLayerGroup.clearLayers();
   state.fr24TrackPayload = null;
+  state.fr24ProfileCursorIndex = 0;
+  updateFR24ProfilePanel();
   applyMapOverlayVisibility();
   updateTrackHistoryControlState();
   setFR24QueryStatus(t("query.fr24TrackCleared"));
@@ -10784,6 +11196,45 @@ async function setFR24CacheFavorite(key, favorite) {
   }
 }
 
+async function shareFR24CachedFlight(key) {
+  const flight = state.fr24CacheFlights.get(key);
+  const cacheKey = flight?.cache_key || flight?.fr24_id;
+  if (!flight || !cacheKey) {
+    return;
+  }
+  if (!window.webkit?.messageHandlers?.navplanner) {
+    setFR24QueryStatus(t("database.iosOnly"), true);
+    setStatus(t("database.iosOnly"), true);
+    return;
+  }
+  setFR24QueryBusy(true);
+  setFR24QueryStatus(t("query.cacheSharing"));
+  try {
+    const payload = await fetchJson("/api/fr24/cache/share", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cache_key: cacheKey }),
+    });
+    updateFR24CacheSummary(payload.cache || state.fr24CacheStatus || {});
+    if (!payload.share_path) {
+      throw new Error(t("query.cacheDirectoryFailed"));
+    }
+    postNativeEvent("shareFile", {
+      path: payload.share_path,
+      title: payload.filename || flightPrimaryLabel(flight),
+    });
+    await searchFR24Cache();
+    setFR24QueryStatus(t("query.cacheShareReady"));
+    setStatus(t("query.cacheShareReady"));
+  } catch (error) {
+    const message = localizedErrorMessage(error.message);
+    setFR24QueryStatus(message, true);
+    setStatus(message, true);
+  } finally {
+    setFR24QueryBusy(false);
+  }
+}
+
 async function clearFR24Cache() {
   const status = state.fr24CacheStatus || await refreshFR24CacheStatus();
   const size = formatBytes(status.size_bytes || 0);
@@ -10820,6 +11271,8 @@ function handleFR24FlightAction(event) {
     deleteFR24CachedFlight(key).catch(setErrorStatus);
   } else if (action === "favorite-cache") {
     setFR24CacheFavorite(key, button.dataset.fr24Favorite === "true").catch(setErrorStatus);
+  } else if (action === "share-cache") {
+    shareFR24CachedFlight(key).catch(setErrorStatus);
   }
 }
 
@@ -10951,6 +11404,7 @@ elements.fr24RefreshCacheButton?.addEventListener("click", () => {
     })))
     .catch(setErrorStatus);
 });
+elements.fr24OpenCacheDirectoryButton?.addEventListener("click", openFR24CacheDirectory);
 elements.fr24OpenBrowserButton?.addEventListener("click", openFR24VerificationBrowser);
 elements.fr24SyncBrowserButton?.addEventListener("click", syncFR24BrowserSession);
 elements.fr24SaveAccessButton?.addEventListener("click", () => {
@@ -10963,6 +11417,26 @@ elements.fr24RefreshAccessButton?.addEventListener("click", () => {
   refreshFR24AccessStatus()
     .then(() => setFR24QueryStatus(elements.fr24AccessSummary?.textContent || t("query.accessInitial")))
     .catch(setErrorStatus);
+});
+elements.fr24ProfileSlider?.addEventListener("input", (event) => {
+  updateFR24ProfileCursor(Number(event.target.value));
+});
+elements.fr24ProfileSvg?.addEventListener("pointerdown", (event) => {
+  state.fr24ProfileDragging = true;
+  elements.fr24ProfileSvg.setPointerCapture?.(event.pointerId);
+  handleFR24ProfilePointer(event);
+});
+elements.fr24ProfileSvg?.addEventListener("pointermove", (event) => {
+  if (state.fr24ProfileDragging) {
+    handleFR24ProfilePointer(event);
+  }
+});
+elements.fr24ProfileSvg?.addEventListener("pointerup", (event) => {
+  state.fr24ProfileDragging = false;
+  elements.fr24ProfileSvg.releasePointerCapture?.(event.pointerId);
+});
+elements.fr24ProfileSvg?.addEventListener("pointercancel", () => {
+  state.fr24ProfileDragging = false;
 });
 elements.themeChoiceButtons.forEach((button) => {
   button.addEventListener("click", () => applyThemeMode(button.dataset.themeChoice));
@@ -11006,6 +11480,7 @@ window.addEventListener("languagechange", () => {
 window.navplannerNativeDatabaseSelected = handleNativeDatabaseSelected;
 window.navplannerNativeAppIconChanged = handleNativeAppIconChanged;
 window.navplannerNativeFR24SessionUpdated = handleNativeFR24SessionUpdated;
+window.navplannerNativeFR24CacheDirectoryOpened = handleNativeFR24CacheDirectoryOpened;
 
 elements.departureInput.addEventListener(
   "input",

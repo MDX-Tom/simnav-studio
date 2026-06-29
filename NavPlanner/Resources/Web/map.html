@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
     <base href="navplanner://app/" />
-    <meta name="navplanner-resource-version" content="20260618-online-tile-request-v14" />
+    <meta name="navplanner-resource-version" content="20260629-fr24-profile-share-v16" />
     <title>航空航路规划器</title>
     <script>
       (() => {
@@ -279,6 +279,16 @@
         </section>
         <section id="querySection" class="detail-tab-panel query-section hidden" data-detail-panel="query">
           <div class="section-label" data-i18n="nav.query">查询</div>
+          <div id="fr24ProfileCard" class="query-card fr24-profile-card hidden">
+            <div class="fr24-profile-head">
+              <strong data-i18n="query.profileTitle">FR24 高度剖面</strong>
+              <span id="fr24ProfileReadout">--</span>
+            </div>
+            <div class="fr24-profile-chart" data-i18n-aria-label="query.profileAria" role="img">
+              <svg id="fr24ProfileSvg" viewBox="0 0 640 190" preserveAspectRatio="none"></svg>
+            </div>
+            <input id="fr24ProfileSlider" class="fr24-profile-slider" type="range" min="0" max="0" step="1" value="0" data-i18n-aria-label="query.profileSlider" aria-label="轨迹时间位置" />
+          </div>
           <div class="query-card query-action-card">
             <div class="settings-row">
               <div>
@@ -360,6 +370,7 @@
             <div class="settings-action-row query-control-row">
               <button id="fr24ClearCacheButton" class="ghost-button compact-button" type="button" data-i18n="query.clearCache">删除下载缓存</button>
               <button id="fr24RefreshCacheButton" class="ghost-button compact-button" type="button" data-i18n="common.refreshStatus">刷新状态</button>
+              <button id="fr24OpenCacheDirectoryButton" class="ghost-button compact-button" type="button" data-i18n="query.openCacheDirectory">打开目录</button>
             </div>
           </div>
         </section>

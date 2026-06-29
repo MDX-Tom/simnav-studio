@@ -1458,6 +1458,63 @@ body.left-panel-expanded .selection-table {
   margin-top: 9px;
 }
 
+.fr24-profile-card {
+  gap: 8px;
+}
+
+.fr24-profile-head {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.fr24-profile-head strong {
+  min-width: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 860;
+  line-height: 1.1;
+}
+
+.fr24-profile-head span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 720;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fr24-profile-chart {
+  position: relative;
+  height: 150px;
+  border: 1px solid rgba(84, 189, 255, 0.2);
+  border-radius: 10px;
+  overflow: hidden;
+  background: transparent;
+  touch-action: none;
+}
+
+.fr24-profile-chart svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: ew-resize;
+}
+
+.fr24-profile-slider {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent-strong);
+}
+
+.query-cache-card .query-control-row {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .query-manual-access {
   border-top: 1px solid var(--surface-line);
   margin-top: 10px;
@@ -1578,7 +1635,7 @@ body.left-panel-expanded .selection-table {
 }
 
 .query-cache-actions {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .danger-button {
@@ -3458,6 +3515,26 @@ html[data-theme="day"] .offline-progress {
   stroke-linejoin: round;
 }
 
+.fr24-track-position-icon {
+  border: 0;
+  background: transparent;
+}
+
+.fr24-track-position-icon span {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.96);
+  border-radius: 999px;
+  background: #0b78d0;
+  box-shadow:
+    0 0 0 2px rgba(4, 39, 70, 0.36),
+    0 8px 16px rgba(0, 0, 0, 0.28);
+  transform: translate(-50%, -50%);
+}
+
 .leaflet-control-attribution {
   display: none !important;
 }
@@ -4849,6 +4926,23 @@ html[data-theme="day"] .offline-progress {
     gap: 3px;
   }
 
+  html:not([data-device="pad"]) .fr24-profile-card {
+    gap: 5px;
+  }
+
+  html:not([data-device="pad"]) .fr24-profile-head strong {
+    font-size: 8.6px;
+  }
+
+  html:not([data-device="pad"]) .fr24-profile-head span {
+    font-size: 7.2px;
+  }
+
+  html:not([data-device="pad"]) .fr24-profile-chart {
+    height: 98px;
+    border-radius: 8px;
+  }
+
   html:not([data-device="pad"]) .query-flight-actions,
   html:not([data-device="pad"]) .query-control-row {
     gap: 4px;
@@ -4861,6 +4955,10 @@ html[data-theme="day"] .offline-progress {
   }
 
   html:not([data-device="pad"]) .query-cache-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  html:not([data-device="pad"]) .query-cache-card .query-control-row {
     grid-template-columns: minmax(0, 1fr);
   }
 
