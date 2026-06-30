@@ -1858,11 +1858,23 @@ body.left-panel-expanded .selection-table {
 }
 
 .calculate-ticks-compact {
-  height: 18px;
+  height: 34px;
 }
 
 .calculate-ticks-compact span:nth-child(even) {
   top: 0;
+}
+
+.calculate-ticks-compact span[data-tick-role="econ"] {
+  top: 16px;
+}
+
+.calculate-ticks-compact span[data-tick-role="max"] {
+  justify-items: end;
+}
+
+.calculate-ticks-compact span[data-edge-cluster="true"] b {
+  transform: translateX(-16px);
 }
 
 .calculate-source-row {
@@ -4560,13 +4572,13 @@ html[data-theme="day"] .offline-progress {
     max-height: 100%;
     min-height: 0;
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, var(--mobile-map-row-size, var(--mobile-map-flex))) minmax(0, var(--mobile-panel-row-size, var(--mobile-panel-flex))) 9px;
+    grid-template-rows: minmax(0, var(--mobile-map-row-size, var(--mobile-map-flex))) minmax(0, var(--mobile-panel-row-size, var(--mobile-panel-flex))) 24px;
     grid-template-areas:
       "map"
       "planner"
       "tabs";
     gap: 1px;
-    padding: max(4px, env(safe-area-inset-top)) 4px max(8px, env(safe-area-inset-bottom));
+    padding: max(4px, env(safe-area-inset-top)) 4px max(6px, env(safe-area-inset-bottom));
     transition:
       height 0.22s cubic-bezier(0.2, 0.82, 0.2, 1),
       max-height 0.22s cubic-bezier(0.2, 0.82, 0.2, 1),
@@ -4735,13 +4747,13 @@ html[data-theme="day"] .offline-progress {
 
   html:not([data-device="pad"]) .mobile-bottom-tabs {
     grid-area: tabs;
-    align-self: end;
+    align-self: center;
     justify-self: stretch;
     z-index: 80;
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 2px;
-    margin: 0 20px;
+    margin: 0 16px;
     padding: 1px;
     border: 1px solid rgba(173, 205, 238, 0.2);
     border-radius: 12px;
@@ -4754,7 +4766,7 @@ html[data-theme="day"] .offline-progress {
       inset 0 -1px 0 rgba(255, 255, 255, 0.05);
     backdrop-filter: blur(20px) saturate(1.36);
     -webkit-backdrop-filter: blur(20px) saturate(1.36);
-    transform: translateY(14px);
+    transform: none;
     transition:
       opacity 0.18s ease,
       transform 0.18s ease;
@@ -4827,8 +4839,8 @@ html[data-theme="day"] .offline-progress {
     align-items: center;
     justify-content: center;
     gap: 3px;
-    min-height: 18px;
-    height: 18px;
+    min-height: 20px;
+    height: 20px;
     padding: 0 4px;
     border-radius: 10px;
     font-size: 7.8px;
