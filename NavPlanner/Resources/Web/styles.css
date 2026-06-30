@@ -1273,7 +1273,7 @@ body.left-panel-expanded .selection-table {
 
 .detail-mode-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 7px;
   margin-bottom: 12px;
   flex: 0 0 auto;
@@ -1286,6 +1286,7 @@ body.left-panel-expanded .selection-table {
 .app-icon-choice,
 .map-source-choice,
 .online-map-provider-choice,
+.calculate-source-choice,
 .mobile-bottom-tab {
   min-width: 0;
   min-height: 34px;
@@ -1314,6 +1315,7 @@ body.left-panel-expanded .selection-table {
 .app-icon-choice:hover,
 .map-source-choice:hover,
 .online-map-provider-choice:hover,
+.calculate-source-choice:hover,
 .mobile-bottom-tab:hover {
   border-color: rgba(84, 189, 255, 0.38);
   color: var(--text);
@@ -1325,6 +1327,7 @@ body.left-panel-expanded .selection-table {
 .app-icon-choice.active,
 .map-source-choice.active,
 .online-map-provider-choice.active,
+.calculate-source-choice.active,
 .mobile-bottom-tab.active {
   border-color: rgba(84, 189, 255, 0.58);
   background:
@@ -1370,8 +1373,18 @@ body.left-panel-expanded .selection-table {
   padding-right: 5px;
 }
 
+.calculate-section {
+  gap: 10px;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overflow-x: clip;
+  padding-right: 5px;
+}
+
 .query-card,
-.query-flight-card {
+.query-flight-card,
+.calculate-card {
   min-width: 0;
   max-width: 100%;
   overflow-x: hidden;
@@ -1384,7 +1397,8 @@ body.left-panel-expanded .selection-table {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
-.query-card {
+.query-card,
+.calculate-card {
   padding: 12px;
 }
 
@@ -1732,6 +1746,260 @@ body.left-panel-expanded .selection-table {
 .query-empty-inline {
   margin-top: 7px;
   padding: 8px;
+}
+
+.calculate-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.calculate-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  margin: 0;
+}
+
+.calculate-field span,
+.calculate-source-row > span,
+.calculate-slider-head span,
+.calculate-zoom-row > span {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.calculate-field select {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+
+.calculate-slider-field {
+  display: grid;
+  gap: 6px;
+  margin-top: 11px;
+  min-width: 0;
+}
+
+.calculate-slider-head,
+.calculate-profile-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+  min-width: 0;
+}
+
+.calculate-slider-head strong {
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 860;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.calculate-slider {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  accent-color: var(--accent-strong);
+}
+
+.calculate-ticks {
+  position: relative;
+  height: 30px;
+  margin: 0 4px;
+  color: var(--muted);
+  font-size: 8.4px;
+  font-weight: 760;
+  line-height: 1;
+}
+
+.calculate-ticks span {
+  position: absolute;
+  left: var(--tick-position);
+  top: 0;
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  min-width: 34px;
+  transform: translateX(-50%);
+  max-width: 52px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.calculate-ticks span:nth-child(even) {
+  top: 11px;
+}
+
+.calculate-ticks span:first-child {
+  transform: translateX(0);
+}
+
+.calculate-ticks span:last-child {
+  transform: translateX(-100%);
+}
+
+.calculate-ticks i {
+  display: block;
+  width: 1px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(155, 173, 194, 0.42);
+}
+
+.calculate-ticks b {
+  font-weight: 780;
+}
+
+.calculate-ticks-compact {
+  height: 18px;
+}
+
+.calculate-ticks-compact span:nth-child(even) {
+  top: 0;
+}
+
+.calculate-source-row {
+  display: grid;
+  gap: 7px;
+  margin-top: 11px;
+  min-width: 0;
+}
+
+.calculate-source-choice-group {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  min-width: 0;
+}
+
+.calculate-source-choice {
+  width: 100%;
+  min-height: 30px;
+  padding: 0 6px;
+}
+
+.calculate-params-card .helper-text {
+  margin-top: 10px;
+}
+
+.calculate-profile-card {
+  display: grid;
+  gap: 9px;
+}
+
+.calculate-profile-head > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.calculate-profile-head strong {
+  min-width: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 860;
+  line-height: 1.1;
+}
+
+.calculate-profile-head span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 720;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calculate-map-toolbar {
+  display: inline-grid;
+  grid-template-columns: repeat(3, 30px);
+  gap: 4px;
+  align-self: start;
+  justify-content: end;
+}
+
+.calculate-map-button {
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(84, 189, 255, 0.22);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.045)),
+    rgba(9, 20, 33, 0.68);
+  color: rgba(213, 229, 244, 0.78);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 860;
+  line-height: 1;
+  box-shadow:
+    0 8px 18px rgba(0, 0, 0, 0.23),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.calculate-map-button.active {
+  border-color: rgba(84, 189, 255, 0.62);
+  color: var(--text);
+  background:
+    radial-gradient(circle at 30% 12%, rgba(84, 189, 255, 0.28), transparent 46%),
+    linear-gradient(180deg, rgba(84, 189, 255, 0.2), rgba(255, 255, 255, 0.045));
+}
+
+.calculate-chart-frame {
+  position: relative;
+  height: clamp(230px, 30vh, 360px);
+  min-height: 220px;
+  border: 1px solid rgba(84, 189, 255, 0.2);
+  border-radius: 10px;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012)),
+    rgba(4, 11, 20, 0.16);
+  touch-action: none;
+}
+
+.calculate-speed-chart-frame {
+  height: clamp(180px, 20vh, 250px);
+  min-height: 170px;
+}
+
+.calculate-chart-frame svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+.calculate-zoom-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(82px, auto);
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.calculate-fuel-brief {
+  min-width: 0;
+  max-width: 100%;
+  margin: 10px 0 0;
+  padding: 11px;
+  border: 1px solid rgba(155, 173, 194, 0.22);
+  border-radius: 10px;
+  overflow-x: auto;
+  background: rgba(5, 10, 18, 0.28);
+  color: rgba(236, 242, 248, 0.94);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.42;
+  white-space: pre;
 }
 
 @keyframes waypointHighlightPulse {
@@ -2333,6 +2601,7 @@ html[data-theme="day"] .info-chip,
 html[data-theme="day"] .settings-card,
 html[data-theme="day"] .query-card,
 html[data-theme="day"] .query-flight-card,
+html[data-theme="day"] .calculate-card,
 html[data-theme="day"] .list-row,
 html[data-theme="day"] .airport-slot-tab {
   background:
@@ -2352,7 +2621,8 @@ html[data-theme="day"] .theme-choice.active,
 html[data-theme="day"] .language-choice.active,
 html[data-theme="day"] .app-icon-choice.active,
 html[data-theme="day"] .map-source-choice.active,
-html[data-theme="day"] .online-map-provider-choice.active {
+html[data-theme="day"] .online-map-provider-choice.active,
+html[data-theme="day"] .calculate-source-choice.active {
   border-color: rgba(3, 50, 96, 0.82);
   background:
     linear-gradient(180deg, rgba(8, 86, 151, 0.99), rgba(4, 54, 104, 0.98));
@@ -2366,7 +2636,8 @@ html[data-theme="day"] .theme-choice.active small,
 html[data-theme="day"] .language-choice.active small,
 html[data-theme="day"] .app-icon-choice.active small,
 html[data-theme="day"] .map-source-choice.active small,
-html[data-theme="day"] .online-map-provider-choice.active small {
+html[data-theme="day"] .online-map-provider-choice.active small,
+html[data-theme="day"] .calculate-source-choice.active small {
   color: rgba(235, 248, 255, 0.88);
 }
 
@@ -2374,8 +2645,35 @@ html[data-theme="day"] .theme-choice.active span,
 html[data-theme="day"] .language-choice.active span,
 html[data-theme="day"] .app-icon-choice.active span,
 html[data-theme="day"] .map-source-choice.active span,
-html[data-theme="day"] .online-map-provider-choice.active span {
+html[data-theme="day"] .online-map-provider-choice.active span,
+html[data-theme="day"] .calculate-source-choice.active span {
   color: #ffffff;
+}
+
+html[data-theme="day"] .calculate-chart-frame,
+html[data-theme="day"] .calculate-fuel-brief {
+  border-color: rgba(47, 80, 103, 0.16);
+  background: rgba(244, 250, 252, 0.72);
+  color: rgba(32, 54, 73, 0.94);
+}
+
+html[data-theme="day"] .calculate-map-button {
+  border-color: rgba(36, 125, 162, 0.18);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(235, 245, 249, 0.62)),
+    rgba(246, 251, 253, 0.74);
+  color: rgba(48, 74, 94, 0.78);
+  box-shadow:
+    0 8px 18px rgba(43, 67, 89, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.86);
+}
+
+html[data-theme="day"] .calculate-map-button.active {
+  border-color: rgba(3, 50, 96, 0.62);
+  background:
+    radial-gradient(circle at 28% 10%, rgba(40, 134, 170, 0.2), transparent 46%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(220, 238, 247, 0.8));
+  color: #043668;
 }
 
 html[data-theme="day"] .procedure-chip.active {
@@ -4392,6 +4690,7 @@ html[data-theme="day"] .offline-progress {
 
   html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .query-card,
   html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .query-flight-card,
+  html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .calculate-card,
   html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .settings-card,
   html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .airport-slot-tab,
   html:not([data-device="pad"]) body[data-mobile-panel-dragging="true"] .route-leg,
@@ -4418,15 +4717,18 @@ html[data-theme="day"] .offline-progress {
   html:not([data-device="pad"]) body[data-mobile-tab="plan"] .detail-panel,
   html:not([data-device="pad"]) body[data-mobile-tab="airport"] .planner-panel,
   html:not([data-device="pad"]) body[data-mobile-tab="query"] .planner-panel,
+  html:not([data-device="pad"]) body[data-mobile-tab="calculate"] .planner-panel,
   html:not([data-device="pad"]) body[data-mobile-tab="settings"] .planner-panel {
     display: none !important;
   }
 
   html:not([data-device="pad"]) body[data-mobile-tab="airport"] .detail-panel,
   html:not([data-device="pad"]) body[data-mobile-tab="query"] .detail-panel,
+  html:not([data-device="pad"]) body[data-mobile-tab="calculate"] .detail-panel,
   html:not([data-device="pad"]) body[data-mobile-tab="settings"] .detail-panel,
   html:not([data-device="pad"]) body[data-mobile-tab="airport"].map-expanded .detail-panel,
   html:not([data-device="pad"]) body[data-mobile-tab="query"].map-expanded .detail-panel,
+  html:not([data-device="pad"]) body[data-mobile-tab="calculate"].map-expanded .detail-panel,
   html:not([data-device="pad"]) body[data-mobile-tab="settings"].map-expanded .detail-panel {
     display: flex !important;
   }
@@ -4437,7 +4739,7 @@ html[data-theme="day"] .offline-progress {
     justify-self: stretch;
     z-index: 80;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 2px;
     margin: 0 20px;
     padding: 1px;
@@ -4581,16 +4883,86 @@ html[data-theme="day"] .offline-progress {
 
   html:not([data-device="pad"]) .airport-panels,
   html:not([data-device="pad"]) .query-section,
+  html:not([data-device="pad"]) .calculate-section,
   html:not([data-device="pad"]) .settings-section {
     flex-direction: column;
     overflow-y: auto;
   }
 
   html:not([data-device="pad"]) .query-section,
+  html:not([data-device="pad"]) .calculate-section,
   html:not([data-device="pad"]) .settings-section {
     gap: 7px;
     overflow-x: hidden;
     padding-right: 2px;
+  }
+
+  html:not([data-device="pad"]) .calculate-card {
+    padding: 9px;
+    border-radius: 10px;
+  }
+
+  html:not([data-device="pad"]) .calculate-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 7px;
+  }
+
+  html:not([data-device="pad"]) .calculate-field span,
+  html:not([data-device="pad"]) .calculate-source-row > span,
+  html:not([data-device="pad"]) .calculate-slider-head span,
+  html:not([data-device="pad"]) .calculate-zoom-row > span {
+    font-size: 9px;
+  }
+
+  html:not([data-device="pad"]) .calculate-source-choice-group {
+    gap: 5px;
+  }
+
+  html:not([data-device="pad"]) .calculate-source-choice {
+    min-height: 26px;
+    border-radius: 9px;
+    font-size: 9px;
+  }
+
+  html:not([data-device="pad"]) .calculate-profile-head {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 7px;
+  }
+
+  html:not([data-device="pad"]) .calculate-map-toolbar {
+    grid-template-columns: repeat(3, 28px);
+    justify-content: start;
+  }
+
+  html:not([data-device="pad"]) .calculate-map-button {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    font-size: 9px;
+  }
+
+  html:not([data-device="pad"]) .calculate-chart-frame {
+    height: 210px;
+    min-height: 190px;
+  }
+
+  html:not([data-device="pad"]) .calculate-speed-chart-frame {
+    height: 160px;
+    min-height: 145px;
+  }
+
+  html:not([data-device="pad"]) .calculate-zoom-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  html:not([data-device="pad"]) .calculate-zoom-row .compact-button {
+    grid-column: 1 / -1;
+  }
+
+  html:not([data-device="pad"]) .calculate-fuel-brief {
+    padding: 8px;
+    font-size: 9px;
+    line-height: 1.36;
   }
 
   html:not([data-device="pad"]) .layout-rail-button {
@@ -5859,6 +6231,7 @@ html[data-theme="day"] .offline-progress {
   html[data-device="phone"] body[data-mobile-tab="plan"] .planner-panel,
   html[data-device="phone"] body[data-mobile-tab="airport"] .planner-panel,
   html[data-device="phone"] body[data-mobile-tab="query"] .planner-panel,
+  html[data-device="phone"] body[data-mobile-tab="calculate"] .planner-panel,
   html[data-device="phone"] body[data-mobile-tab="settings"] .planner-panel,
   html[data-device="phone"] body.left-panel-expanded .planner-panel,
   html[data-device="phone"] body[data-mobile-keyboard="open"] .planner-panel {
@@ -5890,6 +6263,7 @@ html[data-theme="day"] .offline-progress {
   html[data-device="phone"] body[data-mobile-tab="plan"] .detail-panel,
   html[data-device="phone"] body[data-mobile-tab="airport"] .detail-panel,
   html[data-device="phone"] body[data-mobile-tab="query"] .detail-panel,
+  html[data-device="phone"] body[data-mobile-tab="calculate"] .detail-panel,
   html[data-device="phone"] body[data-mobile-tab="settings"] .detail-panel,
   html[data-device="phone"] body[data-mobile-keyboard="open"] .detail-panel {
     grid-area: detail;
@@ -5912,6 +6286,7 @@ html[data-theme="day"] .offline-progress {
   html[data-device="phone"][data-landscape-notch-side="left"] .detail-panel .settings-card,
   html[data-device="phone"][data-landscape-notch-side="left"] .detail-panel .query-card,
   html[data-device="phone"][data-landscape-notch-side="left"] .detail-panel .query-flight-card,
+  html[data-device="phone"][data-landscape-notch-side="left"] .detail-panel .calculate-card,
   html[data-device="phone"][data-landscape-notch-side="left"] .detail-panel .airport-placeholder {
     margin-right: var(--phone-landscape-text-offset);
   }
@@ -5975,12 +6350,14 @@ html[data-theme="day"] .offline-progress {
 
   html[data-device="phone"] .airport-panels,
   html[data-device="phone"] .query-section,
+  html[data-device="phone"] .calculate-section,
   html[data-device="phone"] .settings-section {
     flex-direction: column;
     overflow-y: auto;
   }
 
   html[data-device="phone"] .query-section,
+  html[data-device="phone"] .calculate-section,
   html[data-device="phone"] .settings-section {
     gap: 7px;
     padding-right: 2px;
