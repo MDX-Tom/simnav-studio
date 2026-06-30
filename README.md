@@ -26,9 +26,9 @@ NavPlanner is built around a SwiftUI shell, a WKWebView map workspace, and a Swi
 
 - **Local route planning**: enter departure and arrival airports, build and draw a route, leave Route blank for full auto-planning, or insert `***` between fixes to auto-plan one segment.
 - **Procedure preview**: browse and draw `SID`, `STAR`, and `APPROACH` procedures by runway, including RF / AF arcs, missed approach segments, and holding geometry.
-- **Map overlays**: toggle base maps, planned routes, manual routes, procedure paths, FR24 tracks, terminal waypoints, other fixes, navaids, runways, ILS, and airway labels.
+- **Map overlays and drawing control**: toggle base maps, planned routes, manual routes, procedure paths, FR24 tracks, terminal waypoints, other fixes, navaids, runways, ILS, and airway labels; undo, redo, or clear drawn tracks from the map.
 - **Airport workspace**: inspect runways, frequencies, procedures, and map popovers; quickly assign airports from the map to departure, arrival, or manual slots.
-- **FR24 track comparison**: after syncing an in-app browser session, query recent flights on the planned city pair, view history, download and draw tracks, and match tracks back to local route data.
+- **FR24 track comparison**: after syncing an in-app browser session, query recent flights or a specific flightId, view history, download or manually import GPX tracks, inspect altitude / speed profiles, and match tracks back to local route data.
 - **Offline maps**: import or download PMTiles, MBTiles, SQLite tile stores, and legacy Web `tiles/` layouts; manage storage, active resources, download progress, and online tile cache separately.
 - **Local navigation databases**: import `.s3db`, `.sqlite`, `.sqlite3`, or `.db` files from Files, switch between local databases, remove unused copies, and restore the bundled database.
 
@@ -57,8 +57,10 @@ NavPlanner is built around a SwiftUI shell, a WKWebView map workspace, and a Swi
 1. Fill departure and arrival airports in Plan.
 2. Open the **Query** tab.
 3. For the first query, open the verification page in the in-app browser, complete the FR24 / Cloudflare check, then sync the browser session.
-4. Tap **Query** to list up to 10 recent flights for the route.
-5. Download and draw a flight track, or match it against the local route engine.
+4. Tap **Query** to list up to 10 recent flights for the route, or search a flight number / flightId manually.
+5. Download and draw a flight track, manually import a GPX file, review the altitude / speed profile, or match the track against the local route engine.
+
+Downloaded FR24 tracks are cached locally with GPX, playback JSON, and metadata. The Query tab can search the cache, draw cached tracks, share GPX files, favorite important tracks, open the cache folder, and clear non-favorited downloads.
 
 FR24 is an online enhancement. When the network is unavailable, the browser session expires, or FR24 returns a verification page, local planning, airport lookup, procedures, nav overlays, and offline maps remain available. NavPlanner reuses only the browser session that the user completes inside the app; it does not bypass Cloudflare or automate CAPTCHA challenges.
 
@@ -140,7 +142,7 @@ xcodebuild -project NavPlanner.xcodeproj \
 - Update version, build number, display name, signing, app icon, and alternate icon metadata.
 - Test iPhone compact width, iPhone landscape, iPad portrait, and iPad landscape.
 - Verify airplane-mode behavior: launch, airport search, airport detail, route planning, procedure drawing, nav-overlay rendering, and offline maps.
-- Verify FR24 missing session, Cloudflare verification, failed downloads, track drawing, track matching, and cache management.
+- Verify FR24 missing session, Cloudflare verification, flightId lookup, manual GPX import, altitude profile scrubbing, failed downloads, track drawing, track matching, sharing, and cache management.
 - Filter Xcode logs by the `NavPlanner` process when diagnosing simulator output; iOS beta simulators may print unrelated system-service errors.
 
 Useful local checks:
