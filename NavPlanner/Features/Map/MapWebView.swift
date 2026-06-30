@@ -25,6 +25,13 @@ struct MapWebView: UIViewRepresentable {
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         ))
+        if let debugScript = simulatorDebugLaunchScript() {
+            configuration.userContentController.addUserScript(WKUserScript(
+                source: debugScript,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            ))
+        }
         configuration.userContentController.add(context.coordinator.scriptHandler, name: "navplanner")
         configuration.allowsInlineMediaPlayback = true
 
@@ -63,6 +70,18 @@ struct MapWebView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {}
+
+    private func simulatorDebugLaunchScript() -> String? {
+        let key = "NAVPLANNER_SIM_DEBUG_JSON"
+        guard let payload = ProcessInfo.processInfo.environment[key],
+              !payload.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let data = try? JSONEncoder().encode(payload),
+              let literal = String(data: data, encoding: .utf8)
+        else {
+            return nil
+        }
+        return "window.__NAVPLANNER_SIM_DEBUG_JSON = \(literal);"
+    }
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, UIDocumentPickerDelegate, UIDocumentInteractionControllerDelegate, UIScrollViewDelegate {
         let scriptHandler: MapBridgeScriptHandler

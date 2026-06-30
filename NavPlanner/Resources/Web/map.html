@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
     <base href="navplanner://app/" />
-    <meta name="navplanner-resource-version" content="20260629-ipad-profile-layout-v18" />
+    <meta name="navplanner-resource-version" content="20260630-calculate-profile-v7" />
     <title>航空航路规划器</title>
     <script>
       (() => {
@@ -138,9 +138,10 @@
       </button>
 
       <aside class="panel detail-panel">
-        <div class="detail-mode-tabs" role="tablist" aria-label="详情、查询与设置" data-i18n-aria-label="detail.tabsLabel">
+        <div class="detail-mode-tabs" role="tablist" aria-label="详情、查询、计算与设置" data-i18n-aria-label="detail.tabsLabel">
           <button id="detailAirportTab" class="detail-mode-tab active" type="button" data-detail-tab="airport" data-i18n="nav.airport">机场</button>
           <button id="detailQueryTab" class="detail-mode-tab" type="button" data-detail-tab="query" data-i18n="nav.query">查询</button>
+          <button id="detailCalculateTab" class="detail-mode-tab" type="button" data-detail-tab="calculate" data-i18n="nav.calculate">计算</button>
           <button id="detailSettingsTab" class="detail-mode-tab" type="button" data-detail-tab="settings" data-i18n="nav.settings">设置</button>
         </div>
         <section id="airportDetailSection" class="detail-tab-panel" data-detail-panel="airport">
@@ -375,6 +376,106 @@
             </div>
           </div>
         </section>
+        <section id="calculateSection" class="detail-tab-panel calculate-section hidden" data-detail-panel="calculate">
+          <div class="section-label" data-i18n="nav.calculate">计算</div>
+
+          <div class="calculate-card calculate-params-card">
+            <div class="subheading" data-i18n="calculate.basicParams">基本参数</div>
+            <div class="calculate-grid">
+              <label class="calculate-field">
+                <span data-i18n="calculate.manufacturer">飞机公司</span>
+                <select id="calcManufacturerSelect"></select>
+              </label>
+              <label class="calculate-field">
+                <span data-i18n="calculate.aircraftType">具体机型</span>
+                <select id="calcAircraftSelect"></select>
+              </label>
+            </div>
+
+            <div class="calculate-slider-field">
+              <div class="calculate-slider-head">
+                <span data-i18n="calculate.cruiseAltitude">目标巡航高度</span>
+                <strong id="calcCruiseAltitudeValue">FL300</strong>
+              </div>
+              <input id="calcCruiseAltitudeInput" class="calculate-slider" type="range" min="10000" max="60000" step="100" value="30000" data-i18n-aria-label="calculate.cruiseAltitude" aria-label="目标巡航高度" />
+              <div id="calcCruiseAltitudeTicks" class="calculate-ticks"></div>
+            </div>
+
+            <div class="calculate-slider-field">
+              <div class="calculate-slider-head">
+                <span data-i18n="calculate.cruiseMach">目标巡航速度</span>
+                <strong id="calcCruiseMachValue">M0.78</strong>
+              </div>
+              <input id="calcCruiseMachInput" class="calculate-slider" type="range" min="0.50" max="0.86" step="0.01" value="0.78" data-i18n-aria-label="calculate.cruiseMach" aria-label="目标巡航速度" />
+              <div id="calcCruiseMachTicks" class="calculate-ticks calculate-ticks-compact"></div>
+            </div>
+
+            <div class="calculate-slider-field">
+              <div class="calculate-slider-head">
+                <span data-i18n="calculate.descentRate">下高目标下降率</span>
+                <strong id="calcDescentRateValue">1500 fpm</strong>
+              </div>
+              <input id="calcDescentRateInput" class="calculate-slider" type="range" min="0" max="4000" step="100" value="1500" data-i18n-aria-label="calculate.descentRate" aria-label="下高目标下降率" />
+              <div id="calcDescentRateTicks" class="calculate-ticks"></div>
+            </div>
+
+            <div class="calculate-source-row">
+              <span data-i18n="calculate.weatherSource">气象数据</span>
+              <div class="calculate-source-choice-group" role="radiogroup" aria-label="气象数据" data-i18n-aria-label="calculate.weatherSource">
+                <button class="calculate-source-choice active" type="button" data-calc-weather-source="noaa">NOAA</button>
+                <button class="calculate-source-choice" type="button" data-calc-weather-source="ecmwf">ECMWF</button>
+                <button class="calculate-source-choice" type="button" data-calc-weather-source="gfs">GFS</button>
+              </div>
+            </div>
+            <div id="calcStatusText" class="helper-text" data-i18n="calculate.statusInitial">生成航路后，计算页会读取计划页航路、Procedure 和本地剖面数据。</div>
+          </div>
+
+          <div class="calculate-card calculate-profile-card">
+            <div class="calculate-profile-head">
+              <div>
+                <strong data-i18n="calculate.weatherProfileTitle">航路风速与地面海拔</strong>
+                <span id="calcWeatherReadout">--</span>
+              </div>
+              <div class="calculate-map-toolbar" aria-label="剖面图层" data-i18n-aria-label="calculate.layerToolbar">
+                <button class="calculate-map-button active" type="button" data-calc-layer="wind" data-i18n="calculate.layerWindShort" data-i18n-title="calculate.layerWind" title="风向风速">风</button>
+                <button class="calculate-map-button active" type="button" data-calc-layer="cloud" data-i18n="calculate.layerCloudShort" data-i18n-title="calculate.layerCloud" title="云量">云</button>
+                <button class="calculate-map-button" type="button" data-calc-layer="rain" data-i18n="calculate.layerRainShort" data-i18n-title="calculate.layerRain" title="降雨量">雨</button>
+              </div>
+            </div>
+            <div class="calculate-chart-frame">
+              <svg id="calcWeatherProfileSvg" viewBox="0 0 760 360" preserveAspectRatio="none" role="img" data-i18n-aria-label="calculate.weatherProfileAria" aria-label="航路风速、云量、降雨量、地面海拔和计划高度剖面"></svg>
+            </div>
+            <div class="calculate-zoom-row">
+              <span data-i18n="calculate.profileZoom">缩放</span>
+              <input id="calcProfileZoomInput" class="calculate-slider" type="range" min="1" max="4" step="0.1" value="1" data-i18n-aria-label="calculate.profileZoom" aria-label="剖面缩放" />
+              <button id="calcResetProfileButton" class="ghost-button compact-button" type="button" data-i18n="calculate.resetProfile">重置剖面</button>
+            </div>
+          </div>
+
+          <div class="calculate-card calculate-profile-card">
+            <div class="calculate-profile-head">
+              <div>
+                <strong data-i18n="calculate.speedProfileTitle">飞行速度与 VS</strong>
+                <span id="calcSpeedReadout">--</span>
+              </div>
+            </div>
+            <div class="calculate-chart-frame calculate-speed-chart-frame">
+              <svg id="calcSpeedProfileSvg" viewBox="0 0 760 250" preserveAspectRatio="none" role="img" data-i18n-aria-label="calculate.speedProfileAria" aria-label="飞行地速和垂直速度剖面"></svg>
+            </div>
+          </div>
+
+          <div class="calculate-card calculate-fuel-card">
+            <div class="calculate-profile-head">
+              <div>
+                <strong data-i18n="calculate.fuelTitle">燃油消耗</strong>
+                <span id="calcFuelSummary" data-i18n="calculate.fuelSummaryInitial">等待航路与参数。</span>
+              </div>
+            </div>
+            <pre id="calcFuelBrief" class="calculate-fuel-brief">PLANNED FUEL
+------------------------------
+等待计划页航路。</pre>
+          </div>
+        </section>
         <section id="settingsSection" class="detail-tab-panel settings-section hidden" data-detail-panel="settings">
           <div class="section-label" data-i18n="nav.settings">设置</div>
           <div class="settings-card">
@@ -594,6 +695,19 @@
             </svg>
           </span>
           <span class="mobile-tab-text" data-i18n="nav.query">查询</span>
+        </button>
+        <button class="mobile-bottom-tab" type="button" data-mobile-tab="calculate" aria-label="计算" data-i18n-aria-label="nav.calculate">
+          <span class="mobile-tab-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M5 18.2h14" />
+              <path d="M6 15.4 9.2 9.2l3.1 3.5 2.9-6.3 2.8 9" />
+              <path d="M6.2 5.8h4.2" />
+              <path d="M7 4v3.6" />
+              <path d="M17.2 4.6v4.1" />
+              <path d="M15.2 6.6h4" />
+            </svg>
+          </span>
+          <span class="mobile-tab-text" data-i18n="nav.calculate">计算</span>
         </button>
         <button class="mobile-bottom-tab" type="button" data-mobile-tab="settings" aria-label="设置" data-i18n-aria-label="nav.settings">
           <span class="mobile-tab-icon" aria-hidden="true">
