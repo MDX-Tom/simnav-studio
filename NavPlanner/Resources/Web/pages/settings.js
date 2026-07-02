@@ -13,6 +13,7 @@ export function registerSettingsPage(context) {
     resetAllSettingsAndCaches,
     applyThemeMode,
     applyLanguageMode,
+    applyWeightUnit,
     applyAppIconChoice,
     applyMapSourceChoice,
     applyOnlineMapProvider,
@@ -55,6 +56,9 @@ export function registerSettingsPage(context) {
   });
   elements.languageChoiceButtons.forEach((button) => {
     button.addEventListener("click", () => applyLanguageMode(button.dataset.languageChoice));
+  });
+  elements.weightUnitButtons.forEach((button) => {
+    button.addEventListener("click", () => applyWeightUnit(button.dataset.weightUnitChoice));
   });
   elements.appIconChoiceButtons.forEach((button) => {
     button.addEventListener("click", () => applyAppIconChoice(button.dataset.appIconChoice));
