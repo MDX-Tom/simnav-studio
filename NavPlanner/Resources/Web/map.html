@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
     <base href="navplanner://app/" />
-    <meta name="navplanner-resource-version" content="20260630-page-modules-responsive-v1" />
+    <meta name="navplanner-resource-version" content="20260701-calc-slider-endpoint-v8" />
     <title>航空航路规划器</title>
     <script>
       (() => {
@@ -391,13 +391,45 @@
                 <select id="calcAircraftSelect"></select>
               </label>
             </div>
+            <div id="calcAircraftLimits" class="calculate-aircraft-limits" aria-live="polite"></div>
+
+            <div class="calculate-weight-section">
+              <div class="calculate-section-head">
+                <span data-i18n="calculate.weight">重量</span>
+                <strong id="calcWeightSummary">TOW -- / LDW -- / RANGE --</strong>
+              </div>
+              <div class="calculate-weight-grid">
+                <div class="calculate-slider-field calculate-weight-field">
+                  <div class="calculate-slider-head">
+                    <span data-i18n="calculate.zfw">ZFW</span>
+                    <strong id="calcZfwValue">--</strong>
+                  </div>
+                  <div class="calculate-slider-control">
+                    <input id="calcZfwInput" class="calculate-slider" type="range" min="0" max="1" step="100" value="0" data-i18n-aria-label="calculate.zfw" aria-label="ZFW" />
+                  </div>
+                  <div id="calcZfwTicks" class="calculate-ticks calculate-ticks-minmax"></div>
+                </div>
+                <div class="calculate-slider-field calculate-weight-field">
+                  <div class="calculate-slider-head">
+                    <span data-i18n="calculate.fuelOnBoard">携带燃油</span>
+                    <strong id="calcFuelValue">--</strong>
+                  </div>
+                  <div class="calculate-slider-control">
+                    <input id="calcFuelInput" class="calculate-slider" type="range" min="0" max="1" step="100" value="0" data-i18n-aria-label="calculate.fuelOnBoard" aria-label="携带燃油" />
+                  </div>
+                  <div id="calcFuelTicks" class="calculate-ticks calculate-ticks-minmax"></div>
+                </div>
+              </div>
+            </div>
 
             <div class="calculate-slider-field">
               <div class="calculate-slider-head">
                 <span data-i18n="calculate.cruiseAltitude">目标巡航高度</span>
                 <strong id="calcCruiseAltitudeValue">FL300</strong>
               </div>
-              <input id="calcCruiseAltitudeInput" class="calculate-slider" type="range" min="10000" max="60000" step="100" value="30000" data-i18n-aria-label="calculate.cruiseAltitude" aria-label="目标巡航高度" />
+              <div class="calculate-slider-control">
+                <input id="calcCruiseAltitudeInput" class="calculate-slider" type="range" min="10000" max="60000" step="100" value="30000" data-i18n-aria-label="calculate.cruiseAltitude" aria-label="目标巡航高度" />
+              </div>
               <div id="calcCruiseAltitudeTicks" class="calculate-ticks"></div>
             </div>
 
@@ -406,7 +438,9 @@
                 <span data-i18n="calculate.cruiseMach">目标巡航速度</span>
                 <strong id="calcCruiseMachValue">M0.78</strong>
               </div>
-              <input id="calcCruiseMachInput" class="calculate-slider" type="range" min="0.50" max="0.86" step="0.01" value="0.78" data-i18n-aria-label="calculate.cruiseMach" aria-label="目标巡航速度" />
+              <div class="calculate-slider-control">
+                <input id="calcCruiseMachInput" class="calculate-slider" type="range" min="0.50" max="0.86" step="0.01" value="0.78" data-i18n-aria-label="calculate.cruiseMach" aria-label="目标巡航速度" />
+              </div>
               <div id="calcCruiseMachTicks" class="calculate-ticks calculate-ticks-compact"></div>
             </div>
 
@@ -415,7 +449,9 @@
                 <span data-i18n="calculate.descentRate">下高目标下降率</span>
                 <strong id="calcDescentRateValue">1500 fpm</strong>
               </div>
-              <input id="calcDescentRateInput" class="calculate-slider" type="range" min="0" max="4000" step="100" value="1500" data-i18n-aria-label="calculate.descentRate" aria-label="下高目标下降率" />
+              <div class="calculate-slider-control">
+                <input id="calcDescentRateInput" class="calculate-slider" type="range" min="0" max="4000" step="100" value="1500" data-i18n-aria-label="calculate.descentRate" aria-label="下高目标下降率" />
+              </div>
               <div id="calcDescentRateTicks" class="calculate-ticks"></div>
             </div>
 
@@ -447,15 +483,23 @@
             </div>
             <div class="calculate-zoom-row">
               <span data-i18n="calculate.profileZoom">缩放</span>
-              <input id="calcProfileZoomInput" class="calculate-slider" type="range" min="1" max="4" step="0.1" value="1" data-i18n-aria-label="calculate.profileZoom" aria-label="剖面缩放" />
+              <div class="calculate-slider-control">
+                <input id="calcProfileZoomInput" class="calculate-slider" type="range" min="1" max="4" step="0.1" value="1" data-i18n-aria-label="calculate.profileZoom" aria-label="剖面缩放" />
+              </div>
               <button id="calcResetProfileButton" class="ghost-button compact-button" type="button" data-i18n="calculate.resetProfile">重置剖面</button>
+            </div>
+            <div class="calculate-pan-row">
+              <span data-i18n="calculate.profilePan">平移</span>
+              <div class="calculate-slider-control">
+                <input id="calcProfilePanInput" class="calculate-slider" type="range" min="0" max="100" step="1" value="50" data-i18n-aria-label="calculate.profilePan" aria-label="剖面平移" />
+              </div>
             </div>
           </div>
 
           <div class="calculate-card calculate-profile-card">
             <div class="calculate-profile-head">
               <div>
-                <strong data-i18n="calculate.speedProfileTitle">飞行速度与 VS</strong>
+                <strong data-i18n="calculate.speedProfileTitle">地速与垂直速度</strong>
                 <span id="calcSpeedReadout">--</span>
               </div>
             </div>
@@ -613,6 +657,15 @@
               <button class="language-choice" type="button" data-language-choice="en" data-i18n="language.en">English</button>
             </div>
             <div class="helper-text" data-i18n="settings.languageHint">默认跟随系统语言；无论选择哪种语言，SID / STAR / APPROACH、DCT、IFR、AIRAC 等航空标识保持英文。</div>
+          </div>
+
+          <div class="settings-card">
+            <div class="subheading" data-i18n="settings.weightUnit">重量单位</div>
+            <div class="weight-unit-choice-group" role="radiogroup" aria-label="重量单位" data-i18n-aria-label="settings.weightUnit">
+              <button class="weight-unit-choice active" type="button" data-weight-unit-choice="lb" data-i18n="weight.lb">lb</button>
+              <button class="weight-unit-choice" type="button" data-weight-unit-choice="kg" data-i18n="weight.kg">kg</button>
+            </div>
+            <div class="helper-text" data-i18n="settings.weightUnitHint">影响计算页重量、燃油和 SimBrief 样式输出显示；内部计算仍使用 kg。</div>
           </div>
 
           <div class="settings-card">

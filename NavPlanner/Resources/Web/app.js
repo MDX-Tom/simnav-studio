@@ -10,6 +10,7 @@ const savedLanguageMode = readLocalStorageValue("navplannerLanguageMode");
 const savedMapSourceMode = readLocalStorageValue("navplannerMapSourceMode");
 const savedOnlineMapProvider = readLocalStorageValue("navplannerOnlineMapProvider");
 const savedMapTileZoomOffset = readLocalStorageValue("navplannerMapTileZoomOffset");
+const savedWeightUnit = readLocalStorageValue("navplannerWeightUnit");
 const NAVPLANNER_API_ORIGIN = (window.location.protocol === "navplanner:"
   || window.location.protocol === "about:"
   || window.location.protocol === "file:"
@@ -22,6 +23,7 @@ const LANGUAGE_MODES = new Set(["system", "zh-Hans", "en"]);
 const APP_ICON_CHOICES = new Set(["day-high", "primary", "day-soft", "night-high", "night-medium", "night-soft"]);
 const MAP_SOURCE_MODES = new Set(["online", "offline"]);
 const MAP_TILE_ZOOM_OFFSETS = new Set([-1, 0, 1, 2]);
+const WEIGHT_UNITS = new Set(["lb", "kg"]);
 const ONLINE_TILE_BASE_SIZE = 256;
 const LOCAL_SETTING_KEYS = Object.freeze([
   "navplannerThemeMode",
@@ -30,6 +32,7 @@ const LOCAL_SETTING_KEYS = Object.freeze([
   "navplannerMapSourceMode",
   "navplannerOnlineMapProvider",
   "navplannerMapTileZoomOffset",
+  "navplannerWeightUnit",
 ]);
 const ONLINE_MAP_PROVIDERS = Object.freeze({
   arcgis: {
@@ -135,6 +138,9 @@ const TRANSLATIONS = {
   "settings.appearanceMode": { "zh-Hans": "外观模式", en: "Appearance mode" },
   "settings.language": { "zh-Hans": "语言", en: "Language" },
   "settings.languageHint": { "zh-Hans": "默认跟随系统语言；无论选择哪种语言，SID / STAR / APPROACH、DCT、IFR、AIRAC 等航空标识保持英文。", en: "Default follows the system language. SID / STAR / APPROACH, DCT, IFR, AIRAC, and other aviation identifiers remain in English." },
+  "settings.weightUnit": { "zh-Hans": "重量单位", en: "Weight Unit" },
+  "settings.weightUnitHint": { "zh-Hans": "影响计算页重量、燃油和 SimBrief 样式输出显示；内部计算仍使用 kg。", en: "Controls Calc page weight, fuel, and SimBrief-style output display; internal calculations remain in kg." },
+  "settings.weightUnitChanged": { "zh-Hans": "重量单位已切换为 {unit}。", en: "Weight unit changed to {unit}." },
   "settings.appIcon": { "zh-Hans": "应用图标", en: "App Icon" },
   "settings.appIconHint": { "zh-Hans": "默认图标为日间均衡，夜间图标使用蓝黑反色地形、紫色层次和暗橙航路。", en: "The default icon is the balanced day variant. Night icons use blue-black terrain, purple relief, and dark amber routes." },
   "settings.mapSelection": { "zh-Hans": "地图选择", en: "Map Selection" },
@@ -143,9 +149,9 @@ const TRANSLATIONS = {
   "settings.offlineMaps": { "zh-Hans": "离线地图", en: "Offline Maps" },
   "settings.mapCache": { "zh-Hans": "在线地图缓存", en: "Online Map Cache" },
   "settings.resetAll": { "zh-Hans": "重置与清理", en: "Reset & Cleanup" },
-  "settings.resetAllHint": { "zh-Hans": "恢复外观、语言、图标和地图设置默认值，并清理在线地图缓存与 FR24 轨迹缓存；不会删除导航数据库或离线地图包。", en: "Restore appearance, language, icon, and map settings to defaults, and clear online map plus FR24 track caches. Navigation databases and offline map packages are kept." },
+  "settings.resetAllHint": { "zh-Hans": "恢复外观、语言、重量单位、图标和地图设置默认值，并清理在线地图缓存与 FR24 轨迹缓存；不会删除导航数据库或离线地图包。", en: "Restore appearance, language, weight unit, icon, and map settings to defaults, and clear online map plus FR24 track caches. Navigation databases and offline map packages are kept." },
   "settings.resetAllButton": { "zh-Hans": "重置所有设置并删除全部缓存", en: "Reset All Settings & Delete All Caches" },
-  "settings.resetAllConfirm": { "zh-Hans": "确认重置所有设置并删除全部缓存？\n\n将恢复默认外观、语言、图标和地图设置，并清理在线地图缓存与 FR24 轨迹缓存；不会删除导航数据库或离线地图包。", en: "Reset all settings and delete all caches?\n\nThis restores default appearance, language, icon, and map settings, and clears online map plus FR24 track caches. Navigation databases and offline map packages are kept." },
+  "settings.resetAllConfirm": { "zh-Hans": "确认重置所有设置并删除全部缓存？\n\n将恢复默认外观、语言、重量单位、图标和地图设置，并清理在线地图缓存与 FR24 轨迹缓存；不会删除导航数据库或离线地图包。", en: "Reset all settings and delete all caches?\n\nThis restores default appearance, language, weight unit, icon, and map settings, and clears online map plus FR24 track caches. Navigation databases and offline map packages are kept." },
   "settings.resetAllWorking": { "zh-Hans": "正在重置...", en: "Resetting..." },
   "settings.resetAllDone": { "zh-Hans": "已重置所有设置，并清理在线地图与 FR24 缓存。", en: "All settings reset. Online map and FR24 caches cleared." },
   "settings.copyright": { "zh-Hans": "版权与说明", en: "Copyright & Notes" },
@@ -158,6 +164,8 @@ const TRANSLATIONS = {
   "language.system": { "zh-Hans": "系统语言", en: "System" },
   "language.zhHans": { "zh-Hans": "简体中文", en: "简体中文" },
   "language.en": { "zh-Hans": "English", en: "English" },
+  "weight.lb": { "zh-Hans": "lb", en: "lb" },
+  "weight.kg": { "zh-Hans": "kg", en: "kg" },
   "appIcon.highSaturation": { "zh-Hans": "高饱和", en: "High sat." },
   "appIcon.default": { "zh-Hans": "默认", en: "Default" },
   "appIcon.soft": { "zh-Hans": "柔和", en: "Soft" },
@@ -468,6 +476,12 @@ const TRANSLATIONS = {
   "calculate.basicParams": { "zh-Hans": "基本参数", en: "Basic Parameters" },
   "calculate.manufacturer": { "zh-Hans": "飞机公司", en: "Manufacturer" },
   "calculate.aircraftType": { "zh-Hans": "具体机型", en: "Aircraft Type" },
+  "calculate.aircraftLimits": { "zh-Hans": "限制 MTOW {mtow} / MLW {mlw} / MZFW {mzfw} / OEW {oew} / 最大燃油 {fuel} / 升限 {ceiling}", en: "Limits MTOW {mtow} / MLW {mlw} / MZFW {mzfw} / OEW {oew} / max fuel {fuel} / ceiling {ceiling}" },
+  "calculate.weight": { "zh-Hans": "重量", en: "Weight" },
+  "calculate.zfw": { "zh-Hans": "ZFW", en: "ZFW" },
+  "calculate.fuelOnBoard": { "zh-Hans": "携带燃油", en: "Fuel On Board" },
+  "calculate.weightSummary": { "zh-Hans": "TOW {tow} / LDW {ldw} / 航程 {range} NM", en: "TOW {tow} / LDW {ldw} / Range {range} NM" },
+  "calculate.weightOverLimit": { "zh-Hans": "超过限制", en: "Over limit" },
   "calculate.cruiseAltitude": { "zh-Hans": "目标巡航高度", en: "Target Cruise Altitude" },
   "calculate.cruiseMach": { "zh-Hans": "目标巡航速度", en: "Target Cruise Speed" },
   "calculate.descentRate": { "zh-Hans": "下高目标下降率", en: "Target Descent Rate" },
@@ -489,8 +503,9 @@ const TRANSLATIONS = {
   "calculate.layerCloudShort": { "zh-Hans": "云", en: "C" },
   "calculate.layerRainShort": { "zh-Hans": "雨", en: "R" },
   "calculate.profileZoom": { "zh-Hans": "缩放", en: "Zoom" },
+  "calculate.profilePan": { "zh-Hans": "平移", en: "Pan" },
   "calculate.resetProfile": { "zh-Hans": "重置剖面", en: "Reset Profile" },
-  "calculate.speedProfileTitle": { "zh-Hans": "飞行速度与 VS", en: "Ground Speed & VS" },
+  "calculate.speedProfileTitle": { "zh-Hans": "地速与垂直速度", en: "Ground Speed & Vertical Speed" },
   "calculate.speedProfileAria": { "zh-Hans": "飞行地速和垂直速度剖面", en: "Ground speed and vertical speed profile" },
   "calculate.speedReadout": { "zh-Hans": "{distance}nm / GS {groundSpeed}kt / VS {verticalSpeed}fpm / {phase}", en: "{distance}nm / GS {groundSpeed}kt / VS {verticalSpeed}fpm / {phase}" },
   "calculate.phaseClimb": { "zh-Hans": "爬升", en: "Climb" },
@@ -498,7 +513,7 @@ const TRANSLATIONS = {
   "calculate.phaseDescent": { "zh-Hans": "下降", en: "Descent" },
   "calculate.fuelTitle": { "zh-Hans": "燃油消耗", en: "Fuel Burn" },
   "calculate.fuelSummaryInitial": { "zh-Hans": "等待航路与参数。", en: "Waiting for route and parameters." },
-  "calculate.fuelSummary": { "zh-Hans": "预计航程 {distance}nm，总时间 {time}，T/OFF FUEL {fuel}kg。", en: "Estimated {distance}nm, total time {time}, T/OFF FUEL {fuel}kg." },
+  "calculate.fuelSummary": { "zh-Hans": "预计航程 {distance}nm，总时间 {time}，最低 T/OFF FUEL {fuel}。", en: "Estimated {distance}nm, total time {time}, minimum T/OFF FUEL {fuel}." },
   "calculate.noFuel": { "zh-Hans": "等待计划页航路。", en: "Waiting for Plan route." },
   "calculate.tod": { "zh-Hans": "下高点", en: "TOD" },
   "calculate.procedureConstraint": { "zh-Hans": "程序高度限制", en: "Procedure altitude constraint" },
@@ -766,6 +781,8 @@ const state = {
   fr24ProfileResizeObserver: null,
   calculateManufacturer: "boeing",
   calculateAircraft: "B738",
+  calculateZfwKg: null,
+  calculateFuelKg: null,
   calculateCruiseAltitudeFt: 30000,
   calculateCruiseMach: null,
   calculateDescentRateFpm: 1500,
@@ -778,8 +795,12 @@ const state = {
   calculateAltitudeOverrides: new Map(),
   calculateRouteSignature: "",
   calculateProfileZoom: 1,
+  calculateProfilePanRatio: 0.5,
   calculateProfileFocusNm: null,
   calculateProfileData: null,
+  calculateTerrainCache: new Map(),
+  calculateTerrainTileCache: new Map(),
+  calculateTerrainPendingTiles: new Set(),
   calculateWeatherLayout: null,
   calculateSpeedLayout: null,
   calculateWeatherDragging: false,
@@ -802,6 +823,7 @@ const state = {
   baseMap: normalizeMapSourceMode(savedMapSourceMode) === "offline" ? "offline" : "terrain",
   onlineMapProvider: normalizeOnlineMapProvider(savedOnlineMapProvider),
   mapTileZoomOffset: normalizeMapTileZoomOffset(savedMapTileZoomOffset),
+  weightUnit: normalizeWeightUnit(savedWeightUnit),
   mapOverlayVisibility: {
     baseMap: true,
     route: true,
@@ -882,6 +904,10 @@ function normalizeOnlineMapProvider(provider) {
 function normalizeMapTileZoomOffset(value) {
   const parsed = Number.parseInt(String(value), 10);
   return MAP_TILE_ZOOM_OFFSETS.has(parsed) ? parsed : 0;
+}
+
+function normalizeWeightUnit(value) {
+  return WEIGHT_UNITS.has(value) ? value : "lb";
 }
 
 function mapTileZoomOffsetLabel(value = state.mapTileZoomOffset) {
@@ -1130,6 +1156,7 @@ const elements = {
   databaseList: document.querySelector("#databaseList"),
   themeChoiceButtons: document.querySelectorAll("[data-theme-choice]"),
   languageChoiceButtons: document.querySelectorAll("[data-language-choice]"),
+  weightUnitButtons: document.querySelectorAll("[data-weight-unit-choice]"),
   appIconChoiceButtons: document.querySelectorAll("[data-app-icon-choice]"),
   mapSourceChoiceButtons: document.querySelectorAll("[data-map-source-choice]"),
   onlineMapProviderButtons: document.querySelectorAll("[data-online-map-provider]"),
@@ -1160,6 +1187,14 @@ const elements = {
   calculateSection: document.querySelector("#calculateSection"),
   calcManufacturerSelect: document.querySelector("#calcManufacturerSelect"),
   calcAircraftSelect: document.querySelector("#calcAircraftSelect"),
+  calcAircraftLimits: document.querySelector("#calcAircraftLimits"),
+  calcWeightSummary: document.querySelector("#calcWeightSummary"),
+  calcZfwInput: document.querySelector("#calcZfwInput"),
+  calcZfwValue: document.querySelector("#calcZfwValue"),
+  calcZfwTicks: document.querySelector("#calcZfwTicks"),
+  calcFuelInput: document.querySelector("#calcFuelInput"),
+  calcFuelValue: document.querySelector("#calcFuelValue"),
+  calcFuelTicks: document.querySelector("#calcFuelTicks"),
   calcCruiseAltitudeInput: document.querySelector("#calcCruiseAltitudeInput"),
   calcCruiseAltitudeValue: document.querySelector("#calcCruiseAltitudeValue"),
   calcCruiseAltitudeTicks: document.querySelector("#calcCruiseAltitudeTicks"),
@@ -1175,6 +1210,7 @@ const elements = {
   calcWeatherReadout: document.querySelector("#calcWeatherReadout"),
   calcWeatherProfileSvg: document.querySelector("#calcWeatherProfileSvg"),
   calcProfileZoomInput: document.querySelector("#calcProfileZoomInput"),
+  calcProfilePanInput: document.querySelector("#calcProfilePanInput"),
   calcResetProfileButton: document.querySelector("#calcResetProfileButton"),
   calcSpeedReadout: document.querySelector("#calcSpeedReadout"),
   calcSpeedProfileSvg: document.querySelector("#calcSpeedProfileSvg"),
@@ -3792,6 +3828,7 @@ async function resetAllSettingsAndCaches() {
     state.themeMode = "system";
     state.languageMode = "system";
     state.effectiveLanguage = resolveLanguageMode("system");
+    state.weightUnit = "lb";
     state.appIconChoice = "primary";
     state.fr24CacheItems = [];
     state.fr24CacheFlights.clear();
@@ -3800,6 +3837,7 @@ async function resetAllSettingsAndCaches() {
     renderFR24CacheFlights([]);
     applyLanguageMode("system", { persist: false, refresh: true });
     applyThemeMode("system", { persist: false });
+    applyWeightUnit("lb", { persist: false, announce: false });
     applyAppIconChoice("primary", { persist: false, notifyNative: true });
     updateMapTypeOptionLabels();
     updateMapTileZoomOffsetControl();
@@ -6213,6 +6251,24 @@ function applyLanguageMode(mode, { persist = true, refresh = true } = {}) {
   applyStaticTranslations();
   if (refresh) {
     refreshLocalizedDynamicText();
+  }
+}
+
+function applyWeightUnit(unit, { persist = true, announce = true } = {}) {
+  const normalized = normalizeWeightUnit(unit);
+  state.weightUnit = normalized;
+  elements.weightUnitButtons.forEach((button) => {
+    const active = button.dataset.weightUnitChoice === normalized;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  if (persist) {
+    writeLocalStorageValue("navplannerWeightUnit", normalized);
+  }
+  syncCalculateControls();
+  scheduleCalculateRender();
+  if (announce) {
+    setStatus(t("settings.weightUnitChanged", { unit: normalized }));
   }
 }
 
@@ -11514,6 +11570,7 @@ const calculatePage = createCalculatePage({
   procedureCacheKey,
   formatAltitudeRestriction,
   svgPathForProfile,
+  apiResourceUrl,
 });
 
 function syncCalculateControls(options = {}) {
@@ -11599,6 +11656,7 @@ registerSettingsPage({
   resetAllSettingsAndCaches,
   applyThemeMode,
   applyLanguageMode,
+  applyWeightUnit,
   applyAppIconChoice,
   applyMapSourceChoice,
   applyOnlineMapProvider,
@@ -11739,6 +11797,9 @@ async function applySimulatorDebugLaunch() {
   if (["system", "day", "night"].includes(config.themeMode)) {
     applyThemeMode(config.themeMode, { persist: false });
   }
+  if (["lb", "kg"].includes(config.weightUnit)) {
+    applyWeightUnit(config.weightUnit, { persist: false, announce: false });
+  }
   if (typeof config.departure === "string") {
     elements.departureInput.value = config.departure.trim().toUpperCase();
   }
@@ -11764,6 +11825,14 @@ async function applySimulatorDebugLaunch() {
     state.calculateAircraft = normalizeCalculateAircraft(config.calculateAircraft, state.calculateManufacturer);
     shouldSyncCalculateControls = true;
   }
+  if (Number.isFinite(Number(config.zfwKg))) {
+    state.calculateZfwKg = Number(config.zfwKg);
+    shouldSyncCalculateControls = true;
+  }
+  if (Number.isFinite(Number(config.fuelKg))) {
+    state.calculateFuelKg = Number(config.fuelKg);
+    shouldSyncCalculateControls = true;
+  }
   if (Number.isFinite(Number(config.cruiseAltitudeFt))) {
     state.calculateCruiseAltitudeFt = clampNumber(Number(config.cruiseAltitudeFt), 10000, 60000);
     shouldSyncCalculateControls = true;
@@ -11778,6 +11847,10 @@ async function applySimulatorDebugLaunch() {
   }
   if (Number.isFinite(Number(config.profileZoom))) {
     state.calculateProfileZoom = clampNumber(Number(config.profileZoom), 1, 4);
+    shouldSyncCalculateControls = true;
+  }
+  if (Number.isFinite(Number(config.profilePan))) {
+    state.calculateProfilePanRatio = clampNumber(Number(config.profilePan), 0, 1);
     shouldSyncCalculateControls = true;
   }
   if (isCalculateWeatherSource(config.weatherSource)) {
@@ -11831,6 +11904,7 @@ async function applySimulatorDebugLaunch() {
 async function init() {
   applyLanguageMode(state.languageMode, { persist: false, refresh: false });
   applyThemeMode(state.themeMode, { persist: false });
+  applyWeightUnit(state.weightUnit, { persist: false, announce: false });
   applyAppIconChoice(state.appIconChoice, { persist: false, notifyNative: false });
   updateMapTypeOptionLabels();
   updateMapTypeOptionState();
