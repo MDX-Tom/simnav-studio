@@ -991,6 +991,15 @@ function isPhoneWorkbench() {
   return document.documentElement.dataset.device !== "pad";
 }
 
+function isTouchInputWorkbench() {
+  return Boolean(
+    isPhoneWorkbench()
+    ||
+    navigator.maxTouchPoints > 0
+    || (window.matchMedia && window.matchMedia("(pointer: coarse)").matches),
+  );
+}
+
 function isCompactPhoneMap() {
   return isPhoneWorkbench()
     && (!window.matchMedia || window.matchMedia("(max-width: 1024px), (orientation: landscape)").matches);
@@ -5654,6 +5663,16 @@ function installMobilePanelDragHandle() {
       y: drag?.lastY ?? drag?.startY ?? 0,
     };
   };
+  const eventPointForTapGuard = (event) => {
+    const touch = event?.changedTouches?.[0] || event?.touches?.[0];
+    const x = Number.isFinite(event?.clientX) ? event.clientX : touch?.clientX;
+    const y = Number.isFinite(event?.clientY) ? event.clientY : touch?.clientY;
+    return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+  };
+  const guardedTapTargetIsFormControl = (event) => (
+    event.target instanceof Element
+    && Boolean(event.target.closest("input, textarea, select"))
+  );
   const suppressGuardedTapEvent = (event) => {
     const guard = state.mobilePanelTapGuard;
     if (!guard) {
@@ -5663,14 +5682,18 @@ function installMobilePanelDragHandle() {
       state.mobilePanelTapGuard = null;
       return;
     }
-    if (event.type === "focusin" && event.target && typeof event.target.blur === "function") {
-      event.target.blur();
+    if (guardedTapTargetIsFormControl(event)) {
+      return;
+    }
+    const point = eventPointForTapGuard(event);
+    if (!point || Math.hypot(point.x - guard.x, point.y - guard.y) > 28) {
+      return;
     }
     event.preventDefault?.();
     event.stopPropagation?.();
     event.stopImmediatePropagation?.();
   };
-  ["click", "auxclick", "mouseup", "mousedown", "touchend", "focusin"].forEach((type) => {
+  ["click", "auxclick", "mouseup", "mousedown", "touchend"].forEach((type) => {
     document.addEventListener(type, suppressGuardedTapEvent, { capture: true, passive: false });
   });
   const togglePanelByTap = () => {
@@ -5817,11 +5840,20 @@ function installMobilePanelDragHandle() {
  * 输出：只处理表单控件点击，不抢占 touchstart 原生输入流程。
  */
 function installMobileInputTouchFocus() {
-  if (!isPhoneWorkbench()) {
+  if (!isTouchInputWorkbench()) {
     return;
   }
-  const focusControl = (control) => {
+  const formControlFromEvent = (event) => {
+    const control = event.target instanceof Element
+      ? event.target.closest("input, textarea, select")
+      : null;
     if (!control || control.disabled || control.readOnly) {
+      return null;
+    }
+    return control;
+  };
+  const focusControl = (control) => {
+    if (!control) {
       return;
     }
     if (document.activeElement !== control) {
@@ -5837,20 +5869,12 @@ function installMobileInputTouchFocus() {
     }
   };
   // iOS WKWebView 在 touchstart 阶段强制 focus 会导致键盘闪现后被系统点击流程关闭。
-  // 这里只在 click 用户手势阶段兜底，原生单击聚焦路径优先。
-  document.addEventListener(
-    "click",
-    (event) => {
-      const control = event.target instanceof Element
-        ? event.target.closest("input, textarea, select")
-        : null;
-      if (!control || control.disabled || control.readOnly) {
-        return;
-      }
-      focusControl(control);
-    },
-    { capture: true },
-  );
+  // 这里在 pointerup/click 用户手势阶段兜底，原生单击聚焦路径优先，且不阻止默认事件。
+  const handleInputActivation = (event) => {
+    focusControl(formControlFromEvent(event));
+  };
+  document.addEventListener("pointerup", handleInputActivation, { capture: true, passive: true });
+  document.addEventListener("click", handleInputActivation, { capture: true });
 }
 
 /**
