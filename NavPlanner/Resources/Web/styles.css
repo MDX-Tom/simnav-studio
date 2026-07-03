@@ -2194,20 +2194,19 @@ body.left-panel-expanded .selection-table {
 
 .calculate-chart-frame {
   position: relative;
-  height: clamp(205px, 25vh, 320px);
-  min-height: 195px;
-  border: 1px solid rgba(84, 189, 255, 0.2);
-  border-radius: 10px;
+  height: clamp(190px, 22vh, 286px);
+  min-height: 184px;
+  border: 1px solid rgba(84, 189, 255, 0.18);
+  border-radius: 8px;
   overflow: hidden;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012)),
-    rgba(4, 11, 20, 0.16);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.035);
   touch-action: pan-y;
 }
 
 .calculate-speed-chart-frame {
-  height: clamp(180px, 20vh, 250px);
-  min-height: 170px;
+  height: clamp(165px, 18vh, 230px);
+  min-height: 158px;
 }
 
 .calculate-chart-frame svg {
@@ -5206,13 +5205,13 @@ html[data-theme="day"] .offline-progress {
   }
 
   html:not([data-device="pad"]) .calculate-chart-frame {
-    height: 188px;
-    min-height: 176px;
+    height: 174px;
+    min-height: 164px;
   }
 
   html:not([data-device="pad"]) .calculate-speed-chart-frame {
-    height: 160px;
-    min-height: 145px;
+    height: 148px;
+    min-height: 138px;
   }
 
   html:not([data-device="pad"]) .calculate-zoom-row {
