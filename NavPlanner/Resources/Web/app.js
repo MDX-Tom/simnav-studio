@@ -11,6 +11,7 @@ const savedMapSourceMode = readLocalStorageValue("navplannerMapSourceMode");
 const savedOnlineMapProvider = readLocalStorageValue("navplannerOnlineMapProvider");
 const savedMapTileZoomOffset = readLocalStorageValue("navplannerMapTileZoomOffset");
 const savedWeightUnit = readLocalStorageValue("navplannerWeightUnit");
+const savedPressureUnit = readLocalStorageValue("navplannerPressureUnit");
 const NAVPLANNER_API_ORIGIN = (window.location.protocol === "navplanner:"
   || window.location.protocol === "about:"
   || window.location.protocol === "file:"
@@ -24,6 +25,7 @@ const APP_ICON_CHOICES = new Set(["day-high", "primary", "day-soft", "night-high
 const MAP_SOURCE_MODES = new Set(["online", "offline"]);
 const MAP_TILE_ZOOM_OFFSETS = new Set([-1, 0, 1, 2]);
 const WEIGHT_UNITS = new Set(["lb", "kg"]);
+const PRESSURE_UNITS = new Set(["in", "hpa"]);
 const ONLINE_TILE_BASE_SIZE = 256;
 const LOCAL_SETTING_KEYS = Object.freeze([
   "navplannerThemeMode",
@@ -33,6 +35,7 @@ const LOCAL_SETTING_KEYS = Object.freeze([
   "navplannerOnlineMapProvider",
   "navplannerMapTileZoomOffset",
   "navplannerWeightUnit",
+  "navplannerPressureUnit",
 ]);
 const ONLINE_MAP_PROVIDERS = Object.freeze({
   arcgis: {
@@ -141,6 +144,9 @@ const TRANSLATIONS = {
   "settings.weightUnit": { "zh-Hans": "重量单位", en: "Weight Unit" },
   "settings.weightUnitHint": { "zh-Hans": "影响计算页重量、燃油和 SimBrief 样式输出显示；内部计算仍使用 kg。", en: "Controls Calc page weight, fuel, and SimBrief-style output display; internal calculations remain in kg." },
   "settings.weightUnitChanged": { "zh-Hans": "重量单位已切换为 {unit}。", en: "Weight unit changed to {unit}." },
+  "settings.pressureUnit": { "zh-Hans": "修正海压单位", en: "Altimeter Unit" },
+  "settings.pressureUnitHint": { "zh-Hans": "影响计算页起降机场 QNH 显示；默认 inHg，内部气象计算仍使用 hPa。", en: "Controls Calc page departure/arrival QNH display; default is inHg, internal weather calculations remain in hPa." },
+  "settings.pressureUnitChanged": { "zh-Hans": "修正海压单位已切换为 {unit}。", en: "Altimeter unit changed to {unit}." },
   "settings.appIcon": { "zh-Hans": "应用图标", en: "App Icon" },
   "settings.appIconHint": { "zh-Hans": "默认图标为日间均衡，夜间图标使用蓝黑反色地形、紫色层次和暗橙航路。", en: "The default icon is the balanced day variant. Night icons use blue-black terrain, purple relief, and dark amber routes." },
   "settings.mapSelection": { "zh-Hans": "地图选择", en: "Map Selection" },
@@ -149,9 +155,9 @@ const TRANSLATIONS = {
   "settings.offlineMaps": { "zh-Hans": "离线地图", en: "Offline Maps" },
   "settings.mapCache": { "zh-Hans": "在线地图缓存", en: "Online Map Cache" },
   "settings.resetAll": { "zh-Hans": "重置与清理", en: "Reset & Cleanup" },
-  "settings.resetAllHint": { "zh-Hans": "恢复外观、语言、重量单位、图标和地图设置默认值，并清理在线地图缓存与 FR24 轨迹缓存；不会删除导航数据库或离线地图包。", en: "Restore appearance, language, weight unit, icon, and map settings to defaults, and clear online map plus FR24 track caches. Navigation databases and offline map packages are kept." },
+  "settings.resetAllHint": { "zh-Hans": "恢复外观、语言、重量单位、修正海压单位、图标和地图设置默认值，并清理在线地图缓存与 FR24 轨迹缓存；不会删除导航数据库或离线地图包。", en: "Restore appearance, language, weight unit, altimeter unit, icon, and map settings to defaults, and clear online map plus FR24 track caches. Navigation databases and offline map packages are kept." },
   "settings.resetAllButton": { "zh-Hans": "重置所有设置并删除全部缓存", en: "Reset All Settings & Delete All Caches" },
-  "settings.resetAllConfirm": { "zh-Hans": "确认重置所有设置并删除全部缓存？\n\n将恢复默认外观、语言、重量单位、图标和地图设置，并清理在线地图缓存与 FR24 轨迹缓存；不会删除导航数据库或离线地图包。", en: "Reset all settings and delete all caches?\n\nThis restores default appearance, language, weight unit, icon, and map settings, and clears online map plus FR24 track caches. Navigation databases and offline map packages are kept." },
+  "settings.resetAllConfirm": { "zh-Hans": "确认重置所有设置并删除全部缓存？\n\n将恢复默认外观、语言、重量单位、修正海压单位、图标和地图设置，并清理在线地图缓存与 FR24 轨迹缓存；不会删除导航数据库或离线地图包。", en: "Reset all settings and delete all caches?\n\nThis restores default appearance, language, weight unit, altimeter unit, icon, and map settings, and clears online map plus FR24 track caches. Navigation databases and offline map packages are kept." },
   "settings.resetAllWorking": { "zh-Hans": "正在重置...", en: "Resetting..." },
   "settings.resetAllDone": { "zh-Hans": "已重置所有设置，并清理在线地图与 FR24 缓存。", en: "All settings reset. Online map and FR24 caches cleared." },
   "settings.copyright": { "zh-Hans": "版权与说明", en: "Copyright & Notes" },
@@ -487,11 +493,17 @@ const TRANSLATIONS = {
   "calculate.descentRate": { "zh-Hans": "下高目标下降率", en: "Target Descent Rate" },
   "calculate.weatherSource": { "zh-Hans": "气象数据", en: "Weather Data" },
   "calculate.statusInitial": { "zh-Hans": "生成航路后，计算页会读取计划页航路、Procedure 和本地剖面数据。", en: "Build a route first. Calc reads the Plan route, procedures, and local profile data." },
-  "calculate.statusReady": { "zh-Hans": "已根据计划页航路生成 {count} 个剖面采样点；气象为 {source} 本地估算层。", en: "Generated {count} profile samples from the Plan route; weather uses the local {source} estimate layer." },
+  "calculate.statusReady": { "zh-Hans": "已根据计划页航路生成 {count} 个剖面采样点；气象 {source} {mode}。", en: "Generated {count} profile samples from the Plan route; weather {source} {mode}." },
+  "calculate.weatherModeOnline": { "zh-Hans": "在线时次 {time} / 更新 {updated}", en: "online run {time} / updated {updated}" },
+  "calculate.weatherModePending": { "zh-Hans": "所选数据源加载中", en: "selected source loading" },
+  "calculate.weatherModeFallback": { "zh-Hans": "本地估算层", en: "local fallback layer" },
   "calculate.statusNoRoute": { "zh-Hans": "请先在计划页生成并绘制航路。", en: "Build and draw a route in Plan first." },
-  "calculate.weatherProfileTitle": { "zh-Hans": "航路风速与地面海拔", en: "Route Wind & Terrain" },
-  "calculate.weatherProfileAria": { "zh-Hans": "航路风速、云量、降雨量、地面海拔和计划高度剖面", en: "Route wind, cloud, precipitation, terrain, and planned altitude profile" },
-  "calculate.weatherReadout": { "zh-Hans": "{distance}nm / FL{flightLevel} / 风 {wind}kt / {component} / 云量 {cloud}% / 雨 {rain}mm/h", en: "{distance}nm / FL{flightLevel} / wind {wind}kt / {component} / cloud {cloud}% / rain {rain}mm/h" },
+  "calculate.weatherProfileTitle": { "zh-Hans": "航路剖面", en: "Route Profile" },
+  "calculate.weatherPressureSummary": { "zh-Hans": "QNH {departure} / {arrival}", en: "QNH {departure} / {arrival}" },
+  "calculate.weatherProfileAria": { "zh-Hans": "航路风向风速、云量、降雨量、地面海拔和计划高度剖面", en: "Route-relative wind, cloud, precipitation, terrain, and planned altitude profile" },
+  "calculate.weatherReadout": { "zh-Hans": "{distance}nm / FL{flightLevel} / 相对风 {wind}kt / {component} / 侧风 {crosswind}kt / 云量 {cloud}% / 雨 {rain}mm/h", en: "{distance}nm / FL{flightLevel} / relative wind {wind}kt / {component} / crosswind {crosswind}kt / cloud {cloud}% / rain {rain}mm/h" },
+  "calculate.weatherReadoutPending": { "zh-Hans": "正在加载所选气象数据源。", en: "Loading the selected weather source." },
+  "calculate.weatherLoading": { "zh-Hans": "正在加载所选气象数据源...", en: "Loading selected weather source..." },
   "calculate.weatherReadoutEmpty": { "zh-Hans": "等待航路剖面。", en: "Waiting for route profile." },
   "calculate.componentTail": { "zh-Hans": "顺风 {value}kt", en: "tailwind {value}kt" },
   "calculate.componentHead": { "zh-Hans": "逆风 {value}kt", en: "headwind {value}kt" },
@@ -801,6 +813,10 @@ const state = {
   calculateTerrainCache: new Map(),
   calculateTerrainTileCache: new Map(),
   calculateTerrainPendingTiles: new Set(),
+  calculateOnlineWeather: null,
+  calculateOnlineWeatherSignature: "",
+  calculateOnlineWeatherPending: false,
+  calculateOnlineWeatherError: "",
   calculateWeatherLayout: null,
   calculateSpeedLayout: null,
   calculateWeatherDragging: false,
@@ -824,6 +840,7 @@ const state = {
   onlineMapProvider: normalizeOnlineMapProvider(savedOnlineMapProvider),
   mapTileZoomOffset: normalizeMapTileZoomOffset(savedMapTileZoomOffset),
   weightUnit: normalizeWeightUnit(savedWeightUnit),
+  pressureUnit: normalizePressureUnit(savedPressureUnit),
   mapOverlayVisibility: {
     baseMap: true,
     route: true,
@@ -908,6 +925,10 @@ function normalizeMapTileZoomOffset(value) {
 
 function normalizeWeightUnit(value) {
   return WEIGHT_UNITS.has(value) ? value : "lb";
+}
+
+function normalizePressureUnit(value) {
+  return PRESSURE_UNITS.has(value) ? value : "in";
 }
 
 function mapTileZoomOffsetLabel(value = state.mapTileZoomOffset) {
@@ -1157,6 +1178,7 @@ const elements = {
   themeChoiceButtons: document.querySelectorAll("[data-theme-choice]"),
   languageChoiceButtons: document.querySelectorAll("[data-language-choice]"),
   weightUnitButtons: document.querySelectorAll("[data-weight-unit-choice]"),
+  pressureUnitButtons: document.querySelectorAll("[data-pressure-unit-choice]"),
   appIconChoiceButtons: document.querySelectorAll("[data-app-icon-choice]"),
   mapSourceChoiceButtons: document.querySelectorAll("[data-map-source-choice]"),
   onlineMapProviderButtons: document.querySelectorAll("[data-online-map-provider]"),
@@ -1207,6 +1229,7 @@ const elements = {
   calcWeatherSourceButtons: document.querySelectorAll("[data-calc-weather-source]"),
   calcStatusText: document.querySelector("#calcStatusText"),
   calcLayerButtons: document.querySelectorAll("[data-calc-layer]"),
+  calcWeatherPressure: document.querySelector("#calcWeatherPressure"),
   calcWeatherReadout: document.querySelector("#calcWeatherReadout"),
   calcWeatherProfileSvg: document.querySelector("#calcWeatherProfileSvg"),
   calcProfileZoomInput: document.querySelector("#calcProfileZoomInput"),
@@ -3829,6 +3852,7 @@ async function resetAllSettingsAndCaches() {
     state.languageMode = "system";
     state.effectiveLanguage = resolveLanguageMode("system");
     state.weightUnit = "lb";
+    state.pressureUnit = "in";
     state.appIconChoice = "primary";
     state.fr24CacheItems = [];
     state.fr24CacheFlights.clear();
@@ -3838,6 +3862,7 @@ async function resetAllSettingsAndCaches() {
     applyLanguageMode("system", { persist: false, refresh: true });
     applyThemeMode("system", { persist: false });
     applyWeightUnit("lb", { persist: false, announce: false });
+    applyPressureUnit("in", { persist: false, announce: false });
     applyAppIconChoice("primary", { persist: false, notifyNative: true });
     updateMapTypeOptionLabels();
     updateMapTileZoomOffsetControl();
@@ -6269,6 +6294,24 @@ function applyWeightUnit(unit, { persist = true, announce = true } = {}) {
   scheduleCalculateRender();
   if (announce) {
     setStatus(t("settings.weightUnitChanged", { unit: normalized }));
+  }
+}
+
+function applyPressureUnit(unit, { persist = true, announce = true } = {}) {
+  const normalized = normalizePressureUnit(unit);
+  state.pressureUnit = normalized;
+  elements.pressureUnitButtons.forEach((button) => {
+    const active = button.dataset.pressureUnitChoice === normalized;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  if (persist) {
+    writeLocalStorageValue("navplannerPressureUnit", normalized);
+  }
+  syncCalculateControls();
+  scheduleCalculateRender();
+  if (announce) {
+    setStatus(t("settings.pressureUnitChanged", { unit: normalized === "in" ? "inHg" : "hPa" }));
   }
 }
 
@@ -11657,6 +11700,7 @@ registerSettingsPage({
   applyThemeMode,
   applyLanguageMode,
   applyWeightUnit,
+  applyPressureUnit,
   applyAppIconChoice,
   applyMapSourceChoice,
   applyOnlineMapProvider,
@@ -11800,6 +11844,9 @@ async function applySimulatorDebugLaunch() {
   if (["lb", "kg"].includes(config.weightUnit)) {
     applyWeightUnit(config.weightUnit, { persist: false, announce: false });
   }
+  if (["in", "hpa"].includes(config.pressureUnit)) {
+    applyPressureUnit(config.pressureUnit, { persist: false, announce: false });
+  }
   if (typeof config.departure === "string") {
     elements.departureInput.value = config.departure.trim().toUpperCase();
   }
@@ -11905,6 +11952,7 @@ async function init() {
   applyLanguageMode(state.languageMode, { persist: false, refresh: false });
   applyThemeMode(state.themeMode, { persist: false });
   applyWeightUnit(state.weightUnit, { persist: false, announce: false });
+  applyPressureUnit(state.pressureUnit, { persist: false, announce: false });
   applyAppIconChoice(state.appIconChoice, { persist: false, notifyNative: false });
   updateMapTypeOptionLabels();
   updateMapTypeOptionState();

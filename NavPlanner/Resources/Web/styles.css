@@ -1786,7 +1786,7 @@ body.left-panel-expanded .selection-table {
   --calculate-track-rest: rgba(112, 135, 158, 0.24);
   --calculate-track-height: 4px;
   --calculate-thumb-size: 20px;
-  --calculate-track-inset: 24px;
+  --calculate-track-inset: 10px;
   display: grid;
   gap: 7px;
   margin-top: 11px;
@@ -1799,7 +1799,7 @@ body.left-panel-expanded .selection-table {
   --calculate-track-rest: rgba(112, 135, 158, 0.24);
   --calculate-track-height: 4px;
   --calculate-thumb-size: 20px;
-  --calculate-track-inset: 24px;
+  --calculate-track-inset: 10px;
 }
 
 .calculate-slider-head,
@@ -2152,6 +2152,12 @@ body.left-panel-expanded .selection-table {
   white-space: nowrap;
 }
 
+.calculate-profile-head #calcWeatherReadout {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
 .calculate-map-toolbar {
   display: inline-grid;
   grid-template-columns: repeat(3, 30px);
@@ -2188,8 +2194,8 @@ body.left-panel-expanded .selection-table {
 
 .calculate-chart-frame {
   position: relative;
-  height: clamp(230px, 30vh, 360px);
-  min-height: 220px;
+  height: clamp(205px, 25vh, 320px);
+  min-height: 195px;
   border: 1px solid rgba(84, 189, 255, 0.2);
   border-radius: 10px;
   overflow: hidden;
@@ -5200,8 +5206,8 @@ html[data-theme="day"] .offline-progress {
   }
 
   html:not([data-device="pad"]) .calculate-chart-frame {
-    height: 210px;
-    min-height: 190px;
+    height: 188px;
+    min-height: 176px;
   }
 
   html:not([data-device="pad"]) .calculate-speed-chart-frame {

@@ -28,7 +28,7 @@ NavPlanner is built around a SwiftUI shell, a WKWebView map workspace, and a Swi
 - **Procedure preview**: browse and draw `SID`, `STAR`, and `APPROACH` procedures by runway, including RF / AF arcs, missed approach segments, and holding geometry.
 - **Map overlays and drawing control**: toggle base maps, planned routes, manual routes, procedure paths, FR24 tracks, terminal waypoints, other fixes, navaids, runways, ILS, and airway labels; undo, redo, or clear drawn tracks from the map.
 - **Airport workspace**: inspect runways, frequencies, procedures, and map popovers; quickly assign airports from the map to departure, arrival, or manual slots.
-- **Flight calculation workspace**: choose aircraft type, ZFW, fuel on board, cruise altitude, cruise Mach, descent rate, weather source, and weight unit; review route wind / terrain and ground speed / vertical-speed profiles; estimate fuel in a SimBrief-style format.
+- **Flight calculation workspace**: choose aircraft type, ZFW, fuel on board, cruise altitude, cruise Mach, descent rate, weather source, weight unit, and QNH unit; review route wind / terrain and ground speed / vertical-speed profiles; estimate fuel in a SimBrief-style format.
 - **FR24 track comparison**: after syncing an in-app browser session, query recent flights or a specific flightId, view history, download or manually import GPX tracks, inspect altitude / speed profiles, and match tracks back to local route data.
 - **Offline maps**: import or download PMTiles, MBTiles, SQLite tile stores, and legacy Web `tiles/` layouts; manage storage, active resources, download progress, and online tile cache separately.
 - **Local navigation databases**: import `.s3db`, `.sqlite`, `.sqlite3`, or `.db` files from Files, switch between local databases, remove unused copies, and restore the bundled database.
@@ -57,11 +57,11 @@ NavPlanner is built around a SwiftUI shell, a WKWebView map workspace, and a Swi
 
 1. Build a route in **Plan** and select any required `SID`, `STAR`, or `APPROACH`.
 2. Open the **Calc** tab.
-3. Select manufacturer and aircraft type, then adjust ZFW, fuel on board, cruise altitude, cruise Mach, descent rate, weather source, and weight unit.
-4. Review the route wind / terrain profile, use zoom and pan sliders for the profile window, and check the ground speed / vertical-speed profile.
+3. Select manufacturer and aircraft type, then adjust ZFW, fuel on board, cruise altitude, cruise Mach, descent rate, weather source, weight unit, and QNH display unit.
+4. Review the route profile with relative wind, cloud, precipitation, terrain, procedure altitude limits, QNH, zoom and pan controls, then check the ground speed / vertical-speed profile.
 5. Review the SimBrief-style fuel estimate.
 
-The current calculation model is local-first and works offline. Terrarium DEM tiles are sampled when available and degrade to a conservative local terrain estimate when unavailable. Real NOAA / ECMWF / GFS weather grids, offline DEM packages, and fuller aircraft performance libraries are planned enhancements.
+The calculation model is local-first and works offline. Online weather is an enhancement and falls back to local estimates when unavailable; Terrarium DEM tiles are sampled when available and degrade to a conservative local terrain estimate when unavailable. Direct weather-source licensing, offline DEM packages, and fuller aircraft performance libraries remain planned enhancements.
 
 ### Query and draw FR24 tracks
 
