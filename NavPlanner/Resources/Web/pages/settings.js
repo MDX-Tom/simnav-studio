@@ -14,6 +14,7 @@ export function registerSettingsPage(context) {
     applyThemeMode,
     applyLanguageMode,
     applyWeightUnit,
+    applyPressureUnit,
     applyAppIconChoice,
     applyMapSourceChoice,
     applyOnlineMapProvider,
@@ -59,6 +60,9 @@ export function registerSettingsPage(context) {
   });
   elements.weightUnitButtons.forEach((button) => {
     button.addEventListener("click", () => applyWeightUnit(button.dataset.weightUnitChoice));
+  });
+  elements.pressureUnitButtons.forEach((button) => {
+    button.addEventListener("click", () => applyPressureUnit(button.dataset.pressureUnitChoice));
   });
   elements.appIconChoiceButtons.forEach((button) => {
     button.addEventListener("click", () => applyAppIconChoice(button.dataset.appIconChoice));

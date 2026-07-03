@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
     <base href="navplanner://app/" />
-    <meta name="navplanner-resource-version" content="20260701-calc-slider-endpoint-v8" />
+    <meta name="navplanner-resource-version" content="20260702-route-profile-weather-v7" />
     <title>航空航路规划器</title>
     <script>
       (() => {
@@ -469,7 +469,8 @@
           <div class="calculate-card calculate-profile-card">
             <div class="calculate-profile-head">
               <div>
-                <strong data-i18n="calculate.weatherProfileTitle">航路风速与地面海拔</strong>
+                <strong data-i18n="calculate.weatherProfileTitle">航路剖面</strong>
+                <span id="calcWeatherPressure">QNH -- / --</span>
                 <span id="calcWeatherReadout">--</span>
               </div>
               <div class="calculate-map-toolbar" aria-label="剖面图层" data-i18n-aria-label="calculate.layerToolbar">
@@ -479,7 +480,7 @@
               </div>
             </div>
             <div class="calculate-chart-frame">
-              <svg id="calcWeatherProfileSvg" viewBox="0 0 760 360" preserveAspectRatio="none" role="img" data-i18n-aria-label="calculate.weatherProfileAria" aria-label="航路风速、云量、降雨量、地面海拔和计划高度剖面"></svg>
+              <svg id="calcWeatherProfileSvg" viewBox="0 0 760 320" preserveAspectRatio="none" role="img" data-i18n-aria-label="calculate.weatherProfileAria" aria-label="航路风速、云量、降雨量、地面海拔和计划高度剖面"></svg>
             </div>
             <div class="calculate-zoom-row">
               <span data-i18n="calculate.profileZoom">缩放</span>
@@ -669,6 +670,15 @@
           </div>
 
           <div class="settings-card">
+            <div class="subheading" data-i18n="settings.pressureUnit">修正海压单位</div>
+            <div class="weight-unit-choice-group" role="radiogroup" aria-label="修正海压单位" data-i18n-aria-label="settings.pressureUnit">
+              <button class="weight-unit-choice active" type="button" data-pressure-unit-choice="in">inHg</button>
+              <button class="weight-unit-choice" type="button" data-pressure-unit-choice="hpa">hPa</button>
+            </div>
+            <div class="helper-text" data-i18n="settings.pressureUnitHint">影响计算页起降机场 QNH 显示；默认 inHg，内部气象计算仍使用 hPa。</div>
+          </div>
+
+          <div class="settings-card">
             <div class="subheading" data-i18n="settings.database">导航数据库</div>
             <div class="settings-row">
               <div>
@@ -705,7 +715,7 @@
 
           <div class="settings-card reset-all-card">
             <div class="subheading" data-i18n="settings.resetAll">重置与清理</div>
-            <div class="helper-text" data-i18n="settings.resetAllHint">恢复外观、语言、图标和地图设置默认值，并清理在线地图缓存与 FR24 轨迹缓存；不会删除导航数据库或离线地图包。</div>
+            <div class="helper-text" data-i18n="settings.resetAllHint">恢复外观、语言、重量单位、修正海压单位、图标和地图设置默认值，并清理在线地图缓存与 FR24 轨迹缓存；不会删除导航数据库或离线地图包。</div>
             <button id="resetAllSettingsButton" class="ghost-button compact-button danger-button reset-all-button" type="button" data-i18n="settings.resetAllButton">重置所有设置并删除全部缓存</button>
           </div>
         </section>

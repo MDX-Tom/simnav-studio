@@ -202,6 +202,9 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
         if pathComponents.first == "fr24" {
             return fr24Response(for: request, path: path, queryValue: queryValue)
         }
+        if path == "/weather/open-meteo" {
+            return openMeteoWeatherResponse(queryItems: query)
+        }
         if path == "/header" {
             return jsonResponse(plannerService.headerPayload())
         }
@@ -303,6 +306,78 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
             return jsonResponse(payload, statusCode: payload["error"] == nil ? 200 : 400)
         }
         return jsonResponse(["error": "API not found"], statusCode: 404)
+    }
+
+    private func openMeteoWeatherResponse(queryItems: [URLQueryItem]) -> SchemeResponse {
+        let allowedNames = Set([
+            "latitude",
+            "longitude",
+            "hourly",
+            "forecast_days",
+            "timezone",
+            "wind_speed_unit",
+            "precipitation_unit",
+            "models"
+        ])
+        let forwarded = queryItems.filter { item in
+            guard allowedNames.contains(item.name),
+                  let value = item.value,
+                  !value.isEmpty,
+                  value.count <= 900 else {
+                return false
+            }
+            return true
+        }
+        guard forwarded.contains(where: { $0.name == "latitude" }),
+              forwarded.contains(where: { $0.name == "longitude" }),
+              forwarded.contains(where: { $0.name == "hourly" }) else {
+            return jsonResponse(["error": "Invalid weather request"], statusCode: 400)
+        }
+        var components = URLComponents(string: "https://api.open-meteo.com/v1/forecast")
+        components?.queryItems = forwarded
+        guard let url = components?.url else {
+            return jsonResponse(["error": "Invalid weather URL"], statusCode: 400)
+        }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 14
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("NavPlanner iOS weather proxy", forHTTPHeaderField: "User-Agent")
+
+        let semaphore = DispatchSemaphore(value: 0)
+        var outputData: Data?
+        var outputResponse: HTTPURLResponse?
+        var outputError: Error?
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            outputData = data
+            outputResponse = response as? HTTPURLResponse
+            outputError = error
+            semaphore.signal()
+        }.resume()
+        if semaphore.wait(timeout: .now() + 16) == .timedOut {
+            return jsonResponse(["error": "Weather request timed out"], statusCode: 504)
+        }
+        if let outputError {
+            return jsonResponse(["error": "Weather request failed: \(outputError.localizedDescription)"], statusCode: 502)
+        }
+        let statusCode = outputResponse?.statusCode ?? 502
+        let data = outputData ?? Data()
+        let contentType = outputResponse?.value(forHTTPHeaderField: "Content-Type") ?? "application/json"
+        var headers = cacheHeaders.merging([
+            "Cache-Control": "no-store",
+            "X-Weather-Source": "Open-Meteo"
+        ]) { _, new in new }
+        if let date = outputResponse?.value(forHTTPHeaderField: "Date") {
+            headers["Date"] = date
+            headers["X-Weather-Updated"] = date
+        }
+        return SchemeResponse(
+            statusCode: statusCode,
+            mimeType: contentType,
+            data: data,
+            headers: headers
+        )
     }
 
     private func onlineTileResponse(pathComponents: [String]) -> SchemeResponse {
