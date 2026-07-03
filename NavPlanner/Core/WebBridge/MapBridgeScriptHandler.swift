@@ -10,6 +10,7 @@ final class MapBridgeScriptHandler: NSObject, WKScriptMessageHandler {
     var syncFR24SessionHandler: (() -> Void)?
     var openFR24CacheDirectoryHandler: (() -> Void)?
     var shareFileHandler: ((String, String) -> Void)?
+    var focusFormControlHandler: (() -> Void)?
 
     init(environment: AppEnvironment) {
         self.environment = environment
@@ -17,8 +18,18 @@ final class MapBridgeScriptHandler: NSObject, WKScriptMessageHandler {
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let event = message.body as? [String: Any] else { return }
+        let type = navString(event["type"])
+        if type == "focusFormControl" {
+            if Thread.isMainThread {
+                focusFormControlHandler?()
+            } else {
+                DispatchQueue.main.async { [weak self] in
+                    self?.focusFormControlHandler?()
+                }
+            }
+            return
+        }
         DispatchQueue.main.async { [weak self] in
-            let type = navString(event["type"])
             if type == "selectDatabase" {
                 self?.selectDatabaseHandler?()
                 return

@@ -87,10 +87,10 @@ const CALC_WEATHER_SOURCE_LABELS = Object.freeze({
 });
 const CALC_WEATHER_SOURCE_KEYS = new Set(Object.keys(CALC_WEATHER_SOURCE_LABELS));
 const CALC_LAYER_KEYS = new Set(["wind", "cloud", "rain"]);
-const CALC_PROFILE_SAMPLE_NM = 18;
-const CALC_MAX_PROFILE_POINTS = 240;
+const CALC_PROFILE_SAMPLE_NM = 8;
+const CALC_MAX_PROFILE_POINTS = 420;
 const CALC_ROUTE_SIGNATURE_LIMIT = 120;
-const CALC_TERRAIN_TILE_ZOOM = 9;
+const CALC_TERRAIN_TILE_ZOOM = 10;
 const CALC_TERRAIN_FALLBACK_MAX_FT = 16800;
 const CALC_WEATHER_LEVELS = Object.freeze([
   { pressure: 900, altitudeFt: 3000 },
@@ -1424,16 +1424,18 @@ export function createCalculatePage(context) {
       plotBg: "transparent",
       terrainLow: dayTheme ? "#178852" : "#168148",
       terrainHigh: dayTheme ? "#d6e91e" : "#d3de24",
-      route: "#c00018",
+      route: "#990016",
       point: "#fff025",
       speed: "rgba(66, 198, 186, 0.92)",
       speedFill: dayTheme ? "rgba(112, 206, 216, 0.46)" : "rgba(89, 201, 214, 0.34)",
       vs: "rgba(255, 164, 128, 0.94)",
-      cloud: dayTheme ? "rgba(83, 88, 94, 0.16)" : "rgba(204, 210, 216, 0.16)",
-      cloudCore: dayTheme ? "rgba(76, 80, 86, 0.25)" : "rgba(226, 232, 238, 0.22)",
+      cloud: dayTheme ? "rgba(96, 101, 106, 0.18)" : "rgba(209, 216, 224, 0.18)",
+      cloudCore: dayTheme ? "rgba(75, 79, 84, 0.34)" : "rgba(229, 234, 240, 0.28)",
+      cloudDense: dayTheme ? "rgba(54, 58, 63, 0.42)" : "rgba(238, 242, 247, 0.36)",
       rain: "rgba(36, 86, 255, 0.82)",
       convectiveRain: "rgba(178, 70, 255, 0.84)",
       rainLabel: dayTheme ? "rgba(0, 42, 150, 0.92)" : "rgba(151, 190, 255, 0.94)",
+      convectiveRainLabel: dayTheme ? "rgba(104, 35, 168, 0.92)" : "rgba(220, 180, 255, 0.95)",
     };
   }
 
@@ -1606,39 +1608,67 @@ export function createCalculatePage(context) {
         { pressure: 300, altitudeFt: 33000 },
       ];
     const pieces = [];
-    const averageStep = samples.length > 1
-      ? Math.abs(xForDistance(samples[1].distanceNm) - xForDistance(samples[0].distanceNm))
-      : 10;
+    const tiers = [
+      { threshold: 16, fill: colors.cloud, opacity: 0.50, lift: 0 },
+      { threshold: 38, fill: colors.cloudCore, opacity: 0.58, lift: 140 },
+      { threshold: 62, fill: colors.cloudDense, opacity: 0.66, lift: 260 },
+    ];
+    const cloudEnvelopePath = (segment, level, tier) => {
+      const upperPoints = [];
+      const lowerPoints = [];
+      segment.forEach((item) => {
+        const coverageExcess = Math.max(0, item.coverage - tier.threshold);
+        const terrainFloor = Number(item.sample.terrainFt || 0) + 420;
+        const wave = Math.sin((item.sample.distanceNm * 0.021 + level.pressure * 0.013 + tier.threshold * 0.031) * Math.PI)
+          * clampNumber(80 + item.coverage * 7, 100, 560);
+        const centerFt = level.altitudeFt + wave + tier.lift;
+        const halfHeightFt = clampNumber(520 + coverageExcess * 42 + item.coverage * 8, 620, 4400);
+        const lowerFt = Math.max(terrainFloor, centerFt - halfHeightFt);
+        const upperFt = Math.max(lowerFt + 420, centerFt + halfHeightFt);
+        upperPoints.push({
+          x: xForDistance(item.sample.distanceNm),
+          y: yForAltitude(upperFt),
+        });
+        lowerPoints.push({
+          x: xForDistance(item.sample.distanceNm),
+          y: yForAltitude(lowerFt),
+        });
+      });
+      if (upperPoints.length < 2 || lowerPoints.length < 2) {
+        return "";
+      }
+      const top = smoothSvgPathForPoints(upperPoints);
+      const bottom = smoothSvgPathForPoints(lowerPoints.reverse(), { omitMove: true });
+      return top && bottom ? `${top} ${bottom} Z` : "";
+    };
+    const flushSegment = (segment, level, tier) => {
+      if (segment.length < 2) {
+        return;
+      }
+      const path = cloudEnvelopePath(segment, level, tier);
+      if (!path) {
+        return;
+      }
+      pieces.push(`<path d="${path}" fill="${tier.fill}" opacity="${tier.opacity.toFixed(2)}" />`);
+    };
     cloudLevels.forEach((level) => {
-      samples.forEach((sample, index) => {
-        if (level.altitudeFt < Number(sample.terrainFt || 0) + 350) {
-          return;
-        }
-        const coverage = smoothCloudCoverage(samples, index, level);
-        if (coverage < 7) {
-          return;
-        }
-        const x = xForDistance(sample.distanceNm);
-        const previousX = index > 0 ? xForDistance(samples[index - 1].distanceNm) : x - averageStep;
-        const nextX = index < samples.length - 1 ? xForDistance(samples[index + 1].distanceNm) : x + averageStep;
-        const left = (previousX + x) / 2 - averageStep * 0.12;
-        const right = (x + nextX) / 2 + averageStep * 0.12;
-        const halfHeightFt = clampNumber(420 + coverage * 31, 520, 4300);
-        const topY = yForAltitude(level.altitudeFt + halfHeightFt);
-        const bottomY = yForAltitude(Math.max(sample.terrainFt + 350, level.altitudeFt - halfHeightFt));
-        const rectY = Math.min(topY, bottomY);
-        const rectHeight = Math.max(3, Math.abs(bottomY - topY));
-        const opacity = clampNumber(0.05 + coverage / 245, 0.08, 0.48);
-        const width = Math.max(2, right - left);
-        pieces.push(`<rect x="${left.toFixed(1)}" y="${rectY.toFixed(1)}" width="${width.toFixed(1)}" height="${rectHeight.toFixed(1)}" rx="${Math.min(14, rectHeight / 2).toFixed(1)}" fill="${colors.cloud}" opacity="${opacity.toFixed(2)}" />`);
-        if (coverage >= 42) {
-          const coreInsetY = rectHeight * 0.26;
-          pieces.push(`<rect x="${(left + width * 0.06).toFixed(1)}" y="${(rectY + coreInsetY).toFixed(1)}" width="${(width * 0.88).toFixed(1)}" height="${Math.max(2, rectHeight - coreInsetY * 2).toFixed(1)}" rx="${Math.min(12, rectHeight / 2).toFixed(1)}" fill="${colors.cloudCore}" opacity="${clampNumber(opacity + 0.13, 0.16, 0.64).toFixed(2)}" />`);
-        }
+      tiers.forEach((tier) => {
+        let segment = [];
+        samples.forEach((sample, index) => {
+          const coverage = smoothCloudCoverage(samples, index, level);
+          const usable = coverage >= tier.threshold && level.altitudeFt >= Number(sample.terrainFt || 0) + 350;
+          if (usable) {
+            segment.push({ sample, coverage });
+            return;
+          }
+          flushSegment(segment, level, tier);
+          segment = [];
+        });
+        flushSegment(segment, level, tier);
       });
     });
     return pieces.length
-      ? `<g filter="url(#calculateCloudSoftBlur)">${pieces.join("")}</g>`
+      ? `<g filter="url(#calculateCloudSoftBlur)" opacity="0.96">${pieces.join("")}</g>`
       : "";
   }
 
@@ -1675,18 +1705,23 @@ export function createCalculatePage(context) {
       const rainHeight = barHeight * (item.rain / Math.max(0.001, total));
       const convectiveHeight = barHeight - rainHeight;
       if (rainHeight > 1) {
-        pieces.push(`<rect x="${(item.x - barWidth / 2).toFixed(1)}" y="${(y + convectiveHeight).toFixed(1)}" width="${barWidth.toFixed(1)}" height="${rainHeight.toFixed(1)}" rx="0.6" fill="${colors.rain}" opacity="0.88" />`);
+        pieces.push(`<rect x="${(item.x - barWidth / 2).toFixed(1)}" y="${(y + convectiveHeight).toFixed(1)}" width="${barWidth.toFixed(1)}" height="${rainHeight.toFixed(1)}" rx="0.6" fill="${colors.rain}" opacity="0.90" />`);
       }
       if (convectiveHeight > 1) {
-        pieces.push(`<rect x="${(item.x - barWidth / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${convectiveHeight.toFixed(1)}" rx="0.6" fill="${colors.convectiveRain}" opacity="0.90" />`);
+        pieces.push(`<rect x="${(item.x - barWidth / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${convectiveHeight.toFixed(1)}" rx="0.6" fill="${colors.convectiveRain}" opacity="0.92" />`);
       }
       if (total >= 0.12 && item.x - lastLabelX >= 30) {
         lastLabelX = item.x;
         const label = total >= 10 ? Math.round(total).toString() : total.toFixed(1);
-        pieces.push(svgText(item.x, Math.max(plot.top + 10, y - 4), label, { fill: colors.rainLabel, size: 7.3, weight: 850 }));
+        const labelTop = Math.max(plot.top + 9, y - (item.convective > 0.08 ? 12 : 4));
+        pieces.push(svgText(item.x, labelTop, label, { fill: colors.rainLabel, size: 7.3, weight: 850 }));
+        if (item.convective > 0.08) {
+          const convectiveLabel = item.convective >= 10 ? Math.round(item.convective).toString() : item.convective.toFixed(1);
+          pieces.push(svgText(item.x, Math.max(plot.top + 18, y - 2), convectiveLabel, { fill: colors.convectiveRainLabel, size: 7, weight: 820 }));
+        }
       }
     });
-    return pieces.join("");
+    return pieces.length ? `<g filter="url(#calculateRainSoftGlow)">${pieces.join("")}</g>` : "";
   }
 
   function renderCalculateWeatherProfile(profile) {
@@ -1739,7 +1774,7 @@ export function createCalculatePage(context) {
 
     const terrainPath = samples.map((sample, index) => {
       const x = xForDistance(sample.distanceNm);
-      const y = yForAltitude(sample.terrainFt);
+      const y = yForAltitude(Math.max(0, sample.terrainFt));
       return `${index ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`;
     }).join(" ");
     const terrainArea = terrainPath
@@ -1889,7 +1924,7 @@ export function createCalculatePage(context) {
       ${terrainArea ? `<path d="${terrainArea}" fill="url(#calculateTerrainGradient)" opacity="0.95" />` : ""}
       ${rainLayer}
       ${waitingForOnlineWeather ? svgText(plot.left + 12, plot.top + 18, t("calculate.weatherLoading"), { fill: colors.muted, size: 10, anchor: "start", weight: 820 }) : ""}
-      ${plannedPath ? `<path d="${plannedPath}" fill="none" stroke="${colors.route}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />` : ""}
+      ${plannedPath ? `<path d="${plannedPath}" fill="none" stroke="${colors.route}" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" />` : ""}
       ${todMarker}
       ${constraintMarkers}
       ${legMarkers}

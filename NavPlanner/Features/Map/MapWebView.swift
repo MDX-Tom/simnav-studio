@@ -121,6 +121,9 @@ struct MapWebView: UIViewRepresentable {
             self.scriptHandler.shareFileHandler = { [weak self] path, title in
                 self?.shareFile(path: path, title: title)
             }
+            self.scriptHandler.focusFormControlHandler = { [weak self] in
+                self?.focusFormControl()
+            }
         }
 
         private func presentDatabasePicker() {
@@ -377,6 +380,13 @@ struct MapWebView: UIViewRepresentable {
 
         private func notifyFR24CacheDirectoryOpened(_ payload: [String: Any]) {
             notifyJavaScript(functionName: "window.navplannerNativeFR24CacheDirectoryOpened", payload: payload)
+        }
+
+        private func focusFormControl() {
+            guard let webView else { return }
+            if !webView.isFirstResponder {
+                webView.becomeFirstResponder()
+            }
         }
 
         private func shareFile(path: String, title: String) {

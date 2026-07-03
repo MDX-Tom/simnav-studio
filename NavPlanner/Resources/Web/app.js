@@ -501,7 +501,7 @@ const TRANSLATIONS = {
   "calculate.weatherProfileTitle": { "zh-Hans": "航路剖面", en: "Route Profile" },
   "calculate.weatherPressureSummary": { "zh-Hans": "QNH {departure} / {arrival}", en: "QNH {departure} / {arrival}" },
   "calculate.weatherProfileAria": { "zh-Hans": "航路风向风速、云量、降雨量、地面海拔和计划高度剖面", en: "Route-relative wind, cloud, precipitation, terrain, and planned altitude profile" },
-  "calculate.weatherReadout": { "zh-Hans": "{distance}nm / FL{flightLevel} / 相对风 {wind}kt / {component} / 侧风 {crosswind}kt / 云量 {cloud}% / 雨 {rain}mm/h", en: "{distance}nm / FL{flightLevel} / relative wind {wind}kt / {component} / crosswind {crosswind}kt / cloud {cloud}% / rain {rain}mm/h" },
+  "calculate.weatherReadout": { "zh-Hans": "{distance}nm / FL{flightLevel} / 总风 {wind}kt / {component} / 侧风 {crosswind}kt / 云量 {cloud}% / 雨 {rain}mm/h", en: "{distance}nm / FL{flightLevel} / wind {wind}kt / {component} / crosswind {crosswind}kt / cloud {cloud}% / rain {rain}mm/h" },
   "calculate.weatherReadoutPending": { "zh-Hans": "正在加载所选气象数据源。", en: "Loading the selected weather source." },
   "calculate.weatherLoading": { "zh-Hans": "正在加载所选气象数据源...", en: "Loading selected weather source..." },
   "calculate.weatherReadoutEmpty": { "zh-Hans": "等待航路剖面。", en: "Waiting for route profile." },
@@ -802,7 +802,7 @@ const state = {
   calculateLayerVisibility: {
     wind: true,
     cloud: true,
-    rain: false,
+    rain: true,
   },
   calculateAltitudeOverrides: new Map(),
   calculateRouteSignature: "",
@@ -5843,14 +5843,38 @@ function installMobileInputTouchFocus() {
   if (!isTouchInputWorkbench()) {
     return;
   }
+  const isKeyboardTextControl = (control) => {
+    if (control instanceof HTMLTextAreaElement) {
+      return true;
+    }
+    if (!(control instanceof HTMLInputElement)) {
+      return false;
+    }
+    const type = (control.getAttribute("type") || control.type || "text").toLowerCase();
+    return [
+      "text",
+      "search",
+      "password",
+      "email",
+      "url",
+      "tel",
+      "number",
+      "decimal",
+    ].includes(type);
+  };
   const formControlFromEvent = (event) => {
     const control = event.target instanceof Element
       ? event.target.closest("input, textarea, select")
       : null;
-    if (!control || control.disabled || control.readOnly) {
+    if (!control || control.disabled || control.readOnly || !isKeyboardTextControl(control)) {
       return null;
     }
     return control;
+  };
+  const notifyNativeFocus = (control) => {
+    if (control) {
+      postNativeEvent("focusFormControl");
+    }
   };
   const focusControl = (control) => {
     if (!control) {
@@ -5867,6 +5891,7 @@ function installMobileInputTouchFocus() {
       const end = control.value.length;
       control.setSelectionRange(end, end);
     }
+    notifyNativeFocus(control);
   };
   // iOS WKWebView 在 touchstart 阶段强制 focus 会导致键盘闪现后被系统点击流程关闭。
   // 这里在 pointerup/click 用户手势阶段兜底，原生单击聚焦路径优先，且不阻止默认事件。
@@ -5875,6 +5900,15 @@ function installMobileInputTouchFocus() {
   };
   document.addEventListener("pointerup", handleInputActivation, { capture: true, passive: true });
   document.addEventListener("click", handleInputActivation, { capture: true });
+  document.addEventListener(
+    "focusin",
+    (event) => {
+      if (event.target && isKeyboardTextControl(event.target)) {
+        notifyNativeFocus(event.target);
+      }
+    },
+    true,
+  );
 }
 
 /**
