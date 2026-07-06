@@ -1788,7 +1788,7 @@ body.left-panel-expanded .selection-table {
   --calculate-thumb-size: 20px;
   --calculate-track-inset: 10px;
   display: grid;
-  gap: 7px;
+  gap: 0;
   margin-top: 11px;
   min-width: 0;
 }
@@ -1828,9 +1828,13 @@ body.left-panel-expanded .selection-table {
 
 .calculate-slider-control {
   position: relative;
-  height: 30px;
+  height: 25px;
   min-width: 0;
   overflow: visible;
+}
+
+.calculate-slider-field .calculate-slider-control {
+  margin-top: 6px;
 }
 
 .calculate-slider-control::before,
@@ -1873,7 +1877,7 @@ body.left-panel-expanded .selection-table {
 .calculate-slider-control:focus-within::after {
   box-shadow:
     0 3px 8px rgba(4, 54, 104, 0.28),
-    0 0 0 4px rgba(4, 54, 104, 0.16);
+    0 0 0 2px rgba(4, 54, 104, 0.16);
 }
 
 .calculate-slider-control .calculate-slider {
@@ -1882,7 +1886,7 @@ body.left-panel-expanded .selection-table {
   -webkit-appearance: none;
   appearance: none;
   width: auto;
-  height: 30px;
+  height: 25px;
   margin: 0;
   padding: 0;
   border: 0;
@@ -2021,7 +2025,7 @@ body.left-panel-expanded .selection-table {
 
 .calculate-ticks-compact em {
   position: absolute;
-  top: -40px;
+  top: -31px;
   left: 50%;
   transform: translateX(-50%);
   color: #043668;
@@ -2107,7 +2111,7 @@ body.left-panel-expanded .selection-table {
 
 .calculate-source-choice-group {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 7px;
   min-width: 0;
 }

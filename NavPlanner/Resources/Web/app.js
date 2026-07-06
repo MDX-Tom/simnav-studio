@@ -798,7 +798,7 @@ const state = {
   calculateCruiseAltitudeFt: 30000,
   calculateCruiseMach: null,
   calculateDescentRateFpm: 1500,
-  calculateWeatherSource: "noaa",
+  calculateWeatherSource: "ecmwf",
   calculateLayerVisibility: {
     wind: true,
     cloud: true,

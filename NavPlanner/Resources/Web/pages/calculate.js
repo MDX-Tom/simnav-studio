@@ -81,7 +81,6 @@ const KG_TO_LB = 2.2046226218;
 const CALC_DEFAULT_MANUFACTURER = "boeing";
 const CALC_DEFAULT_AIRCRAFT = "B738";
 const CALC_WEATHER_SOURCE_LABELS = Object.freeze({
-  noaa: "NOAA",
   ecmwf: "ECMWF",
   gfs: "GFS",
 });
@@ -105,12 +104,10 @@ const CALC_WEATHER_LEVELS = Object.freeze([
   { pressure: 150, altitudeFt: 45000 },
 ]);
 const CALC_WEATHER_MODELS = Object.freeze({
-  noaa: "gfs_global",
-  gfs: "gfs_seamless",
   ecmwf: "ecmwf_ifs025",
+  gfs: "gfs_seamless",
 });
 const CALC_WEATHER_MODEL_LABELS = Object.freeze({
-  gfs_global: "GFS global",
   gfs_seamless: "GFS seamless",
   ecmwf_ifs025: "ECMWF IFS 0.25",
 });
@@ -119,7 +116,7 @@ const CALC_WEATHER_MAX_POINTS = 22;
 export const CALCULATE_DEFAULTS = Object.freeze({
   manufacturer: CALC_DEFAULT_MANUFACTURER,
   aircraft: CALC_DEFAULT_AIRCRAFT,
-  weatherSource: "noaa",
+  weatherSource: "ecmwf",
   layers: Object.freeze(Array.from(CALC_LAYER_KEYS)),
 });
 
@@ -547,6 +544,9 @@ export function createCalculatePage(context) {
 
   function syncCalculateControls({ resetMach = false, resetWeights = false } = {}) {
     syncCalculateAircraftControls({ resetMach, resetWeights });
+    if (!CALC_WEATHER_SOURCE_KEYS.has(state.calculateWeatherSource)) {
+      state.calculateWeatherSource = CALCULATE_DEFAULTS.weatherSource;
+    }
     const altitudeValue = Number(state.calculateCruiseAltitudeFt);
     const descentRateValue = Number(state.calculateDescentRateFpm);
     const aircraft = selectedCalculateAircraft();
@@ -916,8 +916,10 @@ export function createCalculatePage(context) {
   }
 
   function weatherRequestSignature(route) {
-    const source = state.calculateWeatherSource || "noaa";
-    const model = CALC_WEATHER_MODELS[source] || CALC_WEATHER_MODELS.noaa;
+    const source = CALC_WEATHER_SOURCE_KEYS.has(state.calculateWeatherSource)
+      ? state.calculateWeatherSource
+      : CALCULATE_DEFAULTS.weatherSource;
+    const model = CALC_WEATHER_MODELS[source] || CALC_WEATHER_MODELS[CALCULATE_DEFAULTS.weatherSource];
     const hour = new Date().toISOString().slice(0, 13);
     const points = (route?.points || [])
       .filter((_, index) => index === 0 || index === route.points.length - 1 || index % 6 === 0)
@@ -1019,7 +1021,7 @@ export function createCalculatePage(context) {
     }).filter((point) => Object.keys(point.levels).length);
     return {
       source,
-      model: CALC_WEATHER_MODELS[source] || CALC_WEATHER_MODELS.noaa,
+      model: CALC_WEATHER_MODELS[source] || CALC_WEATHER_MODELS[CALCULATE_DEFAULTS.weatherSource],
       updatedAt: updatedHeader || new Date().toUTCString(),
       weatherTime: points.find((point) => point.weatherTime)?.weatherTime || "",
       points,
@@ -1027,7 +1029,9 @@ export function createCalculatePage(context) {
   }
 
   async function requestCalculateOnlineWeather(route, signature) {
-    const source = state.calculateWeatherSource || "noaa";
+    const source = CALC_WEATHER_SOURCE_KEYS.has(state.calculateWeatherSource)
+      ? state.calculateWeatherSource
+      : CALCULATE_DEFAULTS.weatherSource;
     const requestSamples = selectWeatherRequestSamples(route);
     if (!requestSamples.length) {
       return;
@@ -1057,7 +1061,7 @@ export function createCalculatePage(context) {
       timezone: "UTC",
       wind_speed_unit: "kn",
       precipitation_unit: "mm",
-      models: CALC_WEATHER_MODELS[source] || CALC_WEATHER_MODELS.noaa,
+      models: CALC_WEATHER_MODELS[source] || CALC_WEATHER_MODELS[CALCULATE_DEFAULTS.weatherSource],
     });
     state.calculateOnlineWeatherPending = true;
     state.calculateOnlineWeatherError = "";
@@ -1191,7 +1195,7 @@ export function createCalculatePage(context) {
         isaDeviationC,
       };
     }
-    const sourceShift = { noaa: 0, ecmwf: 0.58, gfs: 1.14 }[sourceKey] || 0;
+    const sourceShift = { ecmwf: 0.58, gfs: 1.14 }[sourceKey] || 0.58;
     const lat = Number(sample.lat) || 0;
     const lon = Number.isFinite(sample.originalLon) ? Number(sample.originalLon) : Number(sample.lon) || 0;
     const flightLevel = Math.max(0, altitudeFt / 100);
@@ -2329,7 +2333,7 @@ export function createCalculatePage(context) {
     elements.calcWeatherSourceButtons.forEach((button) => {
       button.addEventListener("click", () => {
         const source = button.dataset.calcWeatherSource;
-        state.calculateWeatherSource = CALC_WEATHER_SOURCE_KEYS.has(source) ? source : "noaa";
+        state.calculateWeatherSource = CALC_WEATHER_SOURCE_KEYS.has(source) ? source : "ecmwf";
         scheduleCalculateRender();
       });
     });
