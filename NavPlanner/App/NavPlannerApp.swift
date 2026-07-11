@@ -62,17 +62,20 @@ private struct MacWindowGeometryConfigurator: UIViewControllerRepresentable {
         }
 
         func requestMacGeometryIfNeeded() {
+            let forceLandscapeForSimulatorDebug = ProcessInfo.processInfo.environment["NAVPLANNER_SIM_FORCE_LANDSCAPE"] == "1"
             guard !didRequestMacGeometry,
-                  ProcessInfo.processInfo.isiOSAppOnMac,
+                  (ProcessInfo.processInfo.isiOSAppOnMac || forceLandscapeForSimulatorDebug),
                   let windowScene = view.window?.windowScene
             else {
                 return
             }
 
             didRequestMacGeometry = true
-            preferredContentSize = Self.preferredMacWindowSize
-            parent?.preferredContentSize = Self.preferredMacWindowSize
-            view.window?.rootViewController?.preferredContentSize = Self.preferredMacWindowSize
+            if ProcessInfo.processInfo.isiOSAppOnMac {
+                preferredContentSize = Self.preferredMacWindowSize
+                parent?.preferredContentSize = Self.preferredMacWindowSize
+                view.window?.rootViewController?.preferredContentSize = Self.preferredMacWindowSize
+            }
 
             if #available(iOS 16.0, *) {
                 let preferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .landscape)

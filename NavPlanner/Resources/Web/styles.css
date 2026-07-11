@@ -207,7 +207,7 @@ svg {
 }
 
 .shell {
-  --rail-width: 14px;
+  --rail-width: 24px;
   --planner-panel-width: 318px;
   --detail-panel-width: 350px;
   --planner-expanded-width: minmax(560px, 38vw);
@@ -249,15 +249,15 @@ svg {
 }
 
 .layout-rail-button {
-  place-self: stretch stretch;
+  place-self: center;
   display: inline-grid;
   place-items: center;
-  width: 100%;
-  height: 100%;
-  min-height: 0;
+  width: 18px;
+  height: 72px;
+  min-height: 72px;
   padding: 0;
   border: 1px solid var(--rail-border);
-  border-radius: 13px;
+  border-radius: 999px;
   background:
     radial-gradient(circle at 50% 18%, var(--rail-glow), transparent 42%),
     linear-gradient(180deg, var(--rail-top), var(--rail-bottom));
@@ -281,7 +281,7 @@ svg {
 }
 
 .layout-rail-button:active {
-  transform: scaleX(0.9);
+  transform: scale3d(0.92, 0.96, 1);
 }
 
 html[data-theme="day"] .layout-rail-button,
@@ -337,8 +337,8 @@ html[data-theme-mode="day"] .layout-rail-button:hover {
 }
 
 .layout-rail-icon {
-  width: 14px;
-  height: 48px;
+  width: 11px;
+  height: 38px;
   fill: none;
   stroke: currentColor;
   stroke-width: 2.4;
@@ -1828,8 +1828,10 @@ body.left-panel-expanded .selection-table {
 
 .calculate-slider-control {
   position: relative;
+  width: 100%;
   height: 25px;
   min-width: 0;
+  box-sizing: border-box;
   overflow: visible;
 }
 
@@ -1882,10 +1884,11 @@ body.left-panel-expanded .selection-table {
 
 .calculate-slider-control .calculate-slider {
   position: absolute;
-  inset: 0 var(--calculate-track-inset);
+  inset: 0;
   -webkit-appearance: none;
   appearance: none;
-  width: auto;
+  width: 100%;
+  min-width: 0;
   height: 25px;
   margin: 0;
   padding: 0;
@@ -2198,8 +2201,8 @@ body.left-panel-expanded .selection-table {
 
 .calculate-chart-frame {
   position: relative;
-  height: clamp(190px, 22vh, 286px);
-  min-height: 184px;
+  height: clamp(350px, 42vh, 430px);
+  min-height: 340px;
   border: 1px solid rgba(84, 189, 255, 0.18);
   border-radius: 8px;
   overflow: hidden;
@@ -2209,8 +2212,8 @@ body.left-panel-expanded .selection-table {
 }
 
 .calculate-speed-chart-frame {
-  height: clamp(165px, 18vh, 230px);
-  min-height: 158px;
+  height: clamp(240px, 27vh, 285px);
+  min-height: 232px;
 }
 
 .calculate-chart-frame svg {
@@ -2223,14 +2226,28 @@ body.left-panel-expanded .selection-table {
 .calculate-zoom-row,
 .calculate-pan-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) minmax(82px, auto);
+  grid-template-columns: 40px minmax(0, 1fr) 84px;
   gap: 8px;
   align-items: center;
   min-width: 0;
 }
 
-.calculate-pan-row {
-  grid-template-columns: auto minmax(0, 1fr);
+.calculate-zoom-row > span:first-child,
+.calculate-pan-row > span:first-child {
+  white-space: nowrap;
+}
+
+.calculate-zoom-row .compact-button {
+  width: 84px;
+  min-width: 0;
+  padding-inline: 6px;
+  white-space: nowrap;
+}
+
+.calculate-profile-control-spacer {
+  display: block;
+  width: 84px;
+  min-width: 84px;
 }
 
 .calculate-fuel-brief {
@@ -2247,6 +2264,14 @@ body.left-panel-expanded .selection-table {
   font-size: 11px;
   line-height: 1.42;
   white-space: pre;
+}
+
+.calculate-fuel-brief.is-stacked {
+  overflow-x: hidden;
+}
+
+.calculate-fuel-brief.is-compact {
+  overflow-x: hidden;
 }
 
 @keyframes waypointHighlightPulse {
@@ -2917,7 +2942,11 @@ html[data-theme="day"] .calculate-source-choice.active span {
   color: #ffffff;
 }
 
-html[data-theme="day"] .calculate-chart-frame,
+html[data-theme="day"] .calculate-chart-frame {
+  border-color: rgba(47, 80, 103, 0.16);
+  background: transparent;
+}
+
 html[data-theme="day"] .calculate-fuel-brief {
   border-color: rgba(47, 80, 103, 0.16);
   background: rgba(244, 250, 252, 0.72);
@@ -4794,6 +4823,10 @@ html[data-theme="day"] .offline-progress {
     grid-template-columns: var(--planner-expanded-width) var(--rail-width) minmax(0, 1fr) var(--rail-width);
   }
 
+  body[data-detail-tab="calculate"] .shell {
+    grid-template-rows: minmax(0, 1fr) minmax(560px, 48vh);
+  }
+
   .fr24-profile-chart {
     height: clamp(160px, 18vh, 210px);
     min-height: 150px;
@@ -4801,6 +4834,33 @@ html[data-theme="day"] .offline-progress {
 
   .airport-panels {
     flex-direction: column;
+  }
+}
+
+@media (max-width: 1400px) {
+  html[data-device="pad"] .shell {
+    --planner-panel-width: 292px;
+    --planner-expanded-width: minmax(500px, 46vw);
+    grid-template-columns: var(--planner-panel-width) var(--rail-width) minmax(0, 1fr) var(--rail-width);
+    grid-template-rows: 1fr 260px;
+    grid-template-areas:
+      "planner left-rail map right-rail"
+      "planner left-rail detail right-rail";
+  }
+
+  html[data-device="pad"] body.map-expanded .shell {
+    grid-template-columns: var(--planner-panel-width) var(--rail-width) minmax(0, 1fr) var(--rail-width);
+    grid-template-areas:
+      "planner left-rail map right-rail"
+      "planner left-rail map right-rail";
+  }
+
+  html[data-device="pad"] body.left-panel-expanded .shell {
+    grid-template-columns: var(--planner-expanded-width) var(--rail-width) minmax(0, 1fr) var(--rail-width);
+  }
+
+  html[data-device="pad"] body[data-detail-tab="calculate"] .shell {
+    grid-template-rows: minmax(0, 1fr) minmax(560px, 48vh);
   }
 }
 
@@ -5192,13 +5252,13 @@ html[data-theme="day"] .offline-progress {
   }
 
   html:not([data-device="pad"]) .calculate-profile-head {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 7px;
   }
 
   html:not([data-device="pad"]) .calculate-map-toolbar {
     grid-template-columns: repeat(3, 28px);
-    justify-content: start;
+    justify-content: end;
   }
 
   html:not([data-device="pad"]) .calculate-map-button {
@@ -5209,27 +5269,33 @@ html[data-theme="day"] .offline-progress {
   }
 
   html:not([data-device="pad"]) .calculate-chart-frame {
-    height: 174px;
-    min-height: 164px;
+    height: 430px;
+    min-height: 410px;
   }
 
   html:not([data-device="pad"]) .calculate-speed-chart-frame {
-    height: 148px;
-    min-height: 138px;
+    height: 250px;
+    min-height: 238px;
   }
 
-  html:not([data-device="pad"]) .calculate-zoom-row {
-    grid-template-columns: auto minmax(0, 1fr);
+  html:not([data-device="pad"]) .calculate-zoom-row,
+  html:not([data-device="pad"]) .calculate-pan-row {
+    grid-template-columns: 34px minmax(0, 1fr);
   }
 
   html:not([data-device="pad"]) .calculate-zoom-row .compact-button {
     grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  html:not([data-device="pad"]) .calculate-profile-control-spacer {
+    display: none;
   }
 
   html:not([data-device="pad"]) .calculate-fuel-brief {
-    padding: 8px;
-    font-size: 9px;
-    line-height: 1.36;
+    padding: 8px 7px;
+    font-size: 7.4px;
+    line-height: 1.32;
   }
 
   html:not([data-device="pad"]) .layout-rail-button {
@@ -6583,8 +6649,10 @@ html[data-theme="day"] .offline-progress {
 
   html[data-device="phone"] .layout-rail-button {
     display: inline-grid;
-    min-height: 0;
-    border-radius: 8px;
+    width: 10px;
+    height: 64px;
+    min-height: 64px;
+    border-radius: 999px;
   }
 
   html[data-device="phone"] .layout-rail-icon {

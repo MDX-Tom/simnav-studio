@@ -91,6 +91,9 @@ const CALC_MAX_PROFILE_POINTS = 420;
 const CALC_ROUTE_SIGNATURE_LIMIT = 120;
 const CALC_TERRAIN_TILE_ZOOM = 10;
 const CALC_TERRAIN_FALLBACK_MAX_FT = 16800;
+const CALC_TERRAIN_MAX_RETRIES = 8;
+const calculateTerrainRetryCount = new Map();
+const calculateTerrainRetryAfter = new Map();
 const CALC_WEATHER_LEVELS = Object.freeze([
   { pressure: 900, altitudeFt: 3000 },
   { pressure: 800, altitudeFt: 6400 },
@@ -227,20 +230,43 @@ export function createCalculatePage(context) {
 
   function windComponentsForCourse(speedKt, windFromDeg, courseDeg) {
     const speed = Math.max(0, Number(speedKt) || 0);
-    const fromDeg = Number(windFromDeg) || 0;
-    const course = Number(courseDeg) || 0;
+    const fromDeg = ((Number(windFromDeg) || 0) % 360 + 360) % 360;
+    const course = ((Number(courseDeg) || 0) % 360 + 360) % 360;
+    const relativeWindFromDeg = ((fromDeg - course) % 360 + 360) % 360;
+    const relativeWindFromSignedDeg = ((relativeWindFromDeg + 540) % 360) - 180;
+    const relativeFromRad = (relativeWindFromSignedDeg * Math.PI) / 180;
+    const headwindKt = speed * Math.cos(relativeFromRad);
+    const crosswindKt = speed * Math.sin(relativeFromRad);
     const windToDeg = (fromDeg + 180) % 360;
-    const deltaRad = ((windToDeg - course) * Math.PI) / 180;
-    const tailwindKt = speed * Math.cos(deltaRad);
-    const crosswindKt = speed * Math.sin(deltaRad);
     return {
       windSpeedKt: speed,
-      windDirectionDeg: ((fromDeg % 360) + 360) % 360,
+      windDirectionDeg: fromDeg,
       windToDeg,
-      tailwindKt,
+      headwindKt,
+      tailwindKt: -headwindKt,
       crosswindKt,
-      relativeWindDeg: ((Math.atan2(crosswindKt, tailwindKt) * 180) / Math.PI + 360) % 360,
+      relativeWindSpeedKt: speed,
+      relativeWindDeg: relativeWindFromDeg,
+      relativeWindFromDeg,
+      relativeWindFromSignedDeg,
     };
+  }
+
+  function formatRelativeWindLabel(components, compact = false) {
+    const speed = Math.round(Math.max(0, Number(components.windSpeedKt) || 0));
+    const signed = Number.isFinite(Number(components.relativeWindFromSignedDeg))
+      ? Number(components.relativeWindFromSignedDeg)
+      : (((Number(components.relativeWindDeg) || 0) + 540) % 360) - 180;
+    const absolute = Math.round(Math.abs(signed));
+    let direction;
+    if (absolute <= 7) {
+      direction = compact ? "F" : "前";
+    } else if (absolute >= 173) {
+      direction = compact ? "A" : "后";
+    } else {
+      direction = `${signed > 0 ? (compact ? "R" : "右") : (compact ? "L" : "左")}${absolute}°`;
+    }
+    return `${direction} ${speed}kt`;
   }
 
   function interpolateNumber(left, right, ratio) {
@@ -638,12 +664,36 @@ export function createCalculatePage(context) {
   }
 
   function interpolateRoutePoint(start, end, ratio) {
+    const startLat = (Number(start.lat) * Math.PI) / 180;
+    const endLat = (Number(end.lat) * Math.PI) / 180;
+    const startLon = (normalizeLongitude(Number(start.originalLon ?? start.lon) || 0) * Math.PI) / 180;
+    const endLon = (normalizeLongitude(Number(end.originalLon ?? end.lon) || 0) * Math.PI) / 180;
+    const angularDistance = Math.acos(clampNumber(
+      Math.sin(startLat) * Math.sin(endLat)
+        + Math.cos(startLat) * Math.cos(endLat) * Math.cos(endLon - startLon),
+      -1,
+      1,
+    ));
+    if (!Number.isFinite(angularDistance) || angularDistance < 1e-7) {
+      const originalLon = normalizeLongitude((Number(start.originalLon ?? start.lon) || 0)
+        + normalizeLongitude((Number(end.originalLon ?? end.lon) || 0) - (Number(start.originalLon ?? start.lon) || 0)) * ratio);
+      return {
+        lat: Number(start.lat) + (Number(end.lat) - Number(start.lat)) * ratio,
+        lon: originalLon,
+        originalLon,
+      };
+    }
+    const sinDistance = Math.sin(angularDistance);
+    const startWeight = Math.sin((1 - ratio) * angularDistance) / sinDistance;
+    const endWeight = Math.sin(ratio * angularDistance) / sinDistance;
+    const x = startWeight * Math.cos(startLat) * Math.cos(startLon) + endWeight * Math.cos(endLat) * Math.cos(endLon);
+    const y = startWeight * Math.cos(startLat) * Math.sin(startLon) + endWeight * Math.cos(endLat) * Math.sin(endLon);
+    const z = startWeight * Math.sin(startLat) + endWeight * Math.sin(endLat);
+    const originalLon = normalizeLongitude((Math.atan2(y, x) * 180) / Math.PI);
     return {
-      lat: start.lat + (end.lat - start.lat) * ratio,
-      lon: start.lon + (end.lon - start.lon) * ratio,
-      originalLon: Number.isFinite(start.originalLon) && Number.isFinite(end.originalLon)
-        ? start.originalLon + (normalizeLongitude(end.originalLon - start.originalLon)) * ratio
-        : undefined,
+      lat: (Math.atan2(z, Math.hypot(x, y)) * 180) / Math.PI,
+      lon: originalLon,
+      originalLon,
     };
   }
 
@@ -652,16 +702,17 @@ export function createCalculatePage(context) {
     return `${(Number(point.lat) || 0).toFixed(4)},${lon.toFixed(4)}`;
   }
 
-  function fallbackTerrainFt(point, totalDistanceNm, distanceNm) {
+  function explicitTerrainFt(point) {
     const explicit = [
       point.elevation,
       point.elevation_ft,
-      point.altitude_ft,
-      point.altitude,
-    ].map(Number).find(Number.isFinite);
-    if (Number.isFinite(explicit)) {
-      return Math.round(clampNumber(explicit, -1200, 14500));
-    }
+      point.airport_elevation,
+      point.field_elevation_ft,
+    ].map((value) => (value === null || value === "" || value === undefined ? Number.NaN : Number(value))).find(Number.isFinite);
+    return Number.isFinite(explicit) ? Math.round(clampNumber(explicit, -1200, 29000)) : null;
+  }
+
+  function fallbackTerrainFt(point, totalDistanceNm, distanceNm) {
     const lat = Number(point.lat) || 0;
     const lon = Number.isFinite(point.originalLon) ? Number(point.originalLon) : Number(point.lon) || 0;
     const routeRatio = totalDistanceNm > 0 ? distanceNm / totalDistanceNm : 0;
@@ -740,7 +791,11 @@ export function createCalculatePage(context) {
 
   function queueTerrainTile(tile) {
     const key = `${tile.zoom}/${tile.x}/${tile.y}`;
-    if (state.calculateTerrainTileCache.has(key) || state.calculateTerrainPendingTiles.has(key) || !apiResourceUrl) {
+    const retryAfter = calculateTerrainRetryAfter.get(key) || 0;
+    if (state.calculateTerrainTileCache.has(key)
+      || state.calculateTerrainPendingTiles.has(key)
+      || Date.now() < retryAfter
+      || !apiResourceUrl) {
       return;
     }
     state.calculateTerrainPendingTiles.add(key);
@@ -750,26 +805,52 @@ export function createCalculatePage(context) {
         if (!response.ok) {
           throw new Error(`terrain ${response.status}`);
         }
+        const cacheState = String(response.headers.get("X-Map-Cache") || "HIT").toUpperCase();
+        if (cacheState !== "HIT") {
+          const error = new Error(`terrain cache ${cacheState}`);
+          error.terrainPending = cacheState === "QUEUED" || cacheState === "PENDING";
+          throw error;
+        }
         return response.blob();
       })
       .then(decodeTerrainTile)
       .then((data) => {
+        if (!data?.length || (data[3] === 0 && data[(128 * 256 + 128) * 4 + 3] === 0)) {
+          const error = new Error("terrain placeholder tile");
+          error.terrainPending = true;
+          throw error;
+        }
         state.calculateTerrainTileCache.set(key, data);
+        calculateTerrainRetryCount.delete(key);
+        calculateTerrainRetryAfter.delete(key);
         scheduleCalculateRender(40);
       })
-      .catch(() => {
-        state.calculateTerrainTileCache.set(key, null);
+      .catch((error) => {
+        const attempt = (calculateTerrainRetryCount.get(key) || 0) + 1;
+        calculateTerrainRetryCount.set(key, attempt);
+        const pending = Boolean(error?.terrainPending);
+        const delay = pending
+          ? clampNumber(280 + attempt * 180, 350, 1800)
+          : clampNumber(1800 * attempt, 2500, 12000);
+        const cooldown = attempt <= CALC_TERRAIN_MAX_RETRIES ? delay : 5 * 60 * 1000;
+        calculateTerrainRetryAfter.set(key, Date.now() + cooldown);
+        if (attempt <= CALC_TERRAIN_MAX_RETRIES) {
+          window.setTimeout(() => {
+            calculateTerrainRetryAfter.delete(key);
+            queueTerrainTile(tile);
+          }, delay);
+        }
       })
       .finally(() => {
         state.calculateTerrainPendingTiles.delete(key);
       });
   }
 
-  function terrainFtForPoint(point, totalDistanceNm, distanceNm) {
+  function terrainSampleForPoint(point, totalDistanceNm, distanceNm) {
     const key = terrainSampleKey(point);
     const cached = state.calculateTerrainCache.get(key);
     if (Number.isFinite(cached)) {
-      return cached;
+      return { elevationFt: cached, source: "dem" };
     }
     const tile = terrainTileForPoint(point);
     const tileKey = `${tile.zoom}/${tile.x}/${tile.y}`;
@@ -778,12 +859,14 @@ export function createCalculatePage(context) {
       const elevationFt = terrariumSampleFeet(tileData, tile.px, tile.py);
       const normalized = Math.round(clampNumber(elevationFt, -1400, 29000));
       state.calculateTerrainCache.set(key, normalized);
-      return normalized;
+      return { elevationFt: normalized, source: "dem" };
     }
-    if (!state.calculateTerrainTileCache.has(tileKey)) {
-      queueTerrainTile(tile);
+    queueTerrainTile(tile);
+    const explicit = explicitTerrainFt(point);
+    if (Number.isFinite(explicit)) {
+      return { elevationFt: explicit, source: "navdata" };
     }
-    return fallbackTerrainFt(point, totalDistanceNm, distanceNm);
+    return { elevationFt: fallbackTerrainFt(point, totalDistanceNm, distanceNm), source: "estimated" };
   }
 
   function buildCalculateRouteSamples() {
@@ -833,18 +916,30 @@ export function createCalculatePage(context) {
           continue;
         }
         const ratio = step / steps;
-        const point = interpolateRoutePoint(segment.start, segment.end, ratio);
+        const interpolatedPoint = interpolateRoutePoint(segment.start, segment.end, ratio);
+        const point = ratio === 0
+          ? { ...segment.start, ...interpolatedPoint }
+          : (ratio === 1 ? { ...segment.end, ...interpolatedPoint } : interpolatedPoint);
         const distanceNm = segment.startDistanceNm + segment.distanceNm * ratio;
+        const terrain = terrainSampleForPoint(point, totalDistanceNm, distanceNm);
         samples.push({
           ...point,
           ident: ratio === 0 ? segment.start.ident : ratio === 1 ? segment.end.ident : "",
           sourceIndex: ratio === 0 ? segment.startIndex : ratio === 1 ? segment.endIndex : null,
           legIndex: segment.startIndex,
           distanceNm,
-          courseDeg: initialBearingDeg(segment.start, segment.end) || 0,
-          terrainFt: terrainFtForPoint(point, totalDistanceNm, distanceNm),
+          courseDeg: 0,
+          terrainFt: terrain.elevationFt,
+          terrainSource: terrain.source,
         });
       }
+    });
+    samples.forEach((sample, index) => {
+      const next = samples[index + 1];
+      const previous = samples[index - 1];
+      sample.courseDeg = next
+        ? (initialBearingDeg(sample, next) || 0)
+        : (previous ? (initialBearingDeg(previous, sample) || 0) : 0);
     });
     const legAnnotations = buildCalculateLegAnnotations(routePoints, pointDistances);
     const adjustablePoints = buildCalculateAdjustablePoints(routePoints, pointDistances, legAnnotations);
@@ -1254,8 +1349,8 @@ export function createCalculatePage(context) {
       (payload?.items || []).forEach((item) => {
         const lat = Number(item.waypoint_latitude);
         const lon = Number(item.waypoint_longitude);
-        const altitude1 = Number(item.altitude1);
-        const altitude2 = Number(item.altitude2);
+        const altitude1 = item.altitude1 === null || item.altitude1 === "" ? null : Number(item.altitude1);
+        const altitude2 = item.altitude2 === null || item.altitude2 === "" ? null : Number(item.altitude2);
         if (!Number.isFinite(lat) || !Number.isFinite(lon) || (!Number.isFinite(altitude1) && !Number.isFinite(altitude2))) {
           return;
         }
@@ -1268,20 +1363,57 @@ export function createCalculatePage(context) {
             best = sample;
           }
         });
-        if (!best || bestDistance > 80) {
+        if (!best || bestDistance > 30) {
           return;
+        }
+        const descriptor = String(item.altitude_description || "").trim();
+        let kind = "exact";
+        let minFt = null;
+        let maxFt = null;
+        if (descriptor === "+") {
+          kind = "above";
+          minFt = altitude1;
+        } else if (descriptor === "-") {
+          kind = "below";
+          maxFt = altitude1;
+        } else if (descriptor === "B" && Number.isFinite(altitude1) && Number.isFinite(altitude2)) {
+          kind = "between";
+          minFt = Math.min(altitude1, altitude2);
+          maxFt = Math.max(altitude1, altitude2);
+        } else {
+          const exactFt = Number.isFinite(altitude1) ? altitude1 : altitude2;
+          minFt = exactFt;
+          maxFt = exactFt;
         }
         constraints.push({
           type,
           ident: item.waypoint_identifier || "",
           label: formatAltitudeRestriction(item),
           distanceNm: best.distanceNm,
-          minFt: Number.isFinite(altitude2) ? altitude2 : altitude1,
-          maxFt: Number.isFinite(altitude1) ? altitude1 : altitude2,
+          kind,
+          minFt,
+          maxFt,
         });
       });
     });
-    return constraints;
+    const deduplicated = new Map();
+    constraints
+      .sort((left, right) => left.distanceNm - right.distanceNm)
+      .forEach((constraint) => {
+        const key = [
+          constraint.type,
+          constraint.kind,
+          Math.round((constraint.minFt || 0) / 50),
+          Math.round((constraint.maxFt || 0) / 50),
+          Math.round(constraint.distanceNm / 2),
+        ].join(":");
+        if (!deduplicated.has(key)) {
+          deduplicated.set(key, { ...constraint, mergedCount: 1 });
+        } else {
+          deduplicated.get(key).mergedCount += 1;
+        }
+      });
+    return Array.from(deduplicated.values());
   }
 
   function buildCalculateProfile() {
@@ -1372,6 +1504,7 @@ export function createCalculatePage(context) {
       weatherMeta: state.calculateOnlineWeather,
       weatherOnline: Boolean(state.calculateOnlineWeather?.points?.length),
       todNm: samples[0]?.todNm || 0,
+      tocNm: samples[0]?.climbDistanceNm || 0,
       zfwKg: state.calculateZfwKg,
       blockFuelKg: state.calculateFuelKg,
       takeoffWeightKg,
@@ -1421,30 +1554,39 @@ export function createCalculatePage(context) {
   function calculateChartColors() {
     const dayTheme = document.documentElement.dataset.theme === "day";
     return {
-      grid: dayTheme ? "rgba(82, 104, 122, 0.18)" : "rgba(214, 226, 238, 0.20)",
-      axis: dayTheme ? "rgba(30, 43, 56, 0.60)" : "rgba(190, 212, 230, 0.42)",
-      label: dayTheme ? "rgba(18, 29, 40, 0.92)" : "rgba(224, 238, 250, 0.88)",
-      muted: dayTheme ? "rgba(45, 56, 66, 0.78)" : "rgba(216, 228, 238, 0.74)",
+      grid: dayTheme ? "rgba(58, 74, 88, 0.105)" : "rgba(214, 226, 238, 0.15)",
+      gridStrong: dayTheme ? "rgba(58, 74, 88, 0.17)" : "rgba(214, 226, 238, 0.22)",
+      axis: dayTheme ? "rgba(18, 30, 42, 0.53)" : "rgba(226, 239, 250, 0.48)",
+      label: dayTheme ? "rgba(18, 29, 40, 0.81)" : "rgba(224, 238, 250, 0.84)",
+      muted: dayTheme ? "rgba(43, 55, 66, 0.59)" : "rgba(216, 228, 238, 0.66)",
       plotBg: "transparent",
-      terrainLow: dayTheme ? "#178852" : "#168148",
-      terrainHigh: dayTheme ? "#d6e91e" : "#d3de24",
-      route: "#990016",
+      terrainLow: dayTheme ? "#22a987" : "#168148",
+      terrainMid: dayTheme ? "#6bd0bc" : "#54be9d",
+      terrainHigh: dayTheme ? "#b7ece1" : "#96e0c8",
+      terrainStroke: dayTheme ? "rgba(24, 145, 126, 0.88)" : "rgba(107, 226, 188, 0.84)",
+      route: "#b00018",
       point: "#fff025",
-      speed: "rgba(66, 198, 186, 0.92)",
-      speedFill: dayTheme ? "rgba(112, 206, 216, 0.46)" : "rgba(89, 201, 214, 0.34)",
-      vs: "rgba(255, 164, 128, 0.94)",
-      cloud: dayTheme ? "rgba(96, 101, 106, 0.18)" : "rgba(209, 216, 224, 0.18)",
-      cloudCore: dayTheme ? "rgba(75, 79, 84, 0.34)" : "rgba(229, 234, 240, 0.28)",
-      cloudDense: dayTheme ? "rgba(54, 58, 63, 0.42)" : "rgba(238, 242, 247, 0.36)",
-      rain: "rgba(36, 86, 255, 0.82)",
-      convectiveRain: "rgba(178, 70, 255, 0.84)",
-      rainLabel: dayTheme ? "rgba(0, 42, 150, 0.92)" : "rgba(151, 190, 255, 0.94)",
-      convectiveRainLabel: dayTheme ? "rgba(104, 35, 168, 0.92)" : "rgba(220, 180, 255, 0.95)",
+      speed: "rgba(26, 148, 140, 0.84)",
+      speedFill: dayTheme ? "rgba(112, 206, 216, 0.21)" : "rgba(89, 201, 214, 0.20)",
+      vs: "rgba(245, 133, 93, 0.84)",
+      cloud: dayTheme ? "rgba(202, 222, 250, 0.34)" : "rgba(180, 205, 238, 0.22)",
+      cloudCore: dayTheme ? "rgba(176, 207, 246, 0.40)" : "rgba(205, 222, 246, 0.28)",
+      cloudDense: dayTheme ? "rgba(145, 189, 238, 0.44)" : "rgba(224, 234, 250, 0.34)",
+      cloudStroke: dayTheme ? "rgba(126, 170, 224, 0.22)" : "rgba(216, 230, 250, 0.22)",
+      rain: "rgba(46, 122, 255, 0.86)",
+      convectiveRain: "rgba(154, 59, 238, 0.88)",
+      rainLabel: dayTheme ? "rgba(0, 42, 150, 0.94)" : "rgba(151, 190, 255, 0.96)",
+      convectiveRainLabel: dayTheme ? "rgba(104, 35, 168, 0.94)" : "rgba(220, 180, 255, 0.96)",
+      wind: dayTheme ? "rgba(21, 29, 37, 0.74)" : "rgba(230, 238, 246, 0.76)",
+      windTail: dayTheme ? "rgba(21, 29, 37, 0.74)" : "rgba(230, 238, 246, 0.76)",
+      windHead: dayTheme ? "rgba(21, 29, 37, 0.74)" : "rgba(230, 238, 246, 0.76)",
+      constraint: dayTheme ? "rgba(136, 91, 242, 0.64)" : "rgba(176, 142, 255, 0.70)",
     };
   }
 
   function svgText(x, y, text, options = {}) {
-    return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" fill="${options.fill}" font-size="${options.size.toFixed(1)}" font-weight="${options.weight || 760}" text-anchor="${options.anchor || "middle"}">${escapeHtml(text)}</text>`;
+    const family = options.family ? ` font-family="${escapeHtml(options.family)}"` : "";
+    return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" fill="${options.fill}" font-size="${options.size.toFixed(1)}" font-weight="${options.weight || 760}" text-anchor="${options.anchor || "middle"}"${family}>${escapeHtml(text)}</text>`;
   }
 
   function drawRelativeWindArrowSvg(x, y, components, colors) {
@@ -1465,6 +1607,59 @@ export function createCalculatePage(context) {
       <line x1="${x.toFixed(1)}" y1="${y.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${stroke}" stroke-width="1.6" stroke-linecap="round" />
       <path d="M${x2.toFixed(1)} ${y2.toFixed(1)} L${hx1.toFixed(1)} ${hy1.toFixed(1)} M${x2.toFixed(1)} ${y2.toFixed(1)} L${hx2.toFixed(1)} ${hy2.toFixed(1)}" stroke="${stroke}" stroke-width="1.6" stroke-linecap="round" />
     `;
+  }
+
+  function drawRelativeWindBarbSvg(x, y, components, colors) {
+    const speedKt = Math.max(0, Number(components.windSpeedKt) || 0);
+    const length = clampNumber(7.5 + speedKt * 0.075, 10, 16);
+    const angle = ((Number(components.relativeWindDeg) || 0) * Math.PI) / 180;
+    const stroke = components.tailwindKt >= 0 ? colors.windTail : colors.windHead;
+    const x2 = x + Math.sin(angle) * length;
+    const y2 = y - Math.cos(angle) * length;
+    const featherCount = clampNumber(Math.round(speedKt / 22), 1, 3);
+    const featherPieces = [];
+    for (let index = 0; index < featherCount; index += 1) {
+      const ratio = 0.34 + index * 0.17;
+      const bx = x + (x2 - x) * ratio;
+      const by = y + (y2 - y) * ratio;
+      const sideAngle = angle + Math.PI * 0.72;
+      const featherLength = 3.4 + Math.min(5.4, speedKt / 24);
+      const fx = bx + Math.sin(sideAngle) * featherLength;
+      const fy = by - Math.cos(sideAngle) * featherLength;
+      featherPieces.push(`<line x1="${bx.toFixed(1)}" y1="${by.toFixed(1)}" x2="${fx.toFixed(1)}" y2="${fy.toFixed(1)}" stroke="${stroke}" stroke-width="0.82" stroke-linecap="round" />`);
+    }
+    return `
+      <line x1="${x.toFixed(1)}" y1="${y.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${stroke}" stroke-width="0.96" stroke-linecap="round" />
+      ${featherPieces.join("")}
+    `;
+  }
+
+  function calculateProfileAltitudeMax(profile) {
+    const sampleMax = Math.max(
+      0,
+      ...(profile?.samples || []).map((sample) => Number(sample.altitudeFt) || 0),
+      ...(profile?.constraints || []).map((constraint) => Math.max(Number(constraint.maxFt) || 0, Number(constraint.minFt) || 0)),
+      Number(state.calculateCruiseAltitudeFt) || 0,
+    );
+    const desired = Math.ceil((sampleMax + 3000) / 5000) * 5000;
+    return clampNumber(Math.max(45000, desired), 45000, 60000);
+  }
+
+  function calculateWeatherCycleLabel(profile) {
+    const source = CALC_WEATHER_SOURCE_LABELS[state.calculateWeatherSource] || "ECMWF";
+    const time = profile?.weatherMeta?.weatherTime;
+    if (!time) {
+      return profile?.weatherOnline ? source : `${source} / 本地估算`;
+    }
+    const formatted = formatWeatherTime(time);
+    const hour = formatted.match(/(\d{2}):00Z$/)?.[1];
+    return hour ? `${source} ${hour}Z` : `${source} ${formatted}`;
+  }
+
+  function altitudeFeetForPressureHpa(pressureHpa) {
+    const pressure = clampNumber(Number(pressureHpa) || 1013.25, 1, 1100);
+    const altitudeMeters = 44330.77 * (1 - Math.pow(pressure / 1013.25, 0.190263));
+    return altitudeMeters * 3.28084;
   }
 
   function nearestProfileSample(samples, distanceNm) {
@@ -1613,9 +1808,9 @@ export function createCalculatePage(context) {
       ];
     const pieces = [];
     const tiers = [
-      { threshold: 16, fill: colors.cloud, opacity: 0.50, lift: 0 },
-      { threshold: 38, fill: colors.cloudCore, opacity: 0.58, lift: 140 },
-      { threshold: 62, fill: colors.cloudDense, opacity: 0.66, lift: 260 },
+      { threshold: 40, fill: colors.cloud, opacity: 0.40, lift: -80, halfBase: 230, halfScale: 7.0, maxHalf: 760 },
+      { threshold: 66, fill: colors.cloudCore, opacity: 0.38, lift: 8, halfBase: 185, halfScale: 5.0, maxHalf: 560 },
+      { threshold: 84, fill: colors.cloudDense, opacity: 0.34, lift: 78, halfBase: 145, halfScale: 3.5, maxHalf: 420 },
     ];
     const cloudEnvelopePath = (segment, level, tier) => {
       const upperPoints = [];
@@ -1623,10 +1818,10 @@ export function createCalculatePage(context) {
       segment.forEach((item) => {
         const coverageExcess = Math.max(0, item.coverage - tier.threshold);
         const terrainFloor = Number(item.sample.terrainFt || 0) + 420;
-        const wave = Math.sin((item.sample.distanceNm * 0.021 + level.pressure * 0.013 + tier.threshold * 0.031) * Math.PI)
-          * clampNumber(80 + item.coverage * 7, 100, 560);
+        const wave = Math.sin((item.sample.distanceNm * 0.018 + level.pressure * 0.013 + tier.threshold * 0.031) * Math.PI)
+          * clampNumber(36 + item.coverage * 1.15, 52, 170);
         const centerFt = level.altitudeFt + wave + tier.lift;
-        const halfHeightFt = clampNumber(520 + coverageExcess * 42 + item.coverage * 8, 620, 4400);
+        const halfHeightFt = clampNumber(tier.halfBase + coverageExcess * tier.halfScale, 150, tier.maxHalf);
         const lowerFt = Math.max(terrainFloor, centerFt - halfHeightFt);
         const upperFt = Math.max(lowerFt + 420, centerFt + halfHeightFt);
         upperPoints.push({
@@ -1653,7 +1848,7 @@ export function createCalculatePage(context) {
       if (!path) {
         return;
       }
-      pieces.push(`<path d="${path}" fill="${tier.fill}" opacity="${tier.opacity.toFixed(2)}" />`);
+      pieces.push(`<path d="${path}" fill="${tier.fill}" stroke="${colors.cloudStroke}" stroke-width="0.22" opacity="${tier.opacity.toFixed(2)}" />`);
     };
     cloudLevels.forEach((level) => {
       tiers.forEach((tier) => {
@@ -1672,16 +1867,16 @@ export function createCalculatePage(context) {
       });
     });
     return pieces.length
-      ? `<g filter="url(#calculateCloudSoftBlur)" opacity="0.96">${pieces.join("")}</g>`
+      ? `<g filter="url(#calculateCloudSoftBlur)" opacity="0.88">${pieces.join("")}</g>`
       : "";
   }
 
-  function renderPrecipitationBars(samples, xForDistance, yForAltitude, colors, plot, height) {
+  function renderPrecipitationBars(samples, xForDistance, colors, precipPlot) {
     const pieces = [];
     const averageStep = samples.length > 1
       ? Math.abs(xForDistance(samples[1].distanceNm) - xForDistance(samples[0].distanceNm))
       : 7;
-    const bucketWidth = clampNumber(averageStep * 1.55, 18, 34);
+    const bucketWidth = clampNumber(averageStep * 1.9, 18, 42);
     const buckets = new Map();
     samples.forEach((sample, index) => {
       const rain = Math.max(0, Number(sample.rainMmH) || 0);
@@ -1691,7 +1886,7 @@ export function createCalculatePage(context) {
       }
       const x = xForDistance(sample.distanceNm);
       const total = rain + convective;
-      const bucketKey = Math.round((x - plot.left) / bucketWidth);
+      const bucketKey = Math.round((x - precipPlot.left) / bucketWidth);
       const existing = buckets.get(bucketKey);
       if (!existing || total > existing.total || (Math.abs(total - existing.total) < 0.05 && index > existing.index)) {
         buckets.set(bucketKey, { x, rain, convective, total, index });
@@ -1702,30 +1897,28 @@ export function createCalculatePage(context) {
       .sort((left, right) => left.x - right.x)
       .forEach((item) => {
       const total = item.total;
-      const barHeight = clampNumber(total * 7.6 + Math.sqrt(total) * 5.2, 4, 34);
-      const barWidth = clampNumber(bucketWidth * 0.22, 3.6, 6.2);
-      const bottomY = Math.max(plot.top + 18, height - plot.bottom - 5);
-      const y = Math.max(plot.top + 4, bottomY - barHeight);
+      const barTop = precipPlot.top + 10;
+      const availableHeight = Math.max(8, precipPlot.bottom - barTop);
+      const barHeight = clampNumber(total * 2.4 + Math.sqrt(total) * 2.4, 3.5, availableHeight);
+      const barWidth = clampNumber(bucketWidth * 0.62, 7, 18);
+      const bottomY = precipPlot.bottom;
+      const y = Math.max(barTop, bottomY - barHeight);
       const rainHeight = barHeight * (item.rain / Math.max(0.001, total));
       const convectiveHeight = barHeight - rainHeight;
+      const x = clampNumber(item.x, precipPlot.left + barWidth / 2, precipPlot.right - barWidth / 2);
       if (rainHeight > 1) {
-        pieces.push(`<rect x="${(item.x - barWidth / 2).toFixed(1)}" y="${(y + convectiveHeight).toFixed(1)}" width="${barWidth.toFixed(1)}" height="${rainHeight.toFixed(1)}" rx="0.6" fill="${colors.rain}" opacity="0.90" />`);
+        pieces.push(`<rect x="${(x - barWidth / 2).toFixed(1)}" y="${(y + convectiveHeight).toFixed(1)}" width="${barWidth.toFixed(1)}" height="${rainHeight.toFixed(1)}" rx="0.9" fill="${colors.rain}" opacity="0.92" />`);
       }
       if (convectiveHeight > 1) {
-        pieces.push(`<rect x="${(item.x - barWidth / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${convectiveHeight.toFixed(1)}" rx="0.6" fill="${colors.convectiveRain}" opacity="0.92" />`);
+        pieces.push(`<rect x="${(x - barWidth / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${convectiveHeight.toFixed(1)}" rx="0.9" fill="${colors.convectiveRain}" opacity="0.94" />`);
       }
-      if (total >= 0.12 && item.x - lastLabelX >= 30) {
-        lastLabelX = item.x;
+      if (total >= 0.12 && x - lastLabelX >= 34) {
+        lastLabelX = x;
         const label = total >= 10 ? Math.round(total).toString() : total.toFixed(1);
-        const labelTop = Math.max(plot.top + 9, y - (item.convective > 0.08 ? 12 : 4));
-        pieces.push(svgText(item.x, labelTop, label, { fill: colors.rainLabel, size: 7.3, weight: 850 }));
-        if (item.convective > 0.08) {
-          const convectiveLabel = item.convective >= 10 ? Math.round(item.convective).toString() : item.convective.toFixed(1);
-          pieces.push(svgText(item.x, Math.max(plot.top + 18, y - 2), convectiveLabel, { fill: colors.convectiveRainLabel, size: 7, weight: 820 }));
-        }
+        pieces.push(svgText(x, precipPlot.top + 7, label, { fill: colors.rainLabel, size: 6.8, weight: 840 }));
       }
     });
-    return pieces.length ? `<g filter="url(#calculateRainSoftGlow)">${pieces.join("")}</g>` : "";
+    return pieces.length ? `<g class="calculate-rain-bars" filter="url(#calculateRainSoftGlow)">${pieces.join("")}</g>` : "";
   }
 
   function renderCalculateWeatherProfile(profile) {
@@ -1742,81 +1935,173 @@ export function createCalculatePage(context) {
     const chartElement = svg.parentElement || svg;
     const rect = chartElement.getBoundingClientRect();
     const width = Math.round(Math.max(340, rect.width || svg.clientWidth || 760));
-    const height = Math.round(Math.max(220, rect.height || svg.clientHeight || 360));
+    const height = Math.round(Math.max(340, rect.height || svg.clientHeight || 390));
     svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-    const plot = {
+
+    const lowerReserved = Math.round(clampNumber(height * 0.38, 140, 176));
+    const mainBottom = Math.round(height - lowerReserved);
+    const terrainPlot = {
       left: Math.round(clampNumber(width * 0.085, 44, 62)),
-      right: Math.round(clampNumber(width * 0.055, 28, 48)),
-      top: 20,
-      bottom: 38,
+      right: width - Math.round(clampNumber(width * 0.055, 28, 48)),
+      top: mainBottom + 18,
+      bottom: height - 92,
+    };
+    const precipPlot = {
+      left: terrainPlot.left,
+      right: terrainPlot.right,
+      top: height - 84,
+      bottom: height - 55,
+    };
+    const plot = {
+      left: terrainPlot.left,
+      right: width - terrainPlot.right,
+      top: 50,
+      bottom: height - mainBottom,
     };
     const plotWidth = width - plot.left - plot.right;
-    const plotHeight = height - plot.top - plot.bottom;
+    const plotHeight = mainBottom - plot.top;
     const { viewport, samples } = visibleCalculateSamples(profile);
+    const altitudeMaxFt = calculateProfileAltitudeMax(profile);
     const xForDistance = (distanceNm) => plot.left + ((distanceNm - viewport.start) / Math.max(1, viewport.end - viewport.start)) * plotWidth;
-    const yForAltitude = (altitudeFt) => plot.top + (1 - altitudeFt / 60000) * plotHeight;
-    state.calculateWeatherLayout = { width, height, plot, viewport, xForDistance, yForAltitude };
+    const yForAltitude = (altitudeFt) => plot.top + (1 - clampNumber(altitudeFt, 0, altitudeMaxFt) / altitudeMaxFt) * plotHeight;
+    state.calculateWeatherLayout = { width, height, plot, viewport, xForDistance, yForAltitude, altitudeMaxFt };
+    const tickLabelY = height - 43;
+    const distanceLabelY = height - 26;
+    const footerY = height - 8;
+
+    const terrainValues = samples.map((sample) => Math.max(0, Number(sample.terrainFt) || 0));
+    const terrainMaxFt = clampNumber(Math.ceil((Math.max(1500, ...terrainValues) + 800) / 1000) * 1000, 3000, 18000);
+    const yForTerrain = (altitudeFt) => terrainPlot.bottom - (clampNumber(altitudeFt, 0, terrainMaxFt) / terrainMaxFt) * Math.max(1, terrainPlot.bottom - terrainPlot.top);
+    const terrainMidFt = Math.round((terrainMaxFt / 2) / 500) * 500;
+    const formatTerrainTick = (altitudeFt) => {
+      if (altitudeFt >= 1000) {
+        const thousands = altitudeFt / 1000;
+        return `${Number.isInteger(thousands) ? thousands.toFixed(0) : thousands.toFixed(1)}k`;
+      }
+      return String(Math.round(altitudeFt));
+    };
 
     const grid = [];
-    for (let altitude = 0; altitude <= 60000; altitude += 5000) {
+    const legend = [];
+    const cycleLabel = calculateWeatherCycleLabel(profile);
+    legend.push(svgText(width / 2, 14, cycleLabel, { fill: colors.muted, size: width < 420 ? 8.6 : 9.5, weight: 820 }));
+    legend.push(svgText(plot.left, 14, "FL", { fill: colors.label, size: 10, anchor: "start", weight: 860 }));
+    legend.push(svgText(width - plot.right, 14, "hPa", { fill: colors.label, size: 10, anchor: "end", weight: 860 }));
+    const legendY = 27;
+    const legendSize = width < 430 ? 7.1 : 8.4;
+    const legendItems = width < 430
+      ? [
+        { key: "route", label: "航路", width: 39 },
+        { key: "constraint", label: "约束", width: 43 },
+        { key: "cloud", label: "云层", width: 42 },
+        { key: "wind", label: "相对风", width: 48 },
+        { key: "rain", label: "降水", width: 43 },
+      ]
+      : [
+        { key: "route", label: "航路高度", width: 78 },
+        { key: "constraint", label: "约束高度", width: 84 },
+        { key: "cloud", label: "云层", width: 56 },
+        { key: "wind", label: "相对来风 kt", width: 92 },
+        { key: "rain", label: "降水", width: 58 },
+      ];
+    const legendGap = width < 430 ? 4 : 10;
+    const legendTotalWidth = legendItems.reduce((sum, item) => sum + item.width, 0) + legendGap * (legendItems.length - 1);
+    let legendCursor = clampNumber((width - legendTotalWidth) / 2, plot.left + 16, Math.max(plot.left + 16, width - plot.right - legendTotalWidth));
+    legendItems.forEach((item) => {
+      const x = legendCursor;
+      if (item.key === "route") {
+        legend.push(`<line x1="${x.toFixed(1)}" y1="${legendY.toFixed(1)}" x2="${(x + 16).toFixed(1)}" y2="${legendY.toFixed(1)}" stroke="${colors.route}" stroke-width="1.4" />`);
+        legend.push(svgText(x + 18, legendY + 3, item.label, { fill: colors.muted, size: legendSize, anchor: "start", weight: 760 }));
+      } else if (item.key === "constraint") {
+        legend.push(`<line x1="${x.toFixed(1)}" y1="${legendY.toFixed(1)}" x2="${(x + 16).toFixed(1)}" y2="${legendY.toFixed(1)}" stroke="${colors.constraint}" stroke-width="1.15" stroke-dasharray="4 3" />`);
+        legend.push(svgText(x + 18, legendY + 3, item.label, { fill: colors.muted, size: legendSize, anchor: "start", weight: 760 }));
+      } else if (item.key === "cloud") {
+        legend.push(`<rect x="${x.toFixed(1)}" y="${(legendY - 5.5).toFixed(1)}" width="15" height="7" rx="2" fill="${colors.cloudDense}" stroke="${colors.cloudStroke}" stroke-width="0.35" />`);
+        legend.push(svgText(x + 17, legendY + 3, item.label, { fill: colors.muted, size: legendSize, anchor: "start", weight: 760 }));
+      } else if (item.key === "wind") {
+        legend.push(`<g transform="translate(${(x + 4).toFixed(1)} ${legendY.toFixed(1)}) scale(${width < 430 ? "0.82" : "0.92"})">${drawRelativeWindBarbSvg(0, 0, { windSpeedKt: 42, relativeWindDeg: 115, tailwindKt: -18 }, colors)}</g>`);
+        legend.push(svgText(x + 19, legendY + 3, item.label, { fill: colors.muted, size: legendSize, anchor: "start", weight: 760 }));
+      } else if (item.key === "rain") {
+        legend.push(`<rect x="${x.toFixed(1)}" y="${(legendY - 5.5).toFixed(1)}" width="8" height="7" rx="1" fill="${colors.rain}" /><rect x="${(x + 9.5).toFixed(1)}" y="${(legendY - 5.5).toFixed(1)}" width="8" height="7" rx="1" fill="${colors.convectiveRain}" />`);
+        legend.push(svgText(x + 20, legendY + 3, item.label, { fill: colors.muted, size: legendSize, anchor: "start", weight: 760 }));
+      }
+      legendCursor += item.width + legendGap;
+    });
+
+    const altitudeLabelStep = altitudeMaxFt > 50000 ? 10000 : 5000;
+    for (let altitude = 0; altitude <= altitudeMaxFt; altitude += 5000) {
       const y = yForAltitude(altitude);
-      grid.push(`<line x1="${plot.left}" y1="${y.toFixed(1)}" x2="${(width - plot.right).toFixed(1)}" y2="${y.toFixed(1)}" stroke="${colors.grid}" stroke-width="1" />`);
-      if (altitude % 10000 === 0 || altitude === 5000) {
-        grid.push(svgText(plot.left - 8, y + 4, String(Math.round(altitude / 100)), { fill: colors.label, size: 10, anchor: "end" }));
-        const hpa = altitude >= 45000 ? 150 : altitude >= 35000 ? 250 : altitude >= 25000 ? 400 : altitude >= 15000 ? 600 : altitude >= 5000 ? 850 : 1013;
-        grid.push(svgText(width - plot.right + 8, y + 4, String(hpa), { fill: colors.label, size: 9.5, anchor: "start" }));
+      const major = altitude % altitudeLabelStep === 0 || altitude === altitudeMaxFt || altitude === 0;
+      grid.push(`<line x1="${plot.left}" y1="${y.toFixed(1)}" x2="${(width - plot.right).toFixed(1)}" y2="${y.toFixed(1)}" stroke="${major ? colors.gridStrong : colors.grid}" stroke-width="${major ? "0.78" : "0.52"}" stroke-dasharray="${major ? "3 2.5" : "2 3"}" />`);
+      if (major) {
+        const label = altitude === 0 ? "SFC" : `FL${String(Math.round(altitude / 100)).padStart(3, "0")}`;
+        const numericLabel = altitude === 0 ? "0" : String(Math.round(altitude / 100));
+        grid.push(svgText(plot.left - 13, y + 3.2, numericLabel, { fill: colors.label, size: width < 420 ? 6.8 : 7.8, anchor: "end", weight: 720 }));
+        grid.push(svgText(plot.left + 2, y + 3.0, label, { fill: colors.muted, size: width < 420 ? 5.9 : 6.8, anchor: "start", weight: 620 }));
       }
     }
-    const xTickCount = Math.round(clampNumber(plotWidth / 110 + 1, 3, 8));
+    const pressureAxisTicks = [150, 175, 200, 225, 250, 275, 300, 350, 400, 450, 500, 600, 700, 850, 1000];
+    pressureAxisTicks.forEach((pressure) => {
+      const altitudeFt = altitudeFeetForPressureHpa(pressure);
+      if (altitudeFt < -500 || altitudeFt > altitudeMaxFt + 800) {
+        return;
+      }
+      const y = yForAltitude(altitudeFt);
+      grid.push(svgText(width - plot.right + 7, y + 2.8, String(pressure), { fill: colors.muted, size: width < 420 ? 6.3 : 7.1, anchor: "start", weight: 650 }));
+    });
+
+    const xTickCount = Math.round(clampNumber(plotWidth / 116 + 1, 3, 8));
     for (let index = 0; index < xTickCount; index += 1) {
       const ratio = index / Math.max(1, xTickCount - 1);
       const distance = viewport.start + ratio * (viewport.end - viewport.start);
       const x = xForDistance(distance);
-      grid.push(`<line x1="${x.toFixed(1)}" y1="${plot.top}" x2="${x.toFixed(1)}" y2="${(height - plot.bottom).toFixed(1)}" stroke="${colors.grid}" stroke-width="1" />`);
-      grid.push(svgText(x, height - 12, `${Math.round(distance)}nm`, { fill: colors.label, size: 9.5 }));
+      grid.push(`<line x1="${x.toFixed(1)}" y1="${plot.top}" x2="${x.toFixed(1)}" y2="${precipPlot.bottom.toFixed(1)}" stroke="${colors.grid}" stroke-width="0.58" stroke-dasharray="2 3.5" />`);
+      grid.push(svgText(x, tickLabelY, String(Math.round(distance)), { fill: colors.label, size: width < 420 ? 7.4 : 8.4, weight: 720 }));
     }
+    grid.push(svgText(width / 2, distanceLabelY, "飞行距离 (NM)", { fill: colors.muted, size: width < 420 ? 7.4 : 8.4, weight: 780 }));
 
     const terrainPath = samples.map((sample, index) => {
       const x = xForDistance(sample.distanceNm);
-      const y = yForAltitude(Math.max(0, sample.terrainFt));
+      const y = yForTerrain(Math.max(0, sample.terrainFt));
       return `${index ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`;
     }).join(" ");
     const terrainArea = terrainPath
-      ? `${terrainPath} L${xForDistance(samples.at(-1).distanceNm).toFixed(1)} ${(height - plot.bottom).toFixed(1)} L${xForDistance(samples[0].distanceNm).toFixed(1)} ${(height - plot.bottom).toFixed(1)} Z`
+      ? `${terrainPath} L${xForDistance(samples.at(-1).distanceNm).toFixed(1)} ${terrainPlot.bottom.toFixed(1)} L${xForDistance(samples[0].distanceNm).toFixed(1)} ${terrainPlot.bottom.toFixed(1)} Z`
       : "";
     const plannedPath = svgPathForProfile(samples.map((sample) => ({
       x: xForDistance(sample.distanceNm),
       y: yForAltitude(sample.altitudeFt),
     })), "y");
     const waitingForOnlineWeather = state.calculateOnlineWeatherPending && !profile.weatherOnline;
+    const cruiseSamples = profile.samples.filter((sample) => sample.phase === "cruise");
+    const avgCruiseFl = Math.round((cruiseSamples.reduce((sum, sample) => sum + sample.altitudeFt, 0) / Math.max(1, cruiseSamples.length)) / 100);
 
-    const cloudLayer = state.calculateLayerVisibility.cloud && !waitingForOnlineWeather
+    const cloudLayer = state.calculateLayerVisibility.cloud
       ? renderCloudBands(samples, xForDistance, yForAltitude, colors)
       : "";
-    const rainLayer = state.calculateLayerVisibility.rain && !waitingForOnlineWeather
-      ? renderPrecipitationBars(samples, xForDistance, yForAltitude, colors, plot, height)
+    const rainLayer = state.calculateLayerVisibility.rain
+      ? renderPrecipitationBars(samples, xForDistance, colors, precipPlot)
       : "";
-    const windLayer = state.calculateLayerVisibility.wind && !waitingForOnlineWeather
+    const windLayer = state.calculateLayerVisibility.wind
       ? (() => {
-        const levels = [10000, 20000, 30000, 40000];
-        const xSlots = Math.round(clampNumber(plotWidth / 94, 3, 9));
+        const windLevels = CALC_WEATHER_LEVELS.filter((level) => level.altitudeFt >= 3000 && level.altitudeFt <= altitudeMaxFt);
+        const xSlots = Math.round(clampNumber(plotWidth / (width < 430 ? 58 : 78), width < 430 ? 5 : 4, width < 430 ? 7 : 11));
         const pieces = [];
         for (let xi = 0; xi < xSlots; xi += 1) {
           const slotRatio = (xi + 0.5) / Math.max(1, xSlots);
           const distance = viewport.start + slotRatio * (viewport.end - viewport.start);
           const nearest = nearestProfileSample(samples, distance);
-          levels.forEach((altitude) => {
+          windLevels.forEach((level) => {
             const met = profile.weatherOnline
-              ? onlineWindAt(nearest, altitude)
-              : calculateAtmosphereAt(nearest, altitude);
+              ? onlineWindAt(nearest, level.altitudeFt)
+              : calculateAtmosphereAt(nearest, level.altitudeFt);
             if (!met) {
               return;
             }
             const x = xForDistance(distance);
-            const y = yForAltitude(altitude);
-            const componentLabel = `${Math.round(met.windSpeedKt)}kt ${met.tailwindKt >= 0 ? "T" : "H"}${Math.round(Math.abs(met.tailwindKt))}`;
-            pieces.push(`<g opacity="0.92">${drawRelativeWindArrowSvg(x, y, met, colors)}</g>`);
-            pieces.push(svgText(x, y + 17, componentLabel, { fill: colors.muted, size: 7.2, weight: 760 }));
+            const y = yForAltitude(level.altitudeFt);
+            pieces.push(`<g opacity="0.90">${drawRelativeWindBarbSvg(x, y, met, colors)}</g>`);
+            pieces.push(svgText(x, y - 4.1, formatRelativeWindLabel(met, width < 430), { fill: colors.wind, size: width < 420 ? 5.0 : 5.8, weight: 740 }));
           });
         }
         return pieces.join("");
@@ -1842,13 +2127,43 @@ export function createCalculatePage(context) {
           `
           : "";
         return `
-          <line x1="${startX.toFixed(1)}" y1="${plot.top}" x2="${startX.toFixed(1)}" y2="${(height - plot.bottom).toFixed(1)}" stroke="rgba(38, 80, 99, 0.25)" stroke-width="1" stroke-dasharray="3 5" />
-          <line x1="${endX.toFixed(1)}" y1="${plot.top}" x2="${endX.toFixed(1)}" y2="${(height - plot.bottom).toFixed(1)}" stroke="rgba(38, 80, 99, 0.18)" stroke-width="1" stroke-dasharray="3 5" />
+          <line x1="${startX.toFixed(1)}" y1="${plot.top}" x2="${startX.toFixed(1)}" y2="${precipPlot.bottom.toFixed(1)}" stroke="rgba(38, 80, 99, ${showLegLabels ? "0.13" : "0.055"})" stroke-width="0.72" stroke-dasharray="3 7" />
+          <line x1="${endX.toFixed(1)}" y1="${plot.top}" x2="${endX.toFixed(1)}" y2="${precipPlot.bottom.toFixed(1)}" stroke="rgba(38, 80, 99, ${showLegLabels ? "0.10" : "0.045"})" stroke-width="0.72" stroke-dasharray="3 7" />
           ${label}
         `;
       }).join("");
-    const showAdjustableLabels = (state.calculateProfileZoom || 1) >= 1.8;
+    const showAdjustableLabels = width >= 700 || (state.calculateProfileZoom || 1) >= 1.65;
     let lastAdjustableLabelX = -Infinity;
+    const adjustableLabelGap = showAdjustableLabels
+      ? (width < 430 ? 74 : 66)
+      : (width < 430 ? 58 : 62);
+    const visibleAdjustableEntries = (profile.route.adjustablePoints || []).map((point, index) => {
+      const sample = nearestProfileSample(profile.samples, point.distanceNm);
+      if (!sample) {
+        return null;
+      }
+      const x = xForDistance(point.distanceNm);
+      if (x < plot.left - 2 || x > width - plot.right + 2 || !point.ident) {
+        return null;
+      }
+      return { point, sample, x, index };
+    }).filter(Boolean);
+    const defaultAdjustableLabelIndexes = new Set();
+    if (!showAdjustableLabels && visibleAdjustableEntries.length) {
+      const preferred = visibleAdjustableEntries.filter((entry) => (
+        entry.sample.altitudeFt >= 5000
+        || entry.index === 0
+        || entry.index === profile.route.adjustablePoints.length - 1
+      ));
+      const sourceEntries = preferred.length >= 3 ? preferred : visibleAdjustableEntries;
+      const targetCount = Math.min(width < 430 ? 6 : 10, sourceEntries.length);
+      for (let cursor = 0; cursor < targetCount; cursor += 1) {
+        const sourceIndex = targetCount === 1
+          ? 0
+          : Math.round((cursor / Math.max(1, targetCount - 1)) * (sourceEntries.length - 1));
+        defaultAdjustableLabelIndexes.add(sourceEntries[sourceIndex].index);
+      }
+    }
     const adjustablePointMarkers = (profile.route.adjustablePoints || []).map((point, index) => {
       const sample = nearestProfileSample(profile.samples, point.distanceNm);
       if (!sample) {
@@ -1859,58 +2174,99 @@ export function createCalculatePage(context) {
         return "";
       }
       const y = yForAltitude(sample.altitudeFt);
-      const canPlaceLabel = showAdjustableLabels && point.ident && x - lastAdjustableLabelX >= 46;
+      const shouldLabelPoint = showAdjustableLabels || defaultAdjustableLabelIndexes.has(index);
+      const canPlaceLabel = shouldLabelPoint && point.ident && x - lastAdjustableLabelX >= adjustableLabelGap;
       if (canPlaceLabel) {
         lastAdjustableLabelX = x;
       }
-      const labelY = Math.max(plot.top + 32, y - 14 - (index % 2) * 12);
-      const labelWidth = clampNumber(String(point.ident || "").length * 6.4 + 12, 28, 56);
+      const labelAbove = y > plot.top + 40;
+      const labelHeight = width < 430 ? 16 : 18;
+      const labelTop = labelAbove
+        ? Math.max(plot.top + 2, y - labelHeight - 5 - (index % 2) * 7)
+        : Math.min(mainBottom - labelHeight - 2, y + 5 + (index % 2) * 7);
+      const labelWidth = clampNumber(String(point.ident || "").length * 6.0 + 10, 30, width < 430 ? 50 : 56);
+      const altitudeLabel = `FL${String(Math.round(sample.altitudeFt / 100)).padStart(3, "0")}`;
       return `
-        <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.6" fill="${colors.point}" stroke="rgba(48, 55, 20, 0.86)" stroke-width="0.9" />
+        <rect x="${(x - 2.1).toFixed(1)}" y="${(y - 2.1).toFixed(1)}" width="4.2" height="4.2" rx="0.8" fill="${colors.point}" stroke="rgba(48, 55, 20, 0.78)" stroke-width="0.72" />
         ${canPlaceLabel ? `
-          <rect x="${(x - labelWidth / 2).toFixed(1)}" y="${(labelY - 12).toFixed(1)}" width="${labelWidth.toFixed(1)}" height="15" rx="2" fill="rgba(255, 240, 37, 0.92)" stroke="rgba(74, 76, 18, 0.72)" stroke-width="0.8" />
-          ${svgText(x, labelY - 1, point.ident, { fill: "rgba(39, 44, 14, 0.96)", size: 8.2, weight: 850 })}
+          <rect x="${(x - labelWidth / 2).toFixed(1)}" y="${labelTop.toFixed(1)}" width="${labelWidth.toFixed(1)}" height="${labelHeight}" rx="1.8" fill="rgba(195, 225, 237, 0.94)" stroke="rgba(42, 100, 123, 0.76)" stroke-width="0.7" />
+          ${svgText(x, labelTop + (width < 430 ? 6.3 : 7.0), point.ident, { fill: "rgba(18, 51, 66, 0.96)", size: width < 430 ? 6.8 : 7.5, weight: 860 })}
+          ${svgText(x, labelTop + (width < 430 ? 12.3 : 14.0), altitudeLabel, { fill: colors.muted, size: width < 430 ? 4.9 : 5.5, weight: 740 })}
         ` : ""}
       `;
     }).join("");
-    const todX = xForDistance(profile.todNm);
-    const todMarker = todX >= plot.left && todX <= width - plot.right
-      ? `
-        <line x1="${todX.toFixed(1)}" y1="${plot.top}" x2="${todX.toFixed(1)}" y2="${(height - plot.bottom).toFixed(1)}" stroke="rgba(255, 209, 102, 0.78)" stroke-width="1.5" stroke-dasharray="6 6" />
-        ${svgText(todX + 4, plot.top + 13, t("calculate.tod"), { fill: "rgba(255, 209, 102, 0.95)", size: 9.3, anchor: "start", weight: 850 })}
-      `
-      : "";
-    const showConstraintLabels = (state.calculateProfileZoom || 1) >= 1.8;
+    const markerLine = (distanceNm, label, color) => {
+      const markerX = xForDistance(distanceNm);
+      if (markerX < plot.left || markerX > width - plot.right) {
+        return "";
+      }
+      const anchor = markerX > width - plot.right - 44 ? "end" : "start";
+      const labelX = anchor === "end" ? markerX - 4 : markerX + 4;
+      return `
+        <line x1="${markerX.toFixed(1)}" y1="${plot.top}" x2="${markerX.toFixed(1)}" y2="${mainBottom.toFixed(1)}" stroke="${color}" stroke-width="0.95" stroke-opacity="0.78" stroke-dasharray="5 6" />
+        ${svgText(labelX, plot.top + 12, label, { fill: color, size: width < 420 ? 7.4 : 8.0, anchor, weight: 840 })}
+      `;
+    };
+    const tocMarker = markerLine(profile.tocNm || 0, "TOC", "rgba(40, 142, 202, 0.86)");
+    const todMarker = markerLine(profile.todNm, t("calculate.tod"), "rgba(255, 170, 64, 0.88)");
+    const showConstraintLabels = (state.calculateProfileZoom || 1) >= 2.4;
     let lastConstraintLabelX = -Infinity;
     const constraintMarkers = profile.constraints.map((constraint) => {
       const x = xForDistance(constraint.distanceNm);
       if (x < plot.left || x > width - plot.right) {
         return "";
       }
-      const yMin = yForAltitude(clampNumber(constraint.minFt, 0, 60000));
-      const yMax = yForAltitude(clampNumber(constraint.maxFt, 0, 60000));
+      const sample = nearestProfileSample(profile.samples, constraint.distanceNm);
+      const referenceFt = Number.isFinite(constraint.minFt)
+        ? constraint.minFt
+        : (Number.isFinite(constraint.maxFt) ? constraint.maxFt : sample?.altitudeFt || 0);
+      const yMin = yForAltitude(clampNumber(Number.isFinite(constraint.minFt) ? constraint.minFt : referenceFt, 0, altitudeMaxFt));
+      const yMax = yForAltitude(clampNumber(Number.isFinite(constraint.maxFt) ? constraint.maxFt : referenceFt, 0, altitudeMaxFt));
       const yTop = Math.min(yMin, yMax);
       const yBottom = Math.max(yMin, yMax);
-      const canLabel = showConstraintLabels && constraint.ident && x - lastConstraintLabelX >= 52;
+      const canLabel = showConstraintLabels && constraint.ident && x - lastConstraintLabelX >= 62;
       if (canLabel) {
         lastConstraintLabelX = x;
       }
-      const labelAnchor = x > width - plot.right - 70 ? "end" : "start";
-      const labelX = labelAnchor === "end" ? x - 5 : x + 5;
+      const labelAnchor = x > width - plot.right - 82 ? "end" : "start";
+      const labelX = labelAnchor === "end" ? x - 7 : x + 7;
+      let glyph = "";
+      if (constraint.kind === "between" && yBottom - yTop >= 2) {
+        glyph = `
+          <line x1="${x.toFixed(1)}" y1="${yTop.toFixed(1)}" x2="${x.toFixed(1)}" y2="${yBottom.toFixed(1)}" stroke="${colors.constraint}" stroke-width="0.82" />
+          <line x1="${(x - 3.2).toFixed(1)}" y1="${yTop.toFixed(1)}" x2="${(x + 3.2).toFixed(1)}" y2="${yTop.toFixed(1)}" stroke="${colors.constraint}" stroke-width="0.82" />
+          <line x1="${(x - 3.2).toFixed(1)}" y1="${yBottom.toFixed(1)}" x2="${(x + 3.2).toFixed(1)}" y2="${yBottom.toFixed(1)}" stroke="${colors.constraint}" stroke-width="0.82" />
+        `;
+      } else if (constraint.kind === "above") {
+        glyph = `
+          <line x1="${(x - 3.2).toFixed(1)}" y1="${yMin.toFixed(1)}" x2="${(x + 3.2).toFixed(1)}" y2="${yMin.toFixed(1)}" stroke="${colors.constraint}" stroke-width="0.82" />
+          <path d="M${x.toFixed(1)} ${yMin.toFixed(1)} L${x.toFixed(1)} ${(yMin - 5.5).toFixed(1)} M${(x - 2).toFixed(1)} ${(yMin - 3.4).toFixed(1)} L${x.toFixed(1)} ${(yMin - 5.5).toFixed(1)} L${(x + 2).toFixed(1)} ${(yMin - 3.4).toFixed(1)}" fill="none" stroke="${colors.constraint}" stroke-width="0.82" stroke-linecap="round" stroke-linejoin="round" />
+        `;
+      } else if (constraint.kind === "below") {
+        glyph = `
+          <line x1="${(x - 3.2).toFixed(1)}" y1="${yMax.toFixed(1)}" x2="${(x + 3.2).toFixed(1)}" y2="${yMax.toFixed(1)}" stroke="${colors.constraint}" stroke-width="0.82" />
+          <path d="M${x.toFixed(1)} ${yMax.toFixed(1)} L${x.toFixed(1)} ${(yMax + 5.5).toFixed(1)} M${(x - 2).toFixed(1)} ${(yMax + 3.4).toFixed(1)} L${x.toFixed(1)} ${(yMax + 5.5).toFixed(1)} L${(x + 2).toFixed(1)} ${(yMax + 3.4).toFixed(1)}" fill="none" stroke="${colors.constraint}" stroke-width="0.82" stroke-linecap="round" stroke-linejoin="round" />
+        `;
+      } else {
+        const exactY = (yMin + yMax) / 2;
+        glyph = `
+          <line x1="${(x - 3.8).toFixed(1)}" y1="${exactY.toFixed(1)}" x2="${(x + 3.8).toFixed(1)}" y2="${exactY.toFixed(1)}" stroke="${colors.constraint}" stroke-width="0.82" />
+          <path d="M${x.toFixed(1)} ${(exactY - 1.8).toFixed(1)} L${(x + 1.8).toFixed(1)} ${exactY.toFixed(1)} L${x.toFixed(1)} ${(exactY + 1.8).toFixed(1)} L${(x - 1.8).toFixed(1)} ${exactY.toFixed(1)} Z" fill="${colors.constraint}" />
+        `;
+      }
       return `
-        <line x1="${x.toFixed(1)}" y1="${yTop.toFixed(1)}" x2="${x.toFixed(1)}" y2="${yBottom.toFixed(1)}" stroke="rgba(154, 108, 255, 0.92)" stroke-width="2" />
-        <circle cx="${x.toFixed(1)}" cy="${yTop.toFixed(1)}" r="3" fill="rgba(154, 108, 255, 0.92)" />
-        ${canLabel ? svgText(labelX, Math.max(plot.top + 10, yTop - 5), constraint.ident, { fill: "rgba(190, 166, 255, 0.96)", size: 8.2, anchor: labelAnchor, weight: 820 }) : ""}
+        <g opacity="0.76">${glyph}</g>
+        ${canLabel ? svgText(labelX, Math.max(plot.top + 9, yTop - 4), `${constraint.ident} ${constraint.label}`, { fill: colors.constraint, size: 6.7, anchor: labelAnchor, weight: 780 }) : ""}
       `;
     }).join("");
 
     svg.innerHTML = `
       <defs>
         <filter id="calculateCloudSoftBlur" x="-8%" y="-12%" width="116%" height="124%">
-          <feGaussianBlur stdDeviation="4.6" />
+          <feGaussianBlur stdDeviation="3.2" />
         </filter>
         <filter id="calculateRainSoftGlow" x="-12%" y="-18%" width="124%" height="136%">
-          <feGaussianBlur in="SourceGraphic" stdDeviation="0.35" result="blur" />
+          <feGaussianBlur in="SourceGraphic" stdDeviation="0.22" result="blur" />
           <feMerge>
             <feMergeNode in="blur" />
             <feMergeNode in="SourceGraphic" />
@@ -1918,25 +2274,41 @@ export function createCalculatePage(context) {
         </filter>
         <linearGradient id="calculateTerrainGradient" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="${colors.terrainHigh}" />
-          <stop offset="55%" stop-color="#9bd318" />
+          <stop offset="48%" stop-color="${colors.terrainMid}" />
           <stop offset="100%" stop-color="${colors.terrainLow}" />
         </linearGradient>
       </defs>
+      ${legend.join("")}
       ${grid.join("")}
       ${cloudLayer}
       ${windLayer}
-      ${terrainArea ? `<path d="${terrainArea}" fill="url(#calculateTerrainGradient)" opacity="0.95" />` : ""}
-      ${rainLayer}
-      ${waitingForOnlineWeather ? svgText(plot.left + 12, plot.top + 18, t("calculate.weatherLoading"), { fill: colors.muted, size: 10, anchor: "start", weight: 820 }) : ""}
-      ${plannedPath ? `<path d="${plannedPath}" fill="none" stroke="${colors.route}" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" />` : ""}
+      ${waitingForOnlineWeather ? svgText(plot.left + 12, plot.top + 18, t("calculate.weatherLoading"), { fill: colors.muted, size: width < 420 ? 7.2 : 8.2, anchor: "start", weight: 780 }) : ""}
+      ${plannedPath ? `<path d="${plannedPath}" fill="none" stroke="${colors.route}" stroke-width="1.24" stroke-linecap="round" stroke-linejoin="round" />` : ""}
+      ${tocMarker}
       ${todMarker}
       ${constraintMarkers}
       ${legMarkers}
       ${adjustablePointMarkers}
-      <line x1="${plot.left}" y1="${plot.top}" x2="${plot.left}" y2="${height - plot.bottom}" stroke="${colors.axis}" stroke-width="1.4" />
-      <line x1="${plot.left}" y1="${height - plot.bottom}" x2="${width - plot.right}" y2="${height - plot.bottom}" stroke="${colors.axis}" stroke-width="1.4" />
-      ${svgText(plot.left + 3, plot.top - 6, "FL", { fill: colors.label, size: 10, anchor: "start", weight: 860 })}
-      ${svgText(width - 4, plot.top - 6, "hPa", { fill: colors.label, size: 10, anchor: "end", weight: 860 })}
+      <line x1="${plot.left}" y1="${plot.top}" x2="${plot.left}" y2="${mainBottom}" stroke="${colors.axis}" stroke-width="1.05" />
+      <line x1="${plot.left}" y1="${mainBottom}" x2="${width - plot.right}" y2="${mainBottom}" stroke="${colors.axis}" stroke-width="0.95" />
+      <line x1="${width - plot.right}" y1="${plot.top}" x2="${width - plot.right}" y2="${mainBottom}" stroke="${colors.axis}" stroke-width="0.85" />
+      <line x1="${terrainPlot.left}" y1="${terrainPlot.top}" x2="${terrainPlot.left}" y2="${terrainPlot.bottom}" stroke="${colors.axis}" stroke-width="0.78" />
+      <line x1="${terrainPlot.left}" y1="${terrainPlot.bottom}" x2="${terrainPlot.right}" y2="${terrainPlot.bottom}" stroke="${colors.axis}" stroke-width="0.85" />
+      ${terrainArea ? `<path d="${terrainArea}" fill="url(#calculateTerrainGradient)" opacity="0.92" />` : ""}
+      ${terrainPath ? `<path d="${terrainPath}" fill="none" stroke="${colors.terrainStroke}" stroke-width="1.05" stroke-linejoin="round" />` : ""}
+      ${svgText(terrainPlot.left - 7, terrainPlot.top - 5, "地形高度 (ft)", { fill: colors.muted, size: width < 420 ? 5.9 : 6.8, anchor: "end", weight: 760 })}
+      <line x1="${terrainPlot.left - 3}" y1="${terrainPlot.top}" x2="${terrainPlot.left}" y2="${terrainPlot.top}" stroke="${colors.axis}" stroke-width="0.72" />
+      <line x1="${terrainPlot.left - 3}" y1="${yForTerrain(terrainMidFt).toFixed(1)}" x2="${terrainPlot.left}" y2="${yForTerrain(terrainMidFt).toFixed(1)}" stroke="${colors.axis}" stroke-width="0.72" />
+      <line x1="${terrainPlot.left - 3}" y1="${terrainPlot.bottom}" x2="${terrainPlot.left}" y2="${terrainPlot.bottom}" stroke="${colors.axis}" stroke-width="0.72" />
+      ${svgText(terrainPlot.left - 5, terrainPlot.top + 2.5, formatTerrainTick(terrainMaxFt), { fill: colors.muted, size: width < 420 ? 6.0 : 6.8, anchor: "end", weight: 700 })}
+      ${svgText(terrainPlot.left - 5, yForTerrain(terrainMidFt) + 2.5, formatTerrainTick(terrainMidFt), { fill: colors.muted, size: width < 420 ? 6.0 : 6.8, anchor: "end", weight: 700 })}
+      ${svgText(terrainPlot.left - 5, terrainPlot.bottom + 2.5, "0", { fill: colors.muted, size: width < 420 ? 6.0 : 6.8, anchor: "end", weight: 700 })}
+      <line x1="${precipPlot.left}" y1="${precipPlot.bottom}" x2="${precipPlot.right}" y2="${precipPlot.bottom}" stroke="${colors.axis}" stroke-width="0.75" />
+      ${rainLayer}
+      ${svgText(plot.left - 8, precipPlot.bottom - 1, "降水 (mm)", { fill: colors.muted, size: width < 420 ? 6.4 : 7.4, anchor: "end", weight: 760 })}
+      ${svgText(plot.left, footerY, `总里程：${Math.round(profile.totalDistanceNm).toLocaleString("en-US")} NM`, { fill: colors.label, size: width < 420 ? 7.4 : 8.4, anchor: "start", weight: 780 })}
+      ${svgText(width / 2, footerY, `总飞行时间：${formatReadableDuration(profile.totalTimeMinutes)}`, { fill: colors.label, size: width < 420 ? 7.4 : 8.4, weight: 780 })}
+      ${svgText(width - plot.right, footerY, `平均巡航：FL${avgCruiseFl}`, { fill: colors.label, size: width < 420 ? 7.4 : 8.4, anchor: "end", weight: 780 })}
     `;
   }
 
@@ -1959,8 +2331,8 @@ export function createCalculatePage(context) {
     const plot = {
       left: Math.round(clampNumber(width * 0.085, 45, 64)),
       right: Math.round(clampNumber(width * 0.08, 42, 58)),
-      top: 26,
-      bottom: 44,
+      top: 38,
+      bottom: 58,
     };
     const plotWidth = width - plot.left - plot.right;
     const plotHeight = height - plot.top - plot.bottom;
@@ -1968,26 +2340,31 @@ export function createCalculatePage(context) {
     const xForDistance = (distanceNm) => plot.left + ((distanceNm - viewport.start) / Math.max(1, viewport.end - viewport.start)) * plotWidth;
     const speedMax = Math.max(500, Math.ceil(Math.max(...samples.map((sample) => sample.groundSpeedKt)) / 50) * 50);
     const yForSpeed = (speed) => plot.top + (1 - speed / speedMax) * plotHeight;
-    const yForVS = (vs) => plot.top + (1 - ((clampNumber(vs, -4000, 4000) + 4000) / 8000)) * plotHeight;
+    const maxAbsVerticalSpeed = Math.max(...samples.map((sample) => Math.abs(Number(sample.verticalSpeedFpm) || 0)));
+    const vsMax = clampNumber(Math.ceil(Math.max(3000, maxAbsVerticalSpeed) / 500) * 500, 3000, 4000);
+    const yForVS = (vs) => plot.top + (1 - ((clampNumber(vs, -vsMax, vsMax) + vsMax) / (vsMax * 2))) * plotHeight;
     state.calculateSpeedLayout = { width, height, plot, viewport, xForDistance };
     const grid = [];
     for (let speed = 0; speed <= speedMax; speed += 100) {
       const y = yForSpeed(speed);
-      grid.push(`<line x1="${plot.left}" y1="${y.toFixed(1)}" x2="${(width - plot.right).toFixed(1)}" y2="${y.toFixed(1)}" stroke="${colors.grid}" stroke-width="1" />`);
-      grid.push(svgText(plot.left - 8, y + 4, String(speed), { fill: colors.label, size: 10, anchor: "end" }));
+      grid.push(`<line x1="${plot.left}" y1="${y.toFixed(1)}" x2="${(width - plot.right).toFixed(1)}" y2="${y.toFixed(1)}" stroke="${colors.grid}" stroke-width="0.72" />`);
+      grid.push(svgText(plot.left - 8, y + 4, String(speed), { fill: colors.label, size: width < 420 ? 8.8 : 9.7, anchor: "end", weight: 720 }));
     }
-    [-4000, -2000, 0, 2000, 4000].forEach((vs) => {
+    const vsTicks = vsMax <= 3000
+      ? [-3000, -1000, 0, 1000, 3000]
+      : [-4000, -2000, 0, 2000, 4000];
+    vsTicks.forEach((vs) => {
       const y = yForVS(vs);
-      grid.push(`<line x1="${plot.left}" y1="${y.toFixed(1)}" x2="${(width - plot.right).toFixed(1)}" y2="${y.toFixed(1)}" stroke="${vs === 0 ? "rgba(255, 164, 128, 0.42)" : colors.grid}" stroke-width="${vs === 0 ? "1.4" : "1"}" />`);
-      grid.push(svgText(width - plot.right + 8, y + 4, String(vs), { fill: vs === 0 ? colors.vs : colors.label, size: 9.5, anchor: "start" }));
+      grid.push(`<line x1="${plot.left}" y1="${y.toFixed(1)}" x2="${(width - plot.right).toFixed(1)}" y2="${y.toFixed(1)}" stroke="${vs === 0 ? "rgba(255, 145, 104, 0.32)" : colors.grid}" stroke-width="${vs === 0 ? "1.05" : "0.72"}" stroke-dasharray="${vs === 0 ? "5 4" : "none"}" />`);
+      grid.push(svgText(width - plot.right + 8, y + 4, String(vs), { fill: vs === 0 ? colors.vs : colors.label, size: width < 420 ? 8.5 : 9.3, anchor: "start", weight: 720 }));
     });
     const xTickCount = Math.round(clampNumber(plotWidth / 140 + 1, 3, 7));
     for (let index = 0; index < xTickCount; index += 1) {
       const ratio = index / Math.max(1, xTickCount - 1);
       const distance = viewport.start + ratio * (viewport.end - viewport.start);
       const x = xForDistance(distance);
-      grid.push(`<line x1="${x.toFixed(1)}" y1="${plot.top}" x2="${x.toFixed(1)}" y2="${(height - plot.bottom).toFixed(1)}" stroke="${colors.grid}" stroke-width="1" />`);
-      grid.push(svgText(x, height - 24, `${Math.round(distance)}`, { fill: colors.label, size: 9.5 }));
+      grid.push(`<line x1="${x.toFixed(1)}" y1="${plot.top}" x2="${x.toFixed(1)}" y2="${(height - plot.bottom).toFixed(1)}" stroke="${colors.grid}" stroke-width="0.72" />`);
+      grid.push(svgText(x, height - 39, `${Math.round(distance)}`, { fill: colors.label, size: width < 420 ? 7.6 : 8.8, weight: 720 }));
     }
     const speedPoints = samples.map((sample) => ({ x: xForDistance(sample.distanceNm), y: yForSpeed(sample.groundSpeedKt) }));
     const speedPath = svgPathForProfile(speedPoints, "y");
@@ -1995,17 +2372,36 @@ export function createCalculatePage(context) {
       ? `${speedPath} L${xForDistance(samples.at(-1).distanceNm).toFixed(1)} ${(height - plot.bottom).toFixed(1)} L${xForDistance(samples[0].distanceNm).toFixed(1)} ${(height - plot.bottom).toFixed(1)} Z`
       : "";
     const vsPath = svgPathForProfile(samples.map((sample) => ({ x: xForDistance(sample.distanceNm), y: yForVS(sample.verticalSpeedFpm) })), "y");
+    const avgGroundSpeed = samples.reduce((sum, sample) => sum + sample.groundSpeedKt, 0) / Math.max(1, samples.length);
+    const maxGroundSpeed = Math.max(...samples.map((sample) => sample.groundSpeedKt));
+    const maxDescentRate = Math.min(...samples.map((sample) => sample.verticalSpeedFpm));
+    const legendY = 17;
+    const legendCenter = width / 2;
     svg.innerHTML = `
+      <defs>
+        <linearGradient id="calculateSpeedFillGradient" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${colors.speed}" stop-opacity="0.24" />
+          <stop offset="70%" stop-color="${colors.speed}" stop-opacity="0.12" />
+          <stop offset="100%" stop-color="${colors.speed}" stop-opacity="0.035" />
+        </linearGradient>
+      </defs>
       <rect x="0" y="0" width="${width}" height="${height}" fill="transparent" />
+      <line x1="${(legendCenter - 88).toFixed(1)}" y1="${legendY}" x2="${(legendCenter - 64).toFixed(1)}" y2="${legendY}" stroke="${colors.speed}" stroke-width="1.8" />
+      ${svgText(legendCenter - 42, legendY + 3, "地速 (kt)", { fill: colors.muted, size: width < 420 ? 7.4 : 8.5, weight: 780 })}
+      <line x1="${(legendCenter + 28).toFixed(1)}" y1="${legendY}" x2="${(legendCenter + 52).toFixed(1)}" y2="${legendY}" stroke="${colors.vs}" stroke-width="1.45" />
+      ${svgText(legendCenter + 88, legendY + 3, "垂直速度 (fpm)", { fill: colors.muted, size: width < 420 ? 7.4 : 8.5, weight: 780 })}
       ${grid.join("")}
-      ${speedArea ? `<path d="${speedArea}" fill="${colors.speedFill}" />` : ""}
-      ${speedPath ? `<path d="${speedPath}" fill="none" stroke="${colors.speed}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" />` : ""}
-      ${vsPath ? `<path d="${vsPath}" fill="none" stroke="${colors.vs}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" />` : ""}
-      <line x1="${plot.left}" y1="${plot.top}" x2="${plot.left}" y2="${height - plot.bottom}" stroke="${colors.axis}" stroke-width="1.4" />
-      <line x1="${plot.left}" y1="${height - plot.bottom}" x2="${width - plot.right}" y2="${height - plot.bottom}" stroke="${colors.axis}" stroke-width="1.4" />
-      ${svgText(plot.left, plot.top - 8, "地速 (kt)", { fill: colors.label, size: 10, anchor: "start", weight: 860 })}
-      ${svgText(width - plot.right, plot.top - 8, "VS (fpm)", { fill: colors.vs, size: 10, anchor: "end", weight: 860 })}
-      ${svgText(width / 2, height - 7, "飞行距离 (NM)", { fill: colors.label, size: 10, weight: 820 })}
+      ${speedArea ? `<path d="${speedArea}" fill="url(#calculateSpeedFillGradient)" />` : ""}
+      ${speedPath ? `<path d="${speedPath}" fill="none" stroke="${colors.speed}" stroke-width="1.45" stroke-linejoin="round" stroke-linecap="round" />` : ""}
+      ${vsPath ? `<path d="${vsPath}" fill="none" stroke="${colors.vs}" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round" />` : ""}
+      <line x1="${plot.left}" y1="${plot.top}" x2="${plot.left}" y2="${height - plot.bottom}" stroke="${colors.axis}" stroke-width="1.05" />
+      <line x1="${plot.left}" y1="${height - plot.bottom}" x2="${width - plot.right}" y2="${height - plot.bottom}" stroke="${colors.axis}" stroke-width="1.05" />
+      ${svgText(plot.left, plot.top - 8, "地速 (kt)", { fill: colors.label, size: width < 420 ? 8.2 : 9.4, anchor: "start", weight: 820 })}
+      ${svgText(width - plot.right, plot.top - 8, "垂直速度 (fpm)", { fill: colors.vs, size: width < 420 ? 8.2 : 9.4, anchor: "end", weight: 820 })}
+      ${svgText(width / 2, height - 23, "飞行距离 (NM)", { fill: colors.label, size: width < 420 ? 8 : 9.5, weight: 820 })}
+      ${svgText(plot.left, height - 6, `平均地速：${Math.round(avgGroundSpeed)} kt`, { fill: colors.label, size: width < 420 ? 7.4 : 8.4, anchor: "start", weight: 780 })}
+      ${svgText(width / 2, height - 6, `最大地速：${Math.round(maxGroundSpeed)} kt`, { fill: colors.label, size: width < 420 ? 7.4 : 8.4, weight: 780 })}
+      ${svgText(width - plot.right, height - 6, `最大下降率：${Math.round(maxDescentRate)} fpm`, { fill: colors.label, size: width < 420 ? 7.4 : 8.4, anchor: "end", weight: 780 })}
     `;
   }
 
@@ -2047,12 +2443,15 @@ export function createCalculatePage(context) {
     const windCode = `${profile.avgWindComponentKt >= 0 ? "P" : "M"}${String(Math.round(Math.abs(profile.avgWindComponentKt))).padStart(3, "0")}`;
     const isaCode = `${profile.avgIsaDeviationC >= 0 ? "P" : "M"}${String(Math.round(Math.abs(profile.avgIsaDeviationC))).padStart(3, "0")}`;
     const line = (label, arpt, fuel, time) => `${label.padEnd(15, " ")}${String(arpt || "").padEnd(7, " ")}${formatBriefWeight(fuel)}  ${formatFuelTime(time)}`;
+    const compactWeight = (kg) => {
+      const value = displayWeightValue(kg);
+      return Number.isFinite(value) ? String(Math.round(value)).padStart(6, " ") : "    --";
+    };
+    const compactLine = (label, arpt, fuel, time) => (
+      `${label.padEnd(11, " ")}${String(arpt || "").padEnd(5, " ")}${compactWeight(fuel)} ${formatFuelTime(time)}`
+    );
     const unitLabel = currentWeightUnit().toUpperCase();
-    const brief = [
-      `UNITS      ${unitLabel}`,
-      `MAXIMUM    TOW ${formatBriefWeight(aircraft.mtowKg)}  LAW ${formatBriefWeight(aircraft.mlwKg)}  ZFW ${formatBriefWeight(aircraft.zfwKg)}     AVG W/C      ${windCode}`,
-      `ESTIMATED  TOW ${formatBriefWeight(estimatedTow)}  LAW ${formatBriefWeight(estimatedLaw)}  ZFW ${formatBriefWeight(zfw)}     AVG ISA      ${isaCode}`,
-      "",
+    const leftLines = [
       "          PLANNED FUEL",
       "------------------------------",
       "FUEL           ARPT      FUEL  TIME",
@@ -2074,14 +2473,90 @@ export function createCalculatePage(context) {
       "PIC EXTRA       .....",
       "TOTAL FUEL      .....",
       "REASON FOR PIC EXTRA ..........",
-      "------------------------------------------------------",
+      "------------------------------",
+    ].filter((lineText) => lineText !== null);
+    const rightLines = [
+      `UNITS      ${unitLabel}`,
+      "",
+      `MAXIMUM    TOW ${formatBriefWeight(aircraft.mtowKg)}  LAW ${formatBriefWeight(aircraft.mlwKg)}`,
+      `           ZFW ${formatBriefWeight(aircraft.zfwKg)}  AVG W/C ${windCode}`,
+      `ESTIMATED  TOW ${formatBriefWeight(estimatedTow)}  LAW ${formatBriefWeight(estimatedLaw)}`,
+      `           ZFW ${formatBriefWeight(zfw)}  AVG ISA ${isaCode}`,
+      "",
+      "------------------------------",
       "FMC INFO:",
       `FINRES+ALTN       ${formatBriefWeight(finalReserveFuel + alternateFuel)}`,
       `TRIP+TAXI         ${formatBriefWeight(tripFuel + taxiFuel)}`,
       "",
-      `MODEL: ${aircraft.code} ${aircraft.label} / ${formatMach(state.calculateCruiseMach || aircraft.econMach)} / ${formatFlightLevelFromFeet(state.calculateCruiseAltitudeFt)}`,
-    ].filter((lineText) => lineText !== null).join("\n");
+      `MODEL: ${aircraft.code}`,
+      `${formatMach(state.calculateCruiseMach || aircraft.econMach)} / ${formatFlightLevelFromFeet(state.calculateCruiseAltitudeFt)}`,
+    ];
+    const compactLeftLines = [
+      "      PLANNED FUEL",
+      "----------------------------",
+      "FUEL        ARPT   FUEL TIME",
+      "----------------------------",
+      compactLine("TRIP", dest, tripFuel, tripTime),
+      compactLine("CONT 15", "", contFuel, contTime),
+      compactLine("ALTN", "ALTN", alternateFuel, alternateTime),
+      compactLine("FINRES", "", finalReserveFuel, finalReserveTime),
+      "----------------------------",
+      compactLine("MIN T/OFF", "", requiredOffFuel, tripTime + contTime + alternateTime + finalReserveTime),
+      "----------------------------",
+      compactLine("EXTRA", "", extraFuel, 0),
+      "----------------------------",
+      compactLine("T/OFF FUEL", "", offFuel, tripTime + contTime + alternateTime + finalReserveTime),
+      compactLine("TAXI", dep, taxiFuel, 20),
+      "----------------------------",
+      compactLine("BLOCK", dep, blockFuel, ""),
+      fuelShortfall > 0 ? `SHORT        ${compactWeight(fuelShortfall)} ${t("calculate.weightOverLimit")}` : null,
+      "PIC EXTRA    .....",
+      "TOTAL FUEL   .....",
+      "PIC REASON   ..........",
+      "----------------------------",
+    ].filter((lineText) => lineText !== null);
+    const compactRightLines = [
+      `UNITS ${unitLabel}`,
+      "",
+      `MAX TOW ${compactWeight(aircraft.mtowKg).trim()} LAW ${compactWeight(aircraft.mlwKg).trim()}`,
+      `MAX ZFW ${compactWeight(aircraft.zfwKg).trim()} W/C ${windCode}`,
+      `EST TOW ${compactWeight(estimatedTow).trim()} LAW ${compactWeight(estimatedLaw).trim()}`,
+      `EST ZFW ${compactWeight(zfw).trim()} ISA ${isaCode}`,
+      "",
+      "--------------------------",
+      "FMC INFO:",
+      `FINRES+ALTN ${compactWeight(finalReserveFuel + alternateFuel).trim()}`,
+      `TRIP+TAXI   ${compactWeight(tripFuel + taxiFuel).trim()}`,
+      "",
+      `MODEL ${aircraft.code}`,
+      `${formatMach(state.calculateCruiseMach || aircraft.econMach)} ${formatFlightLevelFromFeet(state.calculateCruiseAltitudeFt)}`,
+    ];
+    const briefWidth = elements.calcFuelBrief.getBoundingClientRect?.().width || 0;
+    const stackedBrief = briefWidth > 0 && briefWidth < 286;
+    const compactBrief = !stackedBrief && briefWidth > 0 && briefWidth < 520;
+    let brief = "";
+    if (stackedBrief) {
+      brief = `${leftLines.join("\n")}\n\n${rightLines.join("\n")}`;
+    } else if (compactBrief) {
+      const leftColumnWidth = Math.max(28, ...compactLeftLines.map((item) => item.length));
+      const briefRows = [];
+      const rowCount = Math.max(compactLeftLines.length, compactRightLines.length);
+      for (let index = 0; index < rowCount; index += 1) {
+        briefRows.push(`${(compactLeftLines[index] || "").padEnd(leftColumnWidth, " ")}  ${compactRightLines[index] || ""}`.trimEnd());
+      }
+      brief = briefRows.join("\n");
+    } else {
+      const leftColumnWidth = Math.max(34, ...leftLines.map((item) => item.length));
+      const briefRows = [];
+      const rowCount = Math.max(leftLines.length, rightLines.length);
+      for (let index = 0; index < rowCount; index += 1) {
+        briefRows.push(`${(leftLines[index] || "").padEnd(leftColumnWidth, " ")}   ${rightLines[index] || ""}`.trimEnd());
+      }
+      brief = briefRows.join("\n");
+    }
     elements.calcFuelBrief.textContent = brief;
+    elements.calcFuelBrief.classList.toggle("is-stacked", stackedBrief);
+    elements.calcFuelBrief.classList.toggle("is-compact", compactBrief);
     elements.calcFuelSummary.textContent = t("calculate.fuelSummary", {
       distance: Math.round(profile.totalDistanceNm),
       time: formatReadableDuration(profile.totalTimeMinutes),

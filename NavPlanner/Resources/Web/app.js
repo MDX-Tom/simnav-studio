@@ -6469,6 +6469,7 @@ function handleNativeAppIconChanged(payload = {}) {
 function setDetailTab(tab) {
   const normalized = ["airport", "query", "calculate", "settings"].includes(tab) ? tab : "airport";
   state.activeDetailTab = normalized;
+  document.body.dataset.detailTab = normalized;
   elements.detailModeTabButtons.forEach((button) => {
     const active = button.dataset.detailTab === normalized;
     button.classList.toggle("active", active);
@@ -11981,6 +11982,9 @@ async function applySimulatorDebugLaunch() {
   const mobileTab = typeof config.mobileTab === "string" ? config.mobileTab : config.tab;
   if (typeof mobileTab === "string") {
     setMobileBottomTab(mobileTab);
+  }
+  if (Number.isFinite(Number(config.mobilePanelMapRatio))) {
+    applyMobilePanelMapRatio(Number(config.mobilePanelMapRatio));
   }
   const detailTab = typeof config.detailTab === "string"
     ? config.detailTab
