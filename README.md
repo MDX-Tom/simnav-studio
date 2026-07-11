@@ -58,7 +58,7 @@ NavPlanner is built around a SwiftUI shell, a WKWebView map workspace, and a Swi
 1. Build a route in **Plan** and select any required `SID`, `STAR`, or `APPROACH`.
 2. Open the **Calc** tab.
 3. Select manufacturer and aircraft type, then adjust ZFW, fuel on board, cruise altitude, cruise Mach, descent rate, weather source, weight unit, and QNH display unit.
-4. Review the route profile with relative wind, cloud, precipitation, terrain, procedure altitude limits, QNH, zoom and pan controls, then check the ground speed / vertical-speed profile.
+4. Review the SimBrief-style route profile with relative wind, cloud, precipitation, terrain, procedure altitude limits, QNH, zoom and pan controls, then check the ground speed / vertical-speed profile.
 5. Review the SimBrief-style fuel estimate.
 
 The calculation model is local-first and works offline. Online weather is an enhancement and falls back to local estimates when unavailable; Terrarium DEM tiles are sampled when available and degrade to a conservative local terrain estimate when unavailable. Direct weather-source licensing, offline DEM packages, and fuller aircraft performance libraries remain planned enhancements.
