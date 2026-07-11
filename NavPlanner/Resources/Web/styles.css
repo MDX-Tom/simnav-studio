@@ -223,6 +223,12 @@ svg {
   transition: grid-template-columns 0.22s ease;
 }
 
+@media (orientation: landscape) {
+  html[data-device="pad"] .shell {
+    --detail-panel-width: 385px;
+  }
+}
+
 .panel {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.014)),
