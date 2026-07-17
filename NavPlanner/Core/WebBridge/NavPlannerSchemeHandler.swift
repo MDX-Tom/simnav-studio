@@ -819,6 +819,17 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
     private var cacheHeaders: [String: String] {
         [
             "Access-Control-Allow-Origin": "*",
+            "Access-Control-Expose-Headers": [
+                "Accept-Ranges",
+                "Content-Length",
+                "Content-Range",
+                "Date",
+                "ETag",
+                "X-Map-Cache",
+                "X-Offline-Map",
+                "X-Weather-Source",
+                "X-Weather-Updated"
+            ].joined(separator: ", "),
             "Cache-Control": "no-store"
         ]
     }
@@ -3414,17 +3425,6 @@ private struct OnlineTileProvider {
     }
 }
 
-private extension Optional where Wrapped == Error {
-    var isURLErrorTimedOut: Bool {
-        guard let error = self else { return false }
-        if let urlError = error as? URLError {
-            return urlError.code == .timedOut
-        }
-        let nsError = error as NSError
-        return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorTimedOut
-    }
-}
-
 private final class OnlineTileCache {
     enum TileState {
         case hit(data: Data, contentType: String)
@@ -3434,8 +3434,11 @@ private final class OnlineTileCache {
     }
 
     static let tileResponseWaitTimeout: TimeInterval = 2.4
-    private static let tileDownloadRequestTimeout: TimeInterval = 4.5
-    private static let tileDownloadResourceTimeout: TimeInterval = 9
+    private static let tileDownloadRequestTimeout: TimeInterval = 8
+    private static let tileDownloadResourceTimeout: TimeInterval = 14
+    private static let tileDownloadWorkers = 8
+    private static let tileDownloadRetries = 1
+    private static let tileDownloadRetryDelay: TimeInterval = 0.35
 
     private struct TilePayload {
         let data: Data
@@ -3447,6 +3450,7 @@ private final class OnlineTileCache {
     private let previousRootDirectory: URL
     private let legacyRootDirectory: URL
     private let session: URLSession
+    private let downloadQueue: OperationQueue
     private let lock = NSLock()
     private var pendingKeys = Set<String>()
     private var failedAtByKey: [String: Date] = [:]
@@ -3458,7 +3462,8 @@ private final class OnlineTileCache {
             format: "jpg",
             contentType: "image/jpeg",
             templates: [
-                "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}"
+                "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+                "https://services.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}"
             ],
             maxZoom: 20
         ),
@@ -3540,10 +3545,16 @@ private final class OnlineTileCache {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = Self.tileDownloadRequestTimeout
         configuration.timeoutIntervalForResource = Self.tileDownloadResourceTimeout
-        configuration.httpMaximumConnectionsPerHost = 8
+        configuration.httpMaximumConnectionsPerHost = Self.tileDownloadWorkers
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.urlCache = nil
         self.session = URLSession(configuration: configuration)
+
+        let downloadQueue = OperationQueue()
+        downloadQueue.name = "com.navplanner.online-map-cache"
+        downloadQueue.qualityOfService = .userInitiated
+        downloadQueue.maxConcurrentOperationCount = Self.tileDownloadWorkers
+        self.downloadQueue = downloadQueue
 
         try? fileManager.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
     }
@@ -3675,50 +3686,63 @@ private final class OnlineTileCache {
     }
 
     private func downloadTile(provider: OnlineTileProvider, remoteURLs: [URL], localURL: URL, key: String) {
-        func finishPending() {
-            lock.withLock {
-                _ = pendingKeys.remove(key)
-            }
-        }
-
-        func attemptDownload(at index: Int, sawTimeout: Bool = false) {
-            guard index < remoteURLs.count else {
-                if !sawTimeout {
-                    markFailure(key: key)
+        downloadQueue.addOperation { [weak self] in
+            guard let self else { return }
+            defer {
+                self.lock.withLock {
+                    _ = self.pendingKeys.remove(key)
                 }
-                finishPending()
-                return
             }
 
-            let remoteURL = remoteURLs[index]
-            let request = tileRequest(for: remoteURL)
-
-            let task = session.dataTask(with: request) { [weak self] data, response, error in
-                guard let self else { return }
-                let timedOut = error.isURLErrorTimedOut
-
-                guard let httpResponse = response as? HTTPURLResponse,
-                      (200..<300).contains(httpResponse.statusCode),
-                      let data,
-                      let payload = self.cacheTilePayload(from: data, provider: provider) else {
-                    attemptDownload(at: index + 1, sawTimeout: sawTimeout || timedOut)
-                    return
-                }
-
-                if self.writeCacheData(payload.data, to: localURL) {
-                    self.lock.withLock {
-                        _ = self.failedAtByKey.removeValue(forKey: key)
+            for retry in 0...Self.tileDownloadRetries {
+                for remoteURL in remoteURLs {
+                    guard let payload = self.downloadTilePayload(provider: provider, remoteURL: remoteURL) else {
+                        continue
                     }
-                    finishPending()
-                } else {
-                    attemptDownload(at: index + 1, sawTimeout: sawTimeout)
+                    if self.writeCacheData(payload.data, to: localURL) {
+                        self.lock.withLock {
+                            _ = self.failedAtByKey.removeValue(forKey: key)
+                        }
+                        return
+                    }
+                }
+                if retry < Self.tileDownloadRetries {
+                    Thread.sleep(forTimeInterval: Self.tileDownloadRetryDelay * Double(retry + 1))
                 }
             }
-            task.priority = URLSessionTask.highPriority
-            task.resume()
-        }
 
-        attemptDownload(at: 0)
+            self.markFailure(key: key)
+        }
+    }
+
+    private func downloadTilePayload(provider: OnlineTileProvider, remoteURL: URL) -> TilePayload? {
+        let request = tileRequest(for: remoteURL)
+        let semaphore = DispatchSemaphore(value: 0)
+        let resultLock = NSLock()
+        var resultData: Data?
+        var resultResponse: HTTPURLResponse?
+
+        let task = session.dataTask(with: request) { data, response, _ in
+            resultLock.withLock {
+                resultData = data
+                resultResponse = response as? HTTPURLResponse
+            }
+            semaphore.signal()
+        }
+        task.priority = URLSessionTask.highPriority
+        task.resume()
+
+        guard semaphore.wait(timeout: .now() + Self.tileDownloadResourceTimeout + 1) == .success else {
+            task.cancel()
+            return nil
+        }
+        let result = resultLock.withLock { (resultData, resultResponse) }
+        guard let response = result.1,
+              (200..<300).contains(response.statusCode),
+              let data = result.0 else {
+            return nil
+        }
+        return cacheTilePayload(from: data, provider: provider)
     }
 
     private func tileRequest(for remoteURL: URL) -> URLRequest {

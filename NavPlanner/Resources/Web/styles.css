@@ -3085,6 +3085,34 @@ html[data-theme="day"] .selection-leg-turn {
   will-change: transform;
 }
 
+#map.is-map-moving.has-nav-label-snapshot .nav-label-pane,
+#map.is-smooth-zooming.has-nav-label-snapshot .nav-label-pane {
+  visibility: hidden;
+}
+
+.nav-label-snapshot-pane,
+.nav-label-snapshot-canvas,
+.nav-symbol-snapshot-pane,
+.nav-symbol-snapshot-canvas {
+  pointer-events: none;
+}
+
+.nav-label-snapshot-canvas,
+.nav-symbol-snapshot-canvas {
+  position: absolute;
+  display: block;
+  max-width: none;
+  max-height: none;
+}
+
+#map.has-nav-symbol-snapshot .nav-symbol.is-nav-symbol-snapshotted {
+  display: none !important;
+}
+
+#map.is-smooth-zooming .nav-symbol {
+  pointer-events: none !important;
+}
+
 #map.is-map-moving .nav-label span,
 #map.is-smooth-zooming .nav-label span {
   text-shadow:
@@ -4772,7 +4800,7 @@ html[data-theme="day"] .offline-progress {
 .nav-symbol-vor {
   width: 18px !important;
   height: 18px !important;
-  background-image: url("/nav-icons/vor.svg");
+  background-image: url("/nav-icons/vor.png");
 }
 
 .nav-symbol-dme {
@@ -4786,25 +4814,25 @@ html[data-theme="day"] .offline-progress {
 .nav-symbol-vordme {
   width: 19px !important;
   height: 19px !important;
-  background-image: url("/nav-icons/vordme.svg");
+  background-image: url("/nav-icons/vordme.png");
 }
 
 .nav-symbol-tacan {
   width: 18px !important;
   height: 18px !important;
-  background-image: url("/nav-icons/tacan.svg");
+  background-image: url("/nav-icons/tacan.png");
 }
 
 .nav-symbol-vortac {
   width: 19px !important;
   height: 19px !important;
-  background-image: url("/nav-icons/vortac.svg");
+  background-image: url("/nav-icons/vortac.png");
 }
 
 .nav-symbol-ndb {
   width: 19px !important;
   height: 19px !important;
-  background-image: url("/nav-icons/ndb.svg");
+  background-image: url("/nav-icons/ndb.png");
 }
 
 @media (max-width: 1360px) {

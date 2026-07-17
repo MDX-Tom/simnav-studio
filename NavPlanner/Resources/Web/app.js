@@ -1092,6 +1092,9 @@ const VECTOR_BASE_MAP_TYPES = new Set(["vector", "aero"]);
 const MAPLIBRE_ZOOM_OFFSET = 1;
 const VECTOR_PAN_BUFFER_MIN_PX = 520;
 const VECTOR_PAN_BUFFER_MAX_PX = 1120;
+const NAV_LABEL_SNAPSHOT_BUFFER_PX = 320;
+const NAV_LABEL_SNAPSHOT_SPRITE_PADDING_PX = 6;
+const NAV_LABEL_SNAPSHOT_ATLAS_MAX_WIDTH_PX = 2048;
 const ASYNC_CACHED_TILE_REQUEST_TIMEOUT_MS = 6500;
 const ASYNC_CACHED_TILE_RETRY_DELAYS_MS = [120, 260, 520, 1000, 1800, 3200, 5200, 8000];
 const ROUTE_WORLD_COPY_OFFSETS = [-720, -360, 0, 360, 720];
@@ -1307,12 +1310,20 @@ map.getPane("terrainPane").classList.add("terrain-pane");
 map.createPane("navPane");
 map.getPane("navPane").style.zIndex = 360;
 map.getPane("navPane").classList.add("nav-pane");
+map.createPane("navSymbolSnapshotPane");
+map.getPane("navSymbolSnapshotPane").style.zIndex = 360;
+map.getPane("navSymbolSnapshotPane").style.visibility = "hidden";
+map.getPane("navSymbolSnapshotPane").classList.add("nav-symbol-snapshot-pane");
 map.createPane("pointPane");
 map.getPane("pointPane").style.zIndex = 365;
 map.getPane("pointPane").classList.add("point-pane");
 map.createPane("navLabelPane");
 map.getPane("navLabelPane").style.zIndex = 370;
 map.getPane("navLabelPane").classList.add("nav-label-pane");
+map.createPane("navLabelSnapshotPane");
+map.getPane("navLabelSnapshotPane").style.zIndex = 370;
+map.getPane("navLabelSnapshotPane").style.visibility = "hidden";
+map.getPane("navLabelSnapshotPane").classList.add("nav-label-snapshot-pane");
 map.createPane("routeHitPane");
 map.getPane("routeHitPane").style.zIndex = 355;
 map.getPane("routeHitPane").classList.add("route-hit-pane");
@@ -1356,6 +1367,24 @@ let vectorMapPanStartZoom = 0;
 let vectorMapZoomStartPoint = null;
 let vectorMapZoomStartZoom = 0;
 let vectorMapPanBufferPx = 0;
+let navLabelSnapshotCanvas = null;
+let navLabelSnapshotFrame = 0;
+let navLabelSnapshotDirty = true;
+let navLabelSnapshotReady = false;
+let navLabelSnapshotItems = [];
+let navLabelSnapshotMode = "";
+let navLabelSnapshotZoomFrame = 0;
+let navLabelSnapshotPixelRatio = 1;
+let navLabelSnapshotAtlasCanvas = null;
+let navLabelSnapshotCssWidth = 1;
+let navLabelSnapshotCssHeight = 1;
+let detachedNavLabelPaneParent = null;
+let detachedNavLabelPaneNextSibling = null;
+let navSymbolSnapshotCanvas = null;
+let navSymbolSnapshotAtlasCanvas = null;
+let navSymbolSnapshotItems = [];
+let navSymbolSnapshotReady = false;
+const navSymbolSnapshotImages = new Map();
 let terrainDemSource = null;
 let pmtilesProtocol = null;
 let mapOverlayControlContainer = null;
@@ -1493,6 +1522,22 @@ function isQueuedTileResponse(response) {
 }
 
 /**
+ * 功能：识别后端用于表示“尚未准备好”的 1×1 PNG 占位瓦片。
+ * 输入：buffer 为瓦片响应的 ArrayBuffer。
+ * 输出：仅在响应是 1×1 PNG 时返回 true；在线底图真实瓦片始终大于该尺寸。
+ */
+function isAsyncCachedTilePlaceholderBuffer(buffer) {
+  const bytes = new Uint8Array(buffer || []);
+  if (bytes.length < 24
+    || bytes[0] !== 0x89 || bytes[1] !== 0x50 || bytes[2] !== 0x4e || bytes[3] !== 0x47
+    || bytes[4] !== 0x0d || bytes[5] !== 0x0a || bytes[6] !== 0x1a || bytes[7] !== 0x0a) {
+    return false;
+  }
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return view.getUint32(16) === 1 && view.getUint32(20) === 1;
+}
+
+/**
  * 功能：按指数退避轮询缺失瓦片，直到真实缓存瓦片可用。
  * 输入：tile 为图片元素，attempt 为当前重试次数，requestTile 为实际请求函数。
  * 输出：无返回值；通过定时器触发后续请求。
@@ -1615,6 +1660,10 @@ const AsyncCachedTileLayer = L.TileLayer.extend({
           throw new Error(`Tile request failed: ${response.status}`);
         }
         const buffer = await response.arrayBuffer();
+        if (isAsyncCachedTilePlaceholderBuffer(buffer)) {
+          scheduleAsyncCachedTileRetry(tile, attempt, requestTile);
+          return;
+        }
         const mimeType = supportedTileImageMimeType(buffer);
         if (!mimeType) {
           throw new Error("Tile response is not a supported image.");
@@ -1697,6 +1746,797 @@ function ensureVectorMapContainer() {
   vectorMapContainer.setAttribute("aria-hidden", "true");
   map.getContainer().insertBefore(vectorMapContainer, map.getContainer().firstChild);
   return vectorMapContainer;
+}
+
+function navLabelSnapshotColorIsVisible(color) {
+  if (!color || color === "transparent") {
+    return false;
+  }
+  const match = color.match(/^rgba?\(([^)]+)\)$/i);
+  if (!match) {
+    return true;
+  }
+  const parts = match[1].split(",").map((value) => value.trim());
+  return parts.length < 4 || Number(parts[3]) > 0;
+}
+
+function navLabelSnapshotNumber(value, fallback = 0) {
+  const number = Number.parseFloat(String(value ?? ""));
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function navLabelSnapshotRoundedRect(context, x, y, width, height, radius) {
+  const boundedRadius = Math.max(0, Math.min(radius, width / 2, height / 2));
+  context.beginPath();
+  context.moveTo(x + boundedRadius, y);
+  context.lineTo(x + width - boundedRadius, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + boundedRadius);
+  context.lineTo(x + width, y + height - boundedRadius);
+  context.quadraticCurveTo(x + width, y + height, x + width - boundedRadius, y + height);
+  context.lineTo(x + boundedRadius, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - boundedRadius);
+  context.lineTo(x, y + boundedRadius);
+  context.quadraticCurveTo(x, y, x + boundedRadius, y);
+  context.closePath();
+}
+
+function navLabelSnapshotFont(style) {
+  if (style.font && style.font !== "") {
+    return style.font;
+  }
+  return [style.fontStyle, style.fontVariant, style.fontWeight, style.fontSize, style.fontFamily]
+    .filter((value) => value && value !== "normal")
+    .join(" ");
+}
+
+function navLabelSnapshotText(style, rawText) {
+  const text = String(rawText || "");
+  if (style.textTransform === "uppercase") return text.toUpperCase();
+  if (style.textTransform === "lowercase") return text.toLowerCase();
+  return text;
+}
+
+function navLabelSnapshotTextWidth(context, text, letterSpacing) {
+  const characters = Array.from(text);
+  if (characters.length <= 1 || !letterSpacing) {
+    return context.measureText(text).width;
+  }
+  return characters.reduce((width, character) => width + context.measureText(character).width, 0)
+    + letterSpacing * (characters.length - 1);
+}
+
+function navLabelSnapshotFillText(context, text, centerX, centerY, letterSpacing, color) {
+  context.fillStyle = color;
+  context.textAlign = "left";
+  context.textBaseline = "middle";
+  if ("letterSpacing" in context) {
+    context.letterSpacing = `${letterSpacing || 0}px`;
+    context.textAlign = "center";
+    context.fillText(text, centerX, centerY);
+    context.letterSpacing = "0px";
+    return;
+  }
+  const characters = Array.from(text);
+  if (characters.length <= 1 || !letterSpacing) {
+    context.textAlign = "center";
+    context.fillText(text, centerX, centerY);
+    return;
+  }
+  let x = centerX - navLabelSnapshotTextWidth(context, text, letterSpacing) / 2;
+  characters.forEach((character) => {
+    context.fillText(character, x, centerY);
+    x += context.measureText(character).width + letterSpacing;
+  });
+}
+
+function navLabelSnapshotDrawBox(context, style, x, y, width, height) {
+  const background = style.backgroundColor;
+  const borderWidth = navLabelSnapshotNumber(style.borderTopWidth);
+  const borderColor = style.borderTopColor;
+  if (!navLabelSnapshotColorIsVisible(background) && !(borderWidth > 0 && navLabelSnapshotColorIsVisible(borderColor))) {
+    return;
+  }
+  const radius = navLabelSnapshotNumber(style.borderTopLeftRadius);
+  navLabelSnapshotRoundedRect(context, x, y, width, height, radius);
+  if (navLabelSnapshotColorIsVisible(background)) {
+    context.fillStyle = background;
+    context.fill();
+  }
+  if (borderWidth > 0 && navLabelSnapshotColorIsVisible(borderColor)) {
+    context.lineWidth = borderWidth;
+    context.strokeStyle = borderColor;
+    context.stroke();
+  }
+}
+
+function navLabelSnapshotDrawAirwayDirection(context, element, x, y, width, height) {
+  const centerY = y + height / 2;
+  if (element.classList.contains("dir-f")) {
+    const style = window.getComputedStyle(element, "::after");
+    const color = style.borderLeftColor;
+    const triangleWidth = navLabelSnapshotNumber(style.borderLeftWidth, 4);
+    const triangleHeight = navLabelSnapshotNumber(style.borderTopWidth, 2.5);
+    if (navLabelSnapshotColorIsVisible(color)) {
+      context.beginPath();
+      context.moveTo(x + width, centerY - triangleHeight);
+      context.lineTo(x + width + triangleWidth, centerY);
+      context.lineTo(x + width, centerY + triangleHeight);
+      context.closePath();
+      context.fillStyle = color;
+      context.fill();
+    }
+  }
+  if (element.classList.contains("dir-b")) {
+    const style = window.getComputedStyle(element, "::before");
+    const color = style.borderRightColor;
+    const triangleWidth = navLabelSnapshotNumber(style.borderRightWidth, 4);
+    const triangleHeight = navLabelSnapshotNumber(style.borderTopWidth, 2.5);
+    if (navLabelSnapshotColorIsVisible(color)) {
+      context.beginPath();
+      context.moveTo(x, centerY - triangleHeight);
+      context.lineTo(x - triangleWidth, centerY);
+      context.lineTo(x, centerY + triangleHeight);
+      context.closePath();
+      context.fillStyle = color;
+      context.fill();
+    }
+  }
+}
+
+function navLabelSnapshotItem(label, element, mapRect, canvasLeft, canvasTop, canvasRight, canvasBottom) {
+  const rect = element.getBoundingClientRect();
+  if (!rect.width || !rect.height || rect.right < canvasLeft || rect.left > canvasRight || rect.bottom < canvasTop || rect.top > canvasBottom) {
+    return null;
+  }
+  const style = window.getComputedStyle(element);
+  if (style.display === "none" || style.visibility === "hidden" || navLabelSnapshotNumber(style.opacity, 1) <= 0) {
+    return null;
+  }
+  const marker = label._plannerNavLabelMarker;
+  if (!marker?.getLatLng) {
+    return null;
+  }
+  const latlng = marker.getLatLng();
+  const markerPoint = map.latLngToContainerPoint(latlng);
+  return {
+    element,
+    style,
+    text: navLabelSnapshotText(style, element.textContent),
+    isAirwayBadge: element.classList.contains("nav-airway-badge"),
+    latlng: L.latLng(latlng.lat, latlng.lng),
+    width: rect.width,
+    height: rect.height,
+    initialX: rect.left - canvasLeft,
+    initialY: rect.top - canvasTop,
+    offsetX: rect.left - mapRect.left - markerPoint.x,
+    offsetY: rect.top - mapRect.top - markerPoint.y,
+  };
+}
+
+function navLabelSnapshotDrawItem(context, item, x, y) {
+  const { element, style, text, isAirwayBadge, width, height } = item;
+  const centerX = x + width / 2;
+  const centerY = y + height / 2;
+  if (!text) {
+    return false;
+  }
+
+  context.save();
+  context.globalAlpha = navLabelSnapshotNumber(style.opacity, 1);
+  navLabelSnapshotDrawBox(context, style, x, y, width, height);
+  context.font = navLabelSnapshotFont(style);
+  context.fontKerning = "normal";
+  const letterSpacing = style.letterSpacing === "normal" ? 0 : navLabelSnapshotNumber(style.letterSpacing);
+  if (!isAirwayBadge && state.baseMap !== "vector") {
+    navLabelSnapshotFillText(context, text, centerX, centerY + 1, letterSpacing, "rgba(255, 255, 255, 0.72)");
+    navLabelSnapshotFillText(context, text, centerX + 1, centerY, letterSpacing, "rgba(255, 255, 255, 0.52)");
+  }
+  navLabelSnapshotFillText(context, text, centerX, centerY, letterSpacing, style.color);
+  if (isAirwayBadge) {
+    navLabelSnapshotDrawAirwayDirection(context, element, x, y, width, height);
+  }
+  context.restore();
+  return true;
+}
+
+function buildNavLabelSnapshotAtlas(items, pixelRatio) {
+  if (!items.length) {
+    navLabelSnapshotAtlasCanvas = null;
+    return false;
+  }
+  const padding = NAV_LABEL_SNAPSHOT_SPRITE_PADDING_PX;
+  let cursorX = 0;
+  let cursorY = 0;
+  let rowHeight = 0;
+  let atlasWidth = 0;
+  items.forEach((item) => {
+    const spriteWidth = Math.max(1, Math.ceil(item.width + padding * 2));
+    const spriteHeight = Math.max(1, Math.ceil(item.height + padding * 2));
+    if (cursorX > 0 && cursorX + spriteWidth > NAV_LABEL_SNAPSHOT_ATLAS_MAX_WIDTH_PX) {
+      cursorX = 0;
+      cursorY += rowHeight;
+      rowHeight = 0;
+    }
+    item.spriteX = cursorX;
+    item.spriteY = cursorY;
+    item.spriteWidth = spriteWidth;
+    item.spriteHeight = spriteHeight;
+    item.spritePadding = padding;
+    cursorX += spriteWidth;
+    rowHeight = Math.max(rowHeight, spriteHeight);
+    atlasWidth = Math.max(atlasWidth, cursorX);
+  });
+  const atlasHeight = cursorY + rowHeight;
+  const canvas = navLabelSnapshotAtlasCanvas || document.createElement("canvas");
+  navLabelSnapshotAtlasCanvas = canvas;
+  canvas.width = Math.max(1, Math.ceil(atlasWidth * pixelRatio));
+  canvas.height = Math.max(1, Math.ceil(atlasHeight * pixelRatio));
+  const context = canvas.getContext("2d", { alpha: true });
+  if (!context) {
+    navLabelSnapshotAtlasCanvas = null;
+    return false;
+  }
+  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  context.clearRect(0, 0, atlasWidth, atlasHeight);
+  context.imageSmoothingEnabled = true;
+  items.forEach((item) => {
+    navLabelSnapshotDrawItem(
+      context,
+      item,
+      item.spriteX + item.spritePadding,
+      item.spriteY + item.spritePadding,
+    );
+  });
+  return true;
+}
+
+function navLabelSnapshotDrawCachedItem(context, item, x, y) {
+  if (!navLabelSnapshotAtlasCanvas || !item.spriteWidth || !item.spriteHeight) {
+    return navLabelSnapshotDrawItem(context, item, x, y);
+  }
+  context.drawImage(
+    navLabelSnapshotAtlasCanvas,
+    item.spriteX * navLabelSnapshotPixelRatio,
+    item.spriteY * navLabelSnapshotPixelRatio,
+    item.spriteWidth * navLabelSnapshotPixelRatio,
+    item.spriteHeight * navLabelSnapshotPixelRatio,
+    x - item.spritePadding,
+    y - item.spritePadding,
+    item.spriteWidth,
+    item.spriteHeight,
+  );
+  return true;
+}
+
+function navSymbolSnapshotBackgroundUrl(backgroundImage) {
+  const match = String(backgroundImage || "").match(/^url\(["']?(.*?)["']?\)$/i);
+  return match?.[1] || "";
+}
+
+/**
+ * 功能：为 Canvas 缩放快照选择与 SVG 导航台图标同款的 PNG 资源。
+ * 输入：url 为正常 DOM 图标使用的背景图 URL。
+ * 输出：仅把 /nav-icons/*.svg 映射为同路径 PNG，其他资源保持不变。
+ */
+function navSymbolSnapshotRasterUrl(url) {
+  const source = String(url || "");
+  if (!source) {
+    return "";
+  }
+  try {
+    const parsed = new URL(source, window.location.href);
+    if (/^\/nav-icons\/[^/]+\.svg$/i.test(parsed.pathname)) {
+      parsed.pathname = parsed.pathname.replace(/\.svg$/i, ".png");
+      return parsed.href;
+    }
+  } catch (_) {
+    // 保留非标准 URL；下方正则仍可处理相对路径。
+  }
+  return source.replace(/(\/nav-icons\/[^/?#]+)\.svg(?=([?#]|$))/i, "$1.png");
+}
+
+function navSymbolSnapshotImage(url) {
+  const snapshotUrl = navSymbolSnapshotRasterUrl(url);
+  if (!snapshotUrl) {
+    return null;
+  }
+  if (navSymbolSnapshotImages.has(snapshotUrl)) {
+    return navSymbolSnapshotImages.get(snapshotUrl);
+  }
+  const image = new Image();
+  image.decoding = "async";
+  image.addEventListener("load", scheduleNavLabelSnapshot, { once: true });
+  navSymbolSnapshotImages.set(snapshotUrl, image);
+  image.src = snapshotUrl;
+  return image;
+}
+
+function navSymbolSnapshotItem(element, mapRect, canvasLeft, canvasTop, canvasRight, canvasBottom) {
+  const rect = element.getBoundingClientRect();
+  if (!rect.width || !rect.height || rect.right < canvasLeft || rect.left > canvasRight || rect.bottom < canvasTop || rect.top > canvasBottom) {
+    return null;
+  }
+  const marker = element._plannerNavSymbolMarker;
+  if (!marker?.getLatLng) {
+    return null;
+  }
+  const style = window.getComputedStyle(element);
+  if (style.display === "none" || style.visibility === "hidden" || navLabelSnapshotNumber(style.opacity, 1) <= 0) {
+    return null;
+  }
+  let kind = "box";
+  let image = null;
+  if (element.classList.contains("nav-symbol-small-waypoint")) {
+    kind = "small-waypoint";
+  } else if (element.classList.contains("nav-symbol-waypoint")) {
+    kind = "waypoint";
+  } else {
+    const imageUrl = navSymbolSnapshotBackgroundUrl(style.backgroundImage);
+    if (imageUrl) {
+      image = navSymbolSnapshotImage(imageUrl);
+      if (!image?.complete || !image.naturalWidth) {
+        return null;
+      }
+      kind = "image";
+    }
+  }
+  const latlng = marker.getLatLng();
+  const markerPoint = map.latLngToContainerPoint(latlng);
+  return {
+    element,
+    style,
+    kind,
+    image,
+    latlng: L.latLng(latlng.lat, latlng.lng),
+    width: rect.width,
+    height: rect.height,
+    initialX: rect.left - canvasLeft,
+    initialY: rect.top - canvasTop,
+    offsetX: rect.left - mapRect.left - markerPoint.x,
+    offsetY: rect.top - mapRect.top - markerPoint.y,
+  };
+}
+
+function navSymbolSnapshotDrawItem(context, item, x, y) {
+  const { style, kind, image, width, height } = item;
+  context.save();
+  context.globalAlpha = navLabelSnapshotNumber(style.opacity, 1);
+  if (kind === "small-waypoint") {
+    context.beginPath();
+    context.moveTo(x + width / 2, y);
+    context.lineTo(x + width, y + height);
+    context.lineTo(x, y + height);
+    context.closePath();
+    context.fillStyle = style.borderBottomColor;
+    context.fill();
+  } else if (kind === "image" && image) {
+    context.drawImage(image, x, y, width, height);
+  } else if (kind === "waypoint") {
+    const boxWidth = navLabelSnapshotNumber(style.width, width);
+    const boxHeight = navLabelSnapshotNumber(style.height, height);
+    context.translate(x + width / 2, y + height / 2);
+    context.rotate(Math.PI / 4);
+    if (style.boxShadow !== "none") {
+      context.fillStyle = "rgba(255, 255, 255, 0.72)";
+      context.fillRect(-boxWidth / 2 - 1, -boxHeight / 2 - 1, boxWidth + 2, boxHeight + 2);
+    }
+    navLabelSnapshotDrawBox(context, style, -boxWidth / 2, -boxHeight / 2, boxWidth, boxHeight);
+  } else {
+    navLabelSnapshotDrawBox(context, style, x, y, width, height);
+  }
+  context.restore();
+  return true;
+}
+
+function buildNavSymbolSnapshotAtlas(items, pixelRatio) {
+  if (!items.length) {
+    navSymbolSnapshotAtlasCanvas = null;
+    return false;
+  }
+  const padding = 2;
+  let cursorX = 0;
+  let cursorY = 0;
+  let rowHeight = 0;
+  let atlasWidth = 0;
+  items.forEach((item) => {
+    const spriteWidth = Math.max(1, Math.ceil(item.width + padding * 2));
+    const spriteHeight = Math.max(1, Math.ceil(item.height + padding * 2));
+    if (cursorX > 0 && cursorX + spriteWidth > NAV_LABEL_SNAPSHOT_ATLAS_MAX_WIDTH_PX) {
+      cursorX = 0;
+      cursorY += rowHeight;
+      rowHeight = 0;
+    }
+    item.spriteX = cursorX;
+    item.spriteY = cursorY;
+    item.spriteWidth = spriteWidth;
+    item.spriteHeight = spriteHeight;
+    item.spritePadding = padding;
+    cursorX += spriteWidth;
+    rowHeight = Math.max(rowHeight, spriteHeight);
+    atlasWidth = Math.max(atlasWidth, cursorX);
+  });
+  const atlasHeight = cursorY + rowHeight;
+  const canvas = navSymbolSnapshotAtlasCanvas || document.createElement("canvas");
+  navSymbolSnapshotAtlasCanvas = canvas;
+  canvas.width = Math.max(1, Math.ceil(atlasWidth * pixelRatio));
+  canvas.height = Math.max(1, Math.ceil(atlasHeight * pixelRatio));
+  const context = canvas.getContext("2d", { alpha: true });
+  if (!context) {
+    navSymbolSnapshotAtlasCanvas = null;
+    return false;
+  }
+  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  context.clearRect(0, 0, atlasWidth, atlasHeight);
+  context.imageSmoothingEnabled = true;
+  items.forEach((item) => {
+    navSymbolSnapshotDrawItem(
+      context,
+      item,
+      item.spriteX + item.spritePadding,
+      item.spriteY + item.spritePadding,
+    );
+  });
+  return true;
+}
+
+function navSymbolSnapshotDrawCachedItem(context, item, x, y) {
+  if (!navSymbolSnapshotAtlasCanvas || !item.spriteWidth || !item.spriteHeight) {
+    return navSymbolSnapshotDrawItem(context, item, x, y);
+  }
+  context.drawImage(
+    navSymbolSnapshotAtlasCanvas,
+    item.spriteX * navLabelSnapshotPixelRatio,
+    item.spriteY * navLabelSnapshotPixelRatio,
+    item.spriteWidth * navLabelSnapshotPixelRatio,
+    item.spriteHeight * navLabelSnapshotPixelRatio,
+    x - item.spritePadding,
+    y - item.spritePadding,
+    item.spriteWidth,
+    item.spriteHeight,
+  );
+  return true;
+}
+
+function ensureNavSymbolSnapshotCanvas() {
+  if (navSymbolSnapshotCanvas) {
+    return navSymbolSnapshotCanvas;
+  }
+  const pane = map.getPane("navSymbolSnapshotPane");
+  if (!pane) {
+    return null;
+  }
+  navSymbolSnapshotCanvas = document.createElement("canvas");
+  navSymbolSnapshotCanvas.className = "nav-symbol-snapshot-canvas";
+  navSymbolSnapshotCanvas.setAttribute("aria-hidden", "true");
+  pane.appendChild(navSymbolSnapshotCanvas);
+  return navSymbolSnapshotCanvas;
+}
+
+function renderNavSymbolSnapshot({ mapRect, canvasLeft, canvasTop, cssWidth, cssHeight, pixelRatio, mapPanePosition }) {
+  navSymbolSnapshotItems.forEach((item) => item.element.classList.remove("is-nav-symbol-snapshotted"));
+  const livePane = map.getPane("navPane");
+  const snapshotPane = map.getPane("navSymbolSnapshotPane");
+  const canvas = ensureNavSymbolSnapshotCanvas();
+  if (!livePane || !snapshotPane || !canvas) {
+    navSymbolSnapshotReady = false;
+    return false;
+  }
+  const pixelWidth = Math.ceil(cssWidth * pixelRatio);
+  const pixelHeight = Math.ceil(cssHeight * pixelRatio);
+  if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+    canvas.width = pixelWidth;
+    canvas.height = pixelHeight;
+  }
+  canvas.style.width = `${cssWidth}px`;
+  canvas.style.height = `${cssHeight}px`;
+  canvas.style.left = `${-mapPanePosition.x - NAV_LABEL_SNAPSHOT_BUFFER_PX}px`;
+  canvas.style.top = `${-mapPanePosition.y - NAV_LABEL_SNAPSHOT_BUFFER_PX}px`;
+  const context = canvas.getContext("2d", { alpha: true });
+  if (!context) {
+    navSymbolSnapshotReady = false;
+    return false;
+  }
+  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  context.clearRect(0, 0, cssWidth, cssHeight);
+  context.imageSmoothingEnabled = true;
+  const items = [];
+  Array.from(livePane.querySelectorAll(".nav-symbol")).forEach((element) => {
+    const item = navSymbolSnapshotItem(
+      element,
+      mapRect,
+      canvasLeft,
+      canvasTop,
+      canvasLeft + cssWidth,
+      canvasTop + cssHeight,
+    );
+    if (item) {
+      items.push(item);
+    }
+  });
+  buildNavSymbolSnapshotAtlas(items, pixelRatio);
+  let drawnCount = 0;
+  items.forEach((item) => {
+    if (navSymbolSnapshotDrawCachedItem(context, item, item.initialX, item.initialY)) {
+      item.element.classList.add("is-nav-symbol-snapshotted");
+      drawnCount += 1;
+    }
+  });
+  navSymbolSnapshotItems = items;
+  navSymbolSnapshotReady = drawnCount > 0;
+  snapshotPane.style.visibility = "hidden";
+  return navSymbolSnapshotReady;
+}
+
+function ensureNavLabelSnapshotCanvas() {
+  if (navLabelSnapshotCanvas) {
+    return navLabelSnapshotCanvas;
+  }
+  const pane = map.getPane("navLabelSnapshotPane");
+  if (!pane) {
+    return null;
+  }
+  navLabelSnapshotCanvas = document.createElement("canvas");
+  navLabelSnapshotCanvas.className = "nav-label-snapshot-canvas";
+  navLabelSnapshotCanvas.setAttribute("aria-hidden", "true");
+  pane.appendChild(navLabelSnapshotCanvas);
+  return navLabelSnapshotCanvas;
+}
+
+function detachNavLabelPane() {
+  const livePane = map.getPane("navLabelPane");
+  if (!livePane?.parentNode || detachedNavLabelPaneParent) {
+    return;
+  }
+  detachedNavLabelPaneParent = livePane.parentNode;
+  detachedNavLabelPaneNextSibling = livePane.nextSibling;
+  livePane.remove();
+}
+
+function restoreNavLabelPane() {
+  const livePane = map.getPane("navLabelPane");
+  const parent = detachedNavLabelPaneParent;
+  if (!livePane || !parent) {
+    detachedNavLabelPaneParent = null;
+    detachedNavLabelPaneNextSibling = null;
+    return;
+  }
+  const nextSibling = detachedNavLabelPaneNextSibling?.parentNode === parent
+    ? detachedNavLabelPaneNextSibling
+    : null;
+  parent.insertBefore(livePane, nextSibling);
+  detachedNavLabelPaneParent = null;
+  detachedNavLabelPaneNextSibling = null;
+}
+
+function renderNavLabelSnapshot({ force = false } = {}) {
+  if (!force && (map.getContainer().classList.contains("is-map-moving") || map.getContainer().classList.contains("is-smooth-zooming"))) {
+    return false;
+  }
+  const livePane = map.getPane("navLabelPane");
+  const snapshotPane = map.getPane("navLabelSnapshotPane");
+  const canvas = ensureNavLabelSnapshotCanvas();
+  if (!livePane || !snapshotPane || !canvas) {
+    navLabelSnapshotReady = false;
+    return false;
+  }
+  const labels = Array.from(livePane.querySelectorAll(".nav-label"));
+  if (!labels.length) {
+    navLabelSnapshotReady = false;
+    navLabelSnapshotDirty = true;
+    navLabelSnapshotItems = [];
+    navLabelSnapshotAtlasCanvas = null;
+    snapshotPane.style.visibility = "hidden";
+    return false;
+  }
+
+  const mapRect = map.getContainer().getBoundingClientRect();
+  const buffer = NAV_LABEL_SNAPSHOT_BUFFER_PX;
+  const canvasLeft = mapRect.left - buffer;
+  const canvasTop = mapRect.top - buffer;
+  const cssWidth = Math.max(1, Math.ceil(mapRect.width + buffer * 2));
+  const cssHeight = Math.max(1, Math.ceil(mapRect.height + buffer * 2));
+  navLabelSnapshotCssWidth = cssWidth;
+  navLabelSnapshotCssHeight = cssHeight;
+  const pixelRatio = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  navLabelSnapshotPixelRatio = pixelRatio;
+  const pixelWidth = Math.ceil(cssWidth * pixelRatio);
+  const pixelHeight = Math.ceil(cssHeight * pixelRatio);
+  if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+    canvas.width = pixelWidth;
+    canvas.height = pixelHeight;
+  }
+  canvas.style.width = `${cssWidth}px`;
+  canvas.style.height = `${cssHeight}px`;
+  const mapPanePosition = map._getMapPanePos?.() || L.point(0, 0);
+  canvas.style.left = `${-mapPanePosition.x - buffer}px`;
+  canvas.style.top = `${-mapPanePosition.y - buffer}px`;
+
+  const context = canvas.getContext("2d", { alpha: true });
+  if (!context) {
+    navLabelSnapshotReady = false;
+    return false;
+  }
+  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  context.clearRect(0, 0, cssWidth, cssHeight);
+  context.imageSmoothingEnabled = true;
+  const items = [];
+  labels.forEach((label) => {
+    const visual = label.querySelector(".nav-airway-badge, span");
+    const item = visual ? navLabelSnapshotItem(
+      label,
+      visual,
+      mapRect,
+      canvasLeft,
+      canvasTop,
+      canvasLeft + cssWidth,
+      canvasTop + cssHeight,
+    ) : null;
+    if (item?.text) {
+      items.push(item);
+    }
+  });
+  buildNavLabelSnapshotAtlas(items, pixelRatio);
+  let drawnCount = 0;
+  items.forEach((item) => {
+    if (navLabelSnapshotDrawCachedItem(context, item, item.initialX, item.initialY)) {
+      drawnCount += 1;
+    }
+  });
+  renderNavSymbolSnapshot({
+    mapRect,
+    canvasLeft,
+    canvasTop,
+    cssWidth,
+    cssHeight,
+    pixelRatio,
+    mapPanePosition,
+  });
+  navLabelSnapshotItems = items;
+  navLabelSnapshotDirty = false;
+  navLabelSnapshotReady = drawnCount > 0;
+  snapshotPane.style.visibility = "hidden";
+  return navLabelSnapshotReady;
+}
+
+function markNavLabelSnapshotDirty() {
+  navLabelSnapshotDirty = true;
+  if (!navLabelSnapshotMode) {
+    navLabelSnapshotReady = false;
+    navSymbolSnapshotReady = false;
+  }
+}
+
+function scheduleNavLabelSnapshot() {
+  markNavLabelSnapshotDirty();
+  if (navLabelSnapshotMode) {
+    return;
+  }
+  if (navLabelSnapshotFrame) {
+    return;
+  }
+  navLabelSnapshotFrame = window.requestAnimationFrame(() => {
+    navLabelSnapshotFrame = 0;
+    renderNavLabelSnapshot();
+  });
+}
+
+function renderNavLabelZoomSnapshot() {
+  navLabelSnapshotZoomFrame = 0;
+  if (navLabelSnapshotMode !== "zoom" || !navLabelSnapshotReady || !navLabelSnapshotCanvas) {
+    return;
+  }
+  const snapshotPane = map.getPane("navLabelSnapshotPane");
+  if (!snapshotPane) {
+    return;
+  }
+  const buffer = NAV_LABEL_SNAPSHOT_BUFFER_PX;
+  const cssWidth = navLabelSnapshotCssWidth;
+  const cssHeight = navLabelSnapshotCssHeight;
+  const mapPanePosition = map._getMapPanePos?.() || L.point(0, 0);
+  navLabelSnapshotCanvas.style.left = `${-mapPanePosition.x - buffer}px`;
+  navLabelSnapshotCanvas.style.top = `${-mapPanePosition.y - buffer}px`;
+  const context = navLabelSnapshotCanvas.getContext("2d", { alpha: true });
+  if (!context) {
+    return;
+  }
+  context.setTransform(navLabelSnapshotPixelRatio, 0, 0, navLabelSnapshotPixelRatio, 0, 0);
+  context.clearRect(0, 0, cssWidth, cssHeight);
+  navLabelSnapshotItems.forEach((item) => {
+    const point = map.latLngToContainerPoint(item.latlng);
+    const x = buffer + point.x + item.offsetX;
+    const y = buffer + point.y + item.offsetY;
+    if (x + item.width < 0 || y + item.height < 0 || x > cssWidth || y > cssHeight) {
+      return;
+    }
+    navLabelSnapshotDrawCachedItem(context, item, x, y);
+  });
+  renderNavSymbolZoomSnapshot();
+}
+
+function renderNavSymbolZoomSnapshot() {
+  if (!navSymbolSnapshotReady || !navSymbolSnapshotCanvas) {
+    return;
+  }
+  const snapshotPane = map.getPane("navSymbolSnapshotPane");
+  if (!snapshotPane) {
+    return;
+  }
+  const buffer = NAV_LABEL_SNAPSHOT_BUFFER_PX;
+  const cssWidth = navLabelSnapshotCssWidth;
+  const cssHeight = navLabelSnapshotCssHeight;
+  const mapPanePosition = map._getMapPanePos?.() || L.point(0, 0);
+  navSymbolSnapshotCanvas.style.left = `${-mapPanePosition.x - buffer}px`;
+  navSymbolSnapshotCanvas.style.top = `${-mapPanePosition.y - buffer}px`;
+  const context = navSymbolSnapshotCanvas.getContext("2d", { alpha: true });
+  if (!context) {
+    return;
+  }
+  context.setTransform(navLabelSnapshotPixelRatio, 0, 0, navLabelSnapshotPixelRatio, 0, 0);
+  context.clearRect(0, 0, cssWidth, cssHeight);
+  navSymbolSnapshotItems.forEach((item) => {
+    const point = map.latLngToContainerPoint(item.latlng);
+    const x = buffer + point.x + item.offsetX;
+    const y = buffer + point.y + item.offsetY;
+    if (x + item.width < 0 || y + item.height < 0 || x > cssWidth || y > cssHeight) {
+      return;
+    }
+    navSymbolSnapshotDrawCachedItem(context, item, x, y);
+  });
+}
+
+function scheduleNavLabelZoomSnapshot() {
+  if (navLabelSnapshotMode !== "zoom" || navLabelSnapshotZoomFrame) {
+    return;
+  }
+  navLabelSnapshotZoomFrame = window.requestAnimationFrame(renderNavLabelZoomSnapshot);
+}
+
+function activateNavLabelSnapshot(mode = "pan") {
+  const canReuseActiveSnapshot = Boolean(navLabelSnapshotMode && navLabelSnapshotReady);
+  if (!canReuseActiveSnapshot
+    && (navLabelSnapshotDirty || !navLabelSnapshotReady)
+    && !renderNavLabelSnapshot({ force: true })) {
+    return false;
+  }
+  const snapshotPane = map.getPane("navLabelSnapshotPane");
+  if (!snapshotPane) {
+    return false;
+  }
+  navLabelSnapshotMode = mode;
+  snapshotPane.style.visibility = "visible";
+  map.getContainer().classList.add("has-nav-label-snapshot");
+  if (mode === "zoom") {
+    const symbolSnapshotPane = map.getPane("navSymbolSnapshotPane");
+    if (navSymbolSnapshotReady && symbolSnapshotPane) {
+      symbolSnapshotPane.style.visibility = "visible";
+      map.getContainer().classList.add("has-nav-symbol-snapshot");
+    }
+    renderNavLabelZoomSnapshot();
+    detachNavLabelPane();
+  }
+  return true;
+}
+
+function deactivateNavLabelSnapshot({ rebuild = true } = {}) {
+  if (navLabelSnapshotZoomFrame) {
+    window.cancelAnimationFrame(navLabelSnapshotZoomFrame);
+    navLabelSnapshotZoomFrame = 0;
+  }
+  navLabelSnapshotMode = "";
+  restoreNavLabelPane();
+  map.getContainer().classList.remove("has-nav-label-snapshot");
+  map.getContainer().classList.remove("has-nav-symbol-snapshot");
+  const snapshotPane = map.getPane("navLabelSnapshotPane");
+  if (snapshotPane) {
+    snapshotPane.style.visibility = "hidden";
+  }
+  const symbolSnapshotPane = map.getPane("navSymbolSnapshotPane");
+  if (symbolSnapshotPane) {
+    symbolSnapshotPane.style.visibility = "hidden";
+  }
+  if (rebuild) {
+    scheduleNavLabelSnapshot();
+  }
 }
 
 /**
@@ -2934,6 +3774,7 @@ function handleOfflineTerrainUnavailable({ openManager = false, preserveSettings
     updateOfflineMapControlVisibility();
     updateMapTypeOptionState();
     map.invalidateSize({ pan: false });
+    scheduleNavLabelSnapshot();
   }
   setStatus(t(messageKey), true);
   if (openManager) {
@@ -2991,6 +3832,7 @@ function setBaseMap(type, { preserveSettingsMode = false, openManagerWhenUnavail
   updateOfflineMapControlVisibility();
   updateMapTypeOptionState();
   map.invalidateSize({ pan: false });
+  scheduleNavLabelSnapshot();
   return true;
 }
 
@@ -3206,6 +4048,7 @@ function applyMapOverlayVisibility() {
   setLayerGroupVisible(labelLayerGroup, true);
   setLayerGroupVisible(selectionHighlightLayerGroup, true);
   updateMapOverlayControlState();
+  scheduleNavLabelSnapshot();
 }
 
 function toggleMapOverlay(key) {
@@ -7777,6 +8620,14 @@ function addNavLabel(lat, lon, text, className, options = {}) {
       iconAnchor: isAirwayLabel ? [airwayWidth / 2, airwayHeight / 2] : undefined,
     }),
   }).addTo(options.group || navLabelLayerGroup);
+  const linkMarkerElement = () => {
+    const markerElement = marker.getElement();
+    if (markerElement) {
+      markerElement._plannerNavLabelMarker = marker;
+    }
+  };
+  marker.on("add", linkMarkerElement);
+  linkMarkerElement();
   if (options.onClick) {
     marker.on("click", (event) => {
       scheduleMapPopupAction(event, () => options.onClick(event.latlng, event));
@@ -8318,6 +9169,7 @@ function setNavAirwayHighlight(name, active) {
   labels.forEach((marker) => {
     marker.getElement()?.classList.toggle("active", active);
   });
+  scheduleNavLabelSnapshot();
 }
 
 /**
@@ -8427,6 +9279,14 @@ function drawNavIcon(point, className, symbolClass, options = {}) {
       iconAnchor: symbolAnchor,
     }),
   }).addTo(group);
+  const linkSymbolElement = () => {
+    const markerElement = marker.getElement();
+    if (markerElement) {
+      markerElement._plannerNavSymbolMarker = marker;
+    }
+  };
+  marker.on("add", linkSymbolElement);
+  linkSymbolElement();
   marker.on("click", (event) => {
     scheduleMapPopupAction(event, () => showNavPointPopup(point, event.latlng));
   });
@@ -8559,6 +9419,7 @@ function removeNavOverlayLayerAfterPaint(layer) {
     window.requestAnimationFrame(() => {
       if (map.hasLayer(layer)) {
         map.removeLayer(layer);
+        scheduleNavLabelSnapshot();
       }
     });
   });
@@ -8830,6 +9691,7 @@ function drawNavOverlay(payload) {
     previousNavPointLayerGroup,
     previousNavPointLabelLayerGroup,
   ].forEach(removeNavOverlayLayerAfterPaint);
+  scheduleNavLabelSnapshot();
   } catch (error) {
     navLayerGroup.clearLayers();
     navLabelLayerGroup.clearLayers();
@@ -8937,13 +9799,22 @@ async function refreshNavOverlay() {
 }
 
 const refreshNavOverlayDebounced = debounce(refreshNavOverlay, NAV_OVERLAY_REFRESH_DELAY_MS);
-const clearZoomingClassDebounced = debounce(() => map.getContainer().classList.remove("is-smooth-zooming"), MAP_ZOOM.wheelIdleDelay);
+const clearZoomingClassDebounced = debounce(() => {
+  if (navLabelSnapshotMode === "zoom") {
+    deactivateNavLabelSnapshot();
+  } else {
+    scheduleNavLabelSnapshot();
+  }
+  map.getContainer().classList.remove("is-smooth-zooming");
+}, MAP_ZOOM.wheelIdleDelay);
 map.on("zoomstart", () => {
+  activateNavLabelSnapshot("zoom");
   map.getContainer().classList.add("is-smooth-zooming");
   finishVectorMapPanMirror();
   beginVectorMapZoomMirror();
 });
 map.on("zoom", () => {
+  scheduleNavLabelZoomSnapshot();
   if (vectorMapZoomMirrorActive) {
     scheduleVectorMapZoomMirror();
     return;
@@ -8957,7 +9828,10 @@ map.on("zoomend", () => {
 map.on("movestart", () => {
   map.getContainer().classList.add("is-map-moving");
 });
-map.on("dragstart", beginVectorMapPanMirror);
+map.on("dragstart", () => {
+  activateNavLabelSnapshot();
+  beginVectorMapPanMirror();
+});
 map.on("drag", scheduleVectorMapPanMirror);
 map.on("dragend", scheduleVectorMapPanMirror);
 map.on("move", () => {
@@ -8973,6 +9847,9 @@ map.on("move", () => {
 });
 map.on("moveend", () => {
   map.getContainer().classList.remove("is-map-moving");
+  if (navLabelSnapshotMode !== "zoom") {
+    deactivateNavLabelSnapshot();
+  }
   if (vectorMapPanMirrorActive) {
     finishVectorMapPanMirror();
     return;
@@ -8983,9 +9860,13 @@ map.on("moveend", () => {
   }
   syncVectorMap();
 });
-map.on("viewreset", syncVectorMap);
+map.on("viewreset", () => {
+  syncVectorMap();
+  scheduleNavLabelSnapshot();
+});
 map.on("resize", () => {
   scheduleVectorMapResizeSync();
+  scheduleNavLabelSnapshot();
 });
 map.on("moveend zoomend", refreshNavOverlayDebounced);
 map.on("popupclose", () => {
