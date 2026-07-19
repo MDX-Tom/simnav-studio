@@ -87,8 +87,10 @@ const TRANSLATIONS = {
   "plan.recalculate": { "zh-Hans": "重新计算", en: "Recalculate" },
   "plan.matchTrack": { "zh-Hans": "匹配轨迹", en: "Match Track" },
   "plan.stopTask": { "zh-Hans": "停止当前任务", en: "Stop Current Task" },
+  "plan.stopTaskShort": { "zh-Hans": "停止", en: "Stop" },
   "plan.autoRouteHint": { "zh-Hans": "留空航路以自动规划整条航路，或在航点间输入'***'以自动规划航路片段", en: "Leave Route blank to auto-plan the whole route, or enter '***' between waypoints to auto-plan that segment." },
   "status.waitingRoute": { "zh-Hans": "等待输入航路。", en: "Waiting for route input." },
+  "status.noDetails": { "zh-Hans": "状态已更新，但没有可显示的详情。", en: "Status updated without displayable details." },
   "section.legs": { "zh-Hans": "航段", en: "Legs" },
   "section.selectedProcedures": { "zh-Hans": "已选程序", en: "Selected Procedures" },
   "section.selection": { "zh-Hans": "选中内容", en: "Selection" },
@@ -1133,6 +1135,7 @@ const elements = {
   recalculateButton: document.querySelector("#recalculateButton"),
   planClearTrackButton: document.querySelector("#planClearTrackButton"),
   stopRequestButton: document.querySelector("#stopRequestButton"),
+  planStatus: document.querySelector("#planStatus"),
   statusText: document.querySelector("#statusText"),
   routeLegs: document.querySelector("#routeLegs"),
   selectedProcedures: document.querySelector("#selectedProcedures"),
@@ -6923,12 +6926,19 @@ function installPhoneLandscapeSafeAreaTuning() {
 
 /**
  * 功能：设置 `setStatus` 对应的业务逻辑。
- * 输入：text、isError。
+ * 输入：text、isError、kind（info / progress / success / error）。
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
-function setStatus(text, isError = false) {
-  elements.statusText.textContent = text;
-  elements.statusText.classList.toggle("error", isError);
+function setStatus(text, isError = false, kind = isError ? "error" : "info") {
+  const message = String(text ?? "").trim() || t("status.noDetails");
+  const normalizedKind = new Set(["info", "progress", "success", "error"]).has(kind)
+    ? kind
+    : (isError ? "error" : "info");
+  elements.statusText.textContent = message;
+  elements.statusText.classList.toggle("error", normalizedKind === "error");
+  if (elements.planStatus) {
+    elements.planStatus.dataset.statusKind = normalizedKind;
+  }
 }
 
 /**
@@ -7518,6 +7528,9 @@ function setRouteControlsBusy(isBusy) {
   if (elements.stopRequestButton) {
     elements.stopRequestButton.disabled = !isBusy;
     elements.stopRequestButton.classList.toggle("hidden", !isBusy);
+  }
+  if (elements.planStatus) {
+    elements.planStatus.classList.toggle("is-busy", Boolean(isBusy));
   }
 }
 
@@ -11315,7 +11328,7 @@ async function buildRoute(options = {}) {
   }
 
   const controller = beginRouteOperation(t("route.operation.resolve"));
-  setStatus(t("route.parsing"));
+  setStatus(t("route.parsing"), false, "progress");
   try {
     const payload = await fetchJson(
       `/api/route/resolve?departure=${encodeURIComponent(departure)}&arrival=${encodeURIComponent(arrival)}&route=${encodeURIComponent(route)}&departure_runway=${encodeURIComponent(departureRunway)}&arrival_runway=${encodeURIComponent(arrivalRunway)}`,
@@ -11334,6 +11347,8 @@ async function buildRoute(options = {}) {
             distance: Math.round(payload.distance_nm || 0),
           })
         : t("route.resolvedStatus", { count: payload.points.length }),
+      false,
+      "success",
     );
   } catch (error) {
     if (isAbortError(error)) {
@@ -12431,7 +12446,7 @@ async function matchFR24FlightTrack(key) {
   const controller = beginRouteOperation(t("track.operation"));
   setFR24QueryBusy(true);
   setFR24QueryStatus(t("query.matching"));
-  setStatus(t("query.matching"));
+  setStatus(t("query.matching"), false, "progress");
   try {
     const download = await fetchFR24TrackPayload(flight, { signal: controller.signal });
     throwIfAborted(controller.signal);
@@ -12463,7 +12478,7 @@ async function matchFR24FlightTrack(key) {
       distance: Math.round(payload.distance_nm || 0),
     });
     setFR24QueryStatus(message);
-    setStatus(message);
+    setStatus(message, false, "success");
   } catch (error) {
     if (isAbortError(error)) {
       setStatus(t("track.stopped"));

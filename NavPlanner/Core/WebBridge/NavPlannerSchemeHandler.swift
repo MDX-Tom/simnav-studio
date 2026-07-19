@@ -978,6 +978,12 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
     private var pendingPageContentType = ""
     private var pendingPageReadScript = ""
     private var pendingPageReadDelay: TimeInterval = 0
+    private var pendingPageWaitsForStableResult = false
+    private var pendingPageReadStartedAt: Date?
+    private var pendingPageBestText = ""
+    private var pendingPageBestScore = -1
+    private var pendingPageLastSignature = ""
+    private var pendingPageStableReadCount = 0
 
     func performJSONRequest(path: String, params: [(String, String)]) throws -> [String: Any] {
         guard var components = URLComponents(string: "https://api.flightradar24.com\(path)") else {
@@ -1035,7 +1041,8 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
                 url: url,
                 acceptHeader: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 readScript: Self.flightHistoryExtractionScript,
-                readDelay: 1.2
+                readDelay: 0.45,
+                waitForStableResult: true
             ) { result in
                 output = result.flatMap { page in
                     Self.decodeFlightHistoryPageResponse(page, requestURL: url)
@@ -1071,6 +1078,7 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
         acceptHeader: String,
         readScript: String,
         readDelay: TimeInterval,
+        waitForStableResult: Bool = false,
         completion: @escaping (Result<PageResponse, Error>) -> Void
     ) {
         guard pendingPageCompletion == nil else {
@@ -1084,11 +1092,24 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
         pendingPageContentType = ""
         pendingPageReadScript = readScript
         pendingPageReadDelay = readDelay
-        var request = URLRequest(url: url)
+        pendingPageWaitsForStableResult = waitForStableResult
+        pendingPageReadStartedAt = nil
+        pendingPageBestText = ""
+        pendingPageBestScore = -1
+        pendingPageLastSignature = ""
+        pendingPageStableReadCount = 0
+        let pageTimeout: TimeInterval = waitForStableResult ? 29 : 24
+        var request = URLRequest(
+            url: url,
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            timeoutInterval: pageTimeout
+        )
         request.setValue(acceptHeader, forHTTPHeaderField: "Accept")
         request.setValue("https://www.flightradar24.com/", forHTTPHeaderField: "Referer")
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
         webView.load(request)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 24) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + pageTimeout) { [weak self] in
             guard let self,
                   self.pendingPageCompletion != nil,
                   self.pendingPageURL == url else {
@@ -1229,31 +1250,37 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
       };
       const rows = [];
       const seen = new Set();
-      const rowNodes = Array.from(document.querySelectorAll("tr, [role='row'], li, article, [class*='flight'], [class*='history'], [class*='row']"));
-      for (const node of rowNodes) {
-        const text = clean(node.innerText || node.textContent || "");
-        if (text.length < 18 || text.length > 1800) {
-          continue;
+      const collectRows = (nodes) => {
+        for (const node of nodes) {
+          const text = clean(node.innerText || node.textContent || "");
+          if (text.length < 18 || text.length > 1800) {
+            continue;
+          }
+          const hrefs = linksFor(node);
+          const dateMatch = text.match(/\b\d{1,2}\s+[A-Za-z]{3}\s+20\d{2}\b/);
+          const hasFlightStatus = /\b(STD|ATD|STA|ETA|Landed|Scheduled|Cancelled|Canceled|Diverted|Unknown|KML|CSV|Play)\b/i.test(text);
+          const instanceLink = hrefs.find((link) => /(?:flightId=|\/flight\/|\/data\/flights\/[^/#?\s]+#[0-9a-f]{6,12}\b)/i.test(link.href));
+          if (!dateMatch || (!hasFlightStatus && !instanceLink)) {
+            continue;
+          }
+          const instanceKey = instanceLink?.href.match(/(?:flightId=|#)([0-9a-f]{6,12})\b/i)?.[1] || "";
+          const key = `${dateMatch[0]}|${instanceKey}|${text}`;
+          if (seen.has(key)) {
+            continue;
+          }
+          seen.add(key);
+          rows.push({ text, hrefs, cells: cellsFor(node), headers: headersFor(node) });
+          if (rows.length >= 160) {
+            break;
+          }
         }
-        const hrefs = linksFor(node);
-        const hasDate = /\b\d{1,2}\s+[A-Za-z]{3}\s+20\d{2}\b/.test(text);
-        const hasFlightStatus = /\b(STD|ATD|STA|ETA|Landed|Scheduled|Cancelled|Canceled|Diverted|Unknown|KML|CSV|Play)\b/i.test(text);
-        const hasFlightLink = hrefs.some((link) => /(?:flightId=|\/flight\/|\/data\/flights\/|#[0-9a-f]{6,12}\b)/i.test(link.href));
-        if (!hasDate && !hasFlightLink) {
-          continue;
-        }
-        if (!hasFlightStatus && !hasFlightLink) {
-          continue;
-        }
-        const key = text.slice(0, 240);
-        if (seen.has(key)) {
-          continue;
-        }
-        seen.add(key);
-        rows.push({ text, hrefs, cells: cellsFor(node), headers: headersFor(node) });
-        if (rows.length >= 120) {
-          break;
-        }
+      };
+      const tableRows = Array.from(document.querySelectorAll("table tbody tr, table [role='row'], [role='table'] [role='row'], [role='grid'] [role='row']"));
+      collectRows(tableRows);
+      if (!rows.length) {
+        const fallbackRows = Array.from(document.querySelectorAll("tr, [role='row'], li, article, [class*='flight'], [class*='history'], [class*='row']"))
+          .filter((node) => !node.querySelector("tr, [role='row']"));
+        collectRows(fallbackRows);
       }
       const links = Array.from(document.querySelectorAll("a"))
         .map((anchor) => ({
@@ -1284,30 +1311,76 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        if pendingPageCompletion != nil {
-            let script = pendingPageReadScript
-            let delay = pendingPageReadDelay
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak webView] in
-                guard let self else { return }
+        guard pendingPageCompletion != nil, pendingPageReadStartedAt == nil else { return }
+        pendingPageReadStartedAt = Date()
+        readPendingPage(from: webView, after: pendingPageReadDelay)
+    }
+
+    private func readPendingPage(from webView: WKWebView, after delay: TimeInterval) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak webView] in
+            guard let self, self.pendingPageCompletion != nil else { return }
+            guard let webView else {
+                self.finishPendingPage(.failure(BrowserError(message: "FR24 web request failed.")))
+                return
+            }
+            let script = self.pendingPageReadScript
+            webView.evaluateJavaScript(script) { [weak self, weak webView] result, error in
+                guard let self, self.pendingPageCompletion != nil else { return }
+                if let error {
+                    self.finishPendingPage(.failure(BrowserError(message: "FR24 web response could not be read: \(error.localizedDescription)")))
+                    return
+                }
+                let text = result as? String ?? ""
+                guard self.pendingPageWaitsForStableResult else {
+                    self.finishPendingPage(.success(PageResponse(
+                        status: self.pendingPageStatus,
+                        contentType: self.pendingPageContentType,
+                        text: text
+                    )))
+                    return
+                }
+
+                let metrics = self.historySnapshotMetrics(text)
+                if metrics.score > self.pendingPageBestScore {
+                    self.pendingPageBestScore = metrics.score
+                    self.pendingPageBestText = text
+                }
+                if metrics.signature == self.pendingPageLastSignature {
+                    self.pendingPageStableReadCount += 1
+                } else {
+                    self.pendingPageLastSignature = metrics.signature
+                    self.pendingPageStableReadCount = 0
+                }
+
+                let elapsed = Date().timeIntervalSince(self.pendingPageReadStartedAt ?? Date())
+                let isStable = elapsed >= 3.0 && self.pendingPageStableReadCount >= 2
+                if isStable || elapsed >= 6.0 {
+                    self.finishPendingPage(.success(PageResponse(
+                        status: self.pendingPageStatus,
+                        contentType: self.pendingPageContentType,
+                        text: self.pendingPageBestText.isEmpty ? text : self.pendingPageBestText
+                    )))
+                    return
+                }
                 guard let webView else {
                     self.finishPendingPage(.failure(BrowserError(message: "FR24 web request failed.")))
                     return
                 }
-                webView.evaluateJavaScript(script) { [weak self] result, error in
-                    guard let self else { return }
-                    if let error {
-                        self.finishPendingPage(.failure(BrowserError(message: "FR24 web response could not be read: \(error.localizedDescription)")))
-                        return
-                    }
-                    self.finishPendingPage(.success(PageResponse(
-                        status: self.pendingPageStatus,
-                        contentType: self.pendingPageContentType,
-                        text: result as? String ?? ""
-                    )))
-                }
+                self.readPendingPage(from: webView, after: 0.45)
             }
-            return
         }
+    }
+
+    private func historySnapshotMetrics(_ text: String) -> (score: Int, signature: String) {
+        guard let data = text.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return (text.count, "invalid|\(text.count)|\(text.hashValue)")
+        }
+        let rows = object["rows"] as? [[String: Any]] ?? []
+        let rowText = rows.map { Self.stringValue($0["text"]) }.joined(separator: "|")
+        let bodyText = Self.stringValue(object["bodyText"])
+        let score = rows.count * 10_000_000 + min(rowText.count, 900_000) * 10 + min(bodyText.count, 999_999)
+        return (score, "\(rows.count)|\(bodyText.count)|\(rowText.hashValue)")
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
@@ -1330,6 +1403,12 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
         pendingPageContentType = ""
         pendingPageReadScript = ""
         pendingPageReadDelay = 0
+        pendingPageWaitsForStableResult = false
+        pendingPageReadStartedAt = nil
+        pendingPageBestText = ""
+        pendingPageBestScore = -1
+        pendingPageLastSignature = ""
+        pendingPageStableReadCount = 0
         completion?(result)
     }
 }
@@ -1938,7 +2017,7 @@ private final class FR24Service {
                 break
             }
         }
-        return limitScheduledHistory(sortedFlights(flights))
+        return sortedFlights(flights)
     }
 
     private func airportCodeSet(_ airport: [String: Any]) -> Set<String> {
@@ -2117,22 +2196,6 @@ private final class FR24Service {
             }
         }
         return fields
-    }
-
-    private func limitScheduledHistory(_ flights: [[String: Any]]) -> [[String: Any]] {
-        var didKeepScheduled = false
-        var output: [[String: Any]] = []
-        for flight in flights {
-            let isScheduled = Self.stringValue(flight["status"]).localizedCaseInsensitiveContains("scheduled")
-            if isScheduled {
-                if didKeepScheduled {
-                    continue
-                }
-                didKeepScheduled = true
-            }
-            output.append(flight)
-        }
-        return output
     }
 
     private func hrefs(from value: Any?) -> [String] {
