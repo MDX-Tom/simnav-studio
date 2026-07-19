@@ -413,23 +413,122 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
             return jsonResponse(["error": "Invalid map tile coordinate"], statusCode: 404)
         }
 
-        switch onlineTileCache.tile(providerKey: providerKey, z: z, x: x, y: y, waitForDownload: OnlineTileCache.tileResponseWaitTimeout) {
-        case let .hit(data, contentType):
-            return SchemeResponse(
-                statusCode: 200,
-                mimeType: contentType,
-                data: data,
-                headers: cacheHeaders.merging([
-                    "Cache-Control": "public, max-age=31536000, immutable",
-                    "X-Map-Cache": "HIT"
-                ]) { _, new in new }
+        let initialState = onlineTileCache.tile(
+            providerKey: providerKey,
+            z: z,
+            x: x,
+            y: y,
+            waitForDownload: 0
+        )
+        if case let .hit(data, contentType) = initialState {
+            return onlineTileHitResponse(data: data, contentType: contentType)
+        }
+
+        // 在线栅格瓦片缺失时，同时准备低一级父瓦片。父瓦片一张可覆盖四张子瓦片，
+        // 通常已存在于刚才的缩放视图缓存中；即使未命中，也只会被缓存队列去重下载一次。
+        let allowsParentFallback = pathComponents.first == "map-cache" && z > 0
+        let parentCoordinate = (z: z - 1, x: x >> 1, y: y >> 1)
+        if allowsParentFallback {
+            let parentState = onlineTileCache.tile(
+                providerKey: providerKey,
+                z: parentCoordinate.z,
+                x: parentCoordinate.x,
+                y: parentCoordinate.y,
+                waitForDownload: 0
             )
+            if case let .hit(data, contentType) = parentState {
+                return onlineTileFallbackResponse(
+                    data: data,
+                    contentType: contentType,
+                    sourceZoom: parentCoordinate.z,
+                    targetState: initialState
+                )
+            }
+        }
+
+        let finalState: OnlineTileCache.TileState
+        switch initialState {
+        case .queued, .pending:
+            finalState = onlineTileCache.tile(
+                providerKey: providerKey,
+                z: z,
+                x: x,
+                y: y,
+                waitForDownload: OnlineTileCache.tileResponseWaitTimeout
+            )
+        case .failed:
+            finalState = initialState
+        case .hit:
+            finalState = initialState
+        }
+
+        if case let .hit(data, contentType) = finalState {
+            return onlineTileHitResponse(data: data, contentType: contentType)
+        }
+        if allowsParentFallback,
+           case let .hit(data, contentType) = onlineTileCache.cachedTile(
+            providerKey: providerKey,
+            z: parentCoordinate.z,
+            x: parentCoordinate.x,
+            y: parentCoordinate.y
+           ) {
+            return onlineTileFallbackResponse(
+                data: data,
+                contentType: contentType,
+                sourceZoom: parentCoordinate.z,
+                targetState: finalState
+            )
+        }
+
+        switch finalState {
         case .queued:
             return placeholderTileResponse(cacheState: "QUEUED")
         case .pending:
             return placeholderTileResponse(cacheState: "PENDING")
         case .failed:
             return placeholderTileResponse(cacheState: "MISS")
+        case let .hit(data, contentType):
+            return onlineTileHitResponse(data: data, contentType: contentType)
+        }
+    }
+
+    private func onlineTileHitResponse(data: Data, contentType: String) -> SchemeResponse {
+        SchemeResponse(
+            statusCode: 200,
+            mimeType: contentType,
+            data: data,
+            headers: cacheHeaders.merging([
+                "Cache-Control": "public, max-age=31536000, immutable",
+                "X-Map-Cache": "HIT"
+            ]) { _, new in new }
+        )
+    }
+
+    private func onlineTileFallbackResponse(
+        data: Data,
+        contentType: String,
+        sourceZoom: Int,
+        targetState: OnlineTileCache.TileState
+    ) -> SchemeResponse {
+        SchemeResponse(
+            statusCode: 200,
+            mimeType: contentType,
+            data: data,
+            headers: cacheHeaders.merging([
+                "Cache-Control": "no-store",
+                "X-Map-Cache": "FALLBACK",
+                "X-Map-Fallback-Zoom": String(sourceZoom),
+                "X-Map-Fallback-Target-State": onlineTileStateName(targetState)
+            ]) { _, new in new }
+        )
+    }
+
+    private func onlineTileStateName(_ state: OnlineTileCache.TileState) -> String {
+        switch state {
+        case .hit: "HIT"
+        case .queued: "QUEUED"
+        case .pending: "PENDING"
+        case .failed: "MISS"
         }
     }
 
@@ -826,6 +925,8 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
                 "Date",
                 "ETag",
                 "X-Map-Cache",
+                "X-Map-Fallback-Target-State",
+                "X-Map-Fallback-Zoom",
                 "X-Offline-Map",
                 "X-Weather-Source",
                 "X-Weather-Updated"
@@ -3603,6 +3704,18 @@ private final class OnlineTileCache {
             return .hit(data: payload.data, contentType: payload.contentType)
         }
         return .queued
+    }
+
+    func cachedTile(providerKey: String, z: Int, x: Int, y: Int) -> TileState {
+        guard let provider = providers[providerKey],
+              z >= 0, z <= provider.maxZoom, x >= 0, y >= 0 else {
+            return .failed
+        }
+        let localURL = tileFileURL(provider: provider, z: z, x: x, y: y)
+        guard let payload = cachedTilePayload(provider: provider, localURL: localURL, z: z, x: x, y: y) else {
+            return .failed
+        }
+        return .hit(data: payload.data, contentType: payload.contentType)
     }
 
     func statusPayload() -> [String: Any] {

@@ -25,6 +25,13 @@ struct MapWebView: UIViewRepresentable {
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         ))
+#if DEBUG
+        configuration.userContentController.addUserScript(WKUserScript(
+            source: runtimeDiagnosticsScript(),
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
+        ))
+#endif
         if let debugScript = simulatorDebugLaunchScript() {
             configuration.userContentController.addUserScript(WKUserScript(
                 source: debugScript,
@@ -70,6 +77,67 @@ struct MapWebView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {}
+
+#if DEBUG
+    private func runtimeDiagnosticsScript() -> String {
+        """
+        (() => {
+          if (window.__navplannerRuntimeDiagnosticsInstalled) return;
+          window.__navplannerRuntimeDiagnosticsInstalled = true;
+
+          const describe = (value) => {
+            if (value instanceof Error) return value.stack || `${value.name}: ${value.message}`;
+            if (typeof value === "string") return value;
+            try {
+              return JSON.stringify(value);
+            } catch (_) {
+              return String(value);
+            }
+          };
+          const report = (level, message, details = {}) => {
+            try {
+              window.webkit?.messageHandlers?.navplanner?.postMessage({
+                type: "runtimeDiagnostic",
+                payload: {
+                  level,
+                  message: String(message || "").slice(0, 8000),
+                  source: String(details.source || "").slice(0, 2000),
+                  line: details.line || 0,
+                  column: details.column || 0,
+                  stack: String(details.stack || "").slice(0, 12000)
+                }
+              });
+            } catch (_) {}
+          };
+
+          for (const level of ["warn", "error"]) {
+            const original = console[level];
+            console[level] = function(...values) {
+              const result = original.apply(this, values);
+              report(level === "warn" ? "warning" : "error", values.map(describe).join(" "), {
+                stack: new Error().stack || ""
+              });
+              return result;
+            };
+          }
+
+          window.addEventListener("error", (event) => {
+            report("error", event.message || "Uncaught JavaScript error", {
+              source: event.filename,
+              line: event.lineno,
+              column: event.colno,
+              stack: event.error?.stack || ""
+            });
+          });
+          window.addEventListener("unhandledrejection", (event) => {
+            report("error", `Unhandled promise rejection: ${describe(event.reason)}`, {
+              stack: event.reason?.stack || ""
+            });
+          });
+        })();
+        """
+    }
+#endif
 
     private func simulatorDebugLaunchScript() -> String? {
         let key = "NAVPLANNER_SIM_DEBUG_JSON"
