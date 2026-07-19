@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -14,6 +15,11 @@ TMP_DIR = Path("/private/tmp")
 CASES_PATH = TMP_DIR / "navplanner_route_parity_cases.json"
 PROBE_BINARY = TMP_DIR / "NavPlannerRouteParityProbe"
 MODULE_CACHE = TMP_DIR / "NavPlannerRouteParityModuleCache"
+
+
+def reference_database_path(root: Path) -> Path:
+    configured = os.environ.get("NAVPLANNER_PARITY_DATABASE", "").strip()
+    return Path(configured) if configured else root / "NavPlanner/Resources/Database/navdata.sqlite"
 
 CASES: list[dict[str, str]] = [
     {"name": "auto ZBAA-ZSPD", "departure": "ZBAA", "arrival": "ZSPD", "route": ""},
@@ -152,7 +158,7 @@ def run_web_reference(root: Path, cases: list[dict[str, str]]) -> dict[str, Any]
     sys.path.insert(0, str(root / "NavPlanner-web"))
     from src.planner_database import NavDatabase
 
-    database = NavDatabase(root / "NavPlanner/Resources/Database/navdata.sqlite")
+    database = NavDatabase(reference_database_path(root))
     results: dict[str, Any] = {}
     for case in cases:
         try:

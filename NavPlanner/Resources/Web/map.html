@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
     <base href="navplanner://app/" />
-    <meta name="navplanner-resource-version" content="20260719-map-canvas-parent-fallback-v44" />
+    <meta name="navplanner-resource-version" content="20260719-plan-status-fr24-history-v45" />
     <title>航空航路规划器</title>
     <script>
       (() => {
@@ -98,9 +98,20 @@
             <button id="recalculateButton" class="ghost-button" data-i18n="plan.recalculate">重新计算</button>
             <button id="planClearTrackButton" class="ghost-button" type="button" data-i18n="query.clearTrack">清除轨迹绘制</button>
           </div>
-          <button id="stopRequestButton" class="stop-button hidden" type="button" disabled data-i18n="plan.stopTask">停止当前任务</button>
           <div class="helper-text" data-i18n="plan.autoRouteHint">留空航路以自动规划整条航路，或在航点间输入'***'以自动规划航路片段</div>
-          <div class="status" id="statusText" data-i18n="status.waitingRoute">等待输入航路。</div>
+          <div id="planStatus" class="status" data-status-kind="info" aria-live="polite" aria-atomic="true">
+            <span class="status-indicator" aria-hidden="true"></span>
+            <span id="statusText" class="status-message" data-i18n="status.waitingRoute">等待输入航路。</span>
+            <button
+              id="stopRequestButton"
+              class="status-action hidden"
+              type="button"
+              disabled
+              data-i18n="plan.stopTaskShort"
+              data-i18n-aria-label="plan.stopTask"
+              aria-label="停止当前任务"
+            >停止</button>
+          </div>
         </section>
 
         <section>

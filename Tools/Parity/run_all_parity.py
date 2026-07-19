@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -17,11 +20,12 @@ CHECKS = [
 ]
 
 
-def run_check(name: str, script: Path) -> dict[str, Any]:
+def run_check(name: str, script: Path, environment: dict[str, str]) -> dict[str, Any]:
     started = time.monotonic()
     completed = subprocess.run(
         [sys.executable, str(script)],
         cwd=ROOT,
+        env=environment,
         text=True,
         capture_output=True,
     )
@@ -38,7 +42,15 @@ def run_check(name: str, script: Path) -> dict[str, Any]:
 
 
 def main() -> int:
-    results = [run_check(name, script) for name, script in CHECKS]
+    source_database = ROOT / "NavPlanner/Resources/Database/navdata.sqlite"
+    with tempfile.TemporaryDirectory(prefix="NavPlannerParity-", dir="/private/tmp") as temporary_directory:
+        parity_database = Path(temporary_directory) / "navdata.sqlite"
+        shutil.copy2(source_database, parity_database)
+        parity_database.chmod(0o600)
+        environment = os.environ.copy()
+        environment.pop("SDKROOT", None)
+        environment["NAVPLANNER_PARITY_DATABASE"] = str(parity_database)
+        results = [run_check(name, script, environment) for name, script in CHECKS]
     failed = [result for result in results if result["returncode"] != 0]
     print(json.dumps({"checks": results}, ensure_ascii=False, indent=2))
     if failed:
