@@ -1489,8 +1489,8 @@ function warmSwapOnlineBaseLayer(nextLayer, previousLayer) {
 }
 
 /**
- * 功能：取消一个异步缓存瓦片的后续轮询并释放对象 URL。
- * 输入：tile 为 createTile 创建的图片元素。
+ * 功能：取消一个异步缓存瓦片的后续轮询和解码绘制。
+ * 输入：tile 为 createTile 创建的 Canvas 元素。
  * 输出：无返回值；仅清理前端资源。
  */
 function cancelAsyncCachedTile(tile) {
@@ -1506,10 +1506,26 @@ function cancelAsyncCachedTile(tile) {
     tile._plannerAbortController.abort();
     tile._plannerAbortController = null;
   }
-  if (tile._plannerObjectUrl) {
-    URL.revokeObjectURL(tile._plannerObjectUrl);
-    tile._plannerObjectUrl = "";
+  releaseAsyncCachedTileFallback(tile);
+  if (tile._plannerContext) {
+    tile._plannerContext.clearRect(0, 0, tile.width, tile.height);
+    tile._plannerContext = null;
   }
+  tile.width = 1;
+  tile.height = 1;
+}
+
+/**
+ * 功能：释放单个瓦片正在显示的父级模糊兜底图。
+ * 输入：tile 为异步在线瓦片 Canvas 元素。
+ * 输出：无返回值；清理兜底状态标记。
+ */
+function releaseAsyncCachedTileFallback(tile) {
+  if (!tile) {
+    return;
+  }
+  tile.classList.remove("planner-parent-fallback");
+  delete tile.dataset.plannerCacheState;
 }
 
 /**
@@ -1519,6 +1535,10 @@ function cancelAsyncCachedTile(tile) {
  */
 function isQueuedTileResponse(response) {
   return ["QUEUED", "PENDING", "MISS"].includes(response.headers.get("X-Map-Cache"));
+}
+
+function isParentFallbackTileResponse(response) {
+  return response.headers.get("X-Map-Cache") === "FALLBACK";
 }
 
 /**
@@ -1539,7 +1559,7 @@ function isAsyncCachedTilePlaceholderBuffer(buffer) {
 
 /**
  * 功能：按指数退避轮询缺失瓦片，直到真实缓存瓦片可用。
- * 输入：tile 为图片元素，attempt 为当前重试次数，requestTile 为实际请求函数。
+ * 输入：tile 为 Canvas 元素，attempt 为当前重试次数，requestTile 为实际请求函数。
  * 输出：无返回值；通过定时器触发后续请求。
  */
 function scheduleAsyncCachedTileRetry(tile, attempt, requestTile) {
@@ -1579,62 +1599,163 @@ function supportedTileImageMimeType(buffer) {
 }
 
 /**
- * 功能：把已命中的真实瓦片 URL 或 blob URL 写入图片元素，并在图片可显示后通知 Leaflet。
- * 输入：tile 为图片元素，url 为本地瓦片 URL / blob URL，done 为 Leaflet 的加载完成回调。
- * 输出：无返回值；成功后底图才会替换旧瓦片。
+ * 功能：把瓦片数据转换为旧 WebKit 离屏 Image 可解码的自包含地址。
+ * 输入：buffer 为瓦片数据，mimeType 为已校验的 PNG 或 JPEG 类型。
+ * 输出：可直接用于离屏 img.src 的 data URL。
  */
-function loadAsyncCachedTileUrl(tile, url, done) {
-  if (tile._plannerCancelled) {
-    return;
+function tileBufferDataUrl(buffer, mimeType) {
+  const bytes = new Uint8Array(buffer || []);
+  const chunkSize = 0x8000;
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
   }
-  if (tile._plannerObjectUrl) {
-    URL.revokeObjectURL(tile._plannerObjectUrl);
-    tile._plannerObjectUrl = "";
-  }
-  tile.onload = () => {
-    if (!tile._plannerCancelled && !tile._plannerDone) {
-      tile._plannerDone = true;
-      done(null, tile);
+  return `data:${mimeType};base64,${window.btoa(binary)}`;
+}
+
+/**
+ * 功能：把已校验的瓦片数据解码为可短期绘制的图片对象。
+ * 输入：buffer 为瓦片数据，mimeType 为 PNG 或 JPEG 类型。
+ * 输出：Promise，优先解析为 ImageBitmap；旧 WebKit 降级为离屏 Image。
+ */
+async function decodeAsyncCachedTileBuffer(buffer, mimeType) {
+  if (typeof window.createImageBitmap === "function") {
+    try {
+      return await window.createImageBitmap(new Blob([buffer], { type: mimeType }));
+    } catch (_error) {
+      // Fall through to the broadly supported off-DOM image decoder.
     }
-  };
-  tile.onerror = () => {
+  }
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      image.onload = null;
+      image.onerror = null;
+      resolve(image);
+    };
+    image.onerror = () => {
+      image.onload = null;
+      image.onerror = null;
+      reject(new Error("Tile image decode failed."));
+    };
+    image.src = tileBufferDataUrl(buffer, mimeType);
+  });
+}
+
+/**
+ * 功能：解码瓦片并绘制到现有 Canvas，绘制后立即释放临时 ImageBitmap。
+ * 输入：tile 为 Canvas，buffer / mimeType 为图片数据。
+ * 输出：Promise<boolean>；tile 已取消时返回 false。
+ */
+async function drawAsyncCachedTileBuffer(tile, buffer, mimeType) {
+  const image = await decodeAsyncCachedTileBuffer(buffer, mimeType);
+  try {
+    if (tile._plannerCancelled || tile._plannerDone) {
+      return false;
+    }
+    const context = tile._plannerContext;
+    if (!context) {
+      throw new Error("Tile canvas context is unavailable.");
+    }
+    context.clearRect(0, 0, tile.width, tile.height);
+    context.imageSmoothingEnabled = true;
+    context.drawImage(image, 0, 0, tile.width, tile.height);
+    return true;
+  } finally {
+    if (typeof image.close === "function") {
+      image.close();
+    }
+  }
+}
+
+/**
+ * 功能：把低一级父瓦片裁成当前子瓦片对应的四分之一区域，作为真瓦片到达前的背景。
+ * 输入：tile 为目标 Canvas，buffer 为父瓦片数据，mimeType 为图片类型，coords 为子瓦片坐标。
+ * 输出：Promise<boolean>；成功安装或已经存在兜底图时返回 true。
+ */
+async function applyAsyncCachedTileFallbackBuffer(tile, buffer, mimeType, coords) {
+  if (tile._plannerCancelled || tile._plannerDone) {
+    return false;
+  }
+  if (tile.classList.contains("planner-parent-fallback")) {
+    return true;
+  }
+  const image = await decodeAsyncCachedTileBuffer(buffer, mimeType);
+  try {
+    if (tile._plannerCancelled || tile._plannerDone) {
+      return false;
+    }
+    const context = tile._plannerContext;
+    if (!context) {
+      return false;
+    }
+    const imageWidth = Math.max(1, Number(image.width) || tile.width);
+    const imageHeight = Math.max(1, Number(image.height) || tile.height);
+    const sourceWidth = imageWidth / 2;
+    const sourceHeight = imageHeight / 2;
+    const quadrantX = ((Number(coords.x) % 2) + 2) % 2;
+    const quadrantY = ((Number(coords.y) % 2) + 2) % 2;
+    context.clearRect(0, 0, tile.width, tile.height);
+    context.imageSmoothingEnabled = true;
+    context.drawImage(
+      image,
+      quadrantX * sourceWidth,
+      quadrantY * sourceHeight,
+      sourceWidth,
+      sourceHeight,
+      0,
+      0,
+      tile.width,
+      tile.height,
+    );
+    tile.classList.add("planner-parent-fallback");
+    tile.dataset.plannerCacheState = "fallback";
+    return true;
+  } finally {
+    if (typeof image.close === "function") {
+      image.close();
+    }
+  }
+}
+
+/**
+ * 功能：把真实瓦片绘制到 Canvas，并在可显示后通知 Leaflet。
+ * 输入：tile 为 Canvas，buffer / mimeType 为已校验数据，done 为 Leaflet 回调。
+ * 输出：Promise；成功后底图原位替换父级预览。
+ */
+async function loadAsyncCachedTileBuffer(tile, buffer, mimeType, done) {
+  try {
+    if (!await drawAsyncCachedTileBuffer(tile, buffer, mimeType)) {
+      return;
+    }
+    releaseAsyncCachedTileFallback(tile);
+    tile._plannerDone = true;
+    done(null, tile);
+  } catch (_error) {
     if (!tile._plannerCancelled && !tile._plannerDone) {
-      if (tile._plannerObjectUrl) {
-        URL.revokeObjectURL(tile._plannerObjectUrl);
-        tile._plannerObjectUrl = "";
-      }
       tile._plannerDone = true;
       done(new Error("Tile image decode failed."), tile);
     }
-  };
-  tile.src = url;
-}
-
-function loadAsyncCachedTileBuffer(tile, buffer, mimeType, done) {
-  if (tile._plannerCancelled) {
-    return;
   }
-  const blob = new Blob([buffer], { type: mimeType || "image/png" });
-  const objectUrl = URL.createObjectURL(blob);
-  loadAsyncCachedTileUrl(tile, objectUrl, done);
-  tile._plannerObjectUrl = objectUrl;
 }
 
 const AsyncCachedTileLayer = L.TileLayer.extend({
   /**
    * 功能：创建单个异步缓存瓦片，避免透明占位图覆盖已有底图。
    * 输入：coords 为 Leaflet 瓦片坐标，done 为瓦片加载完成回调。
-   * 输出：图片元素；真实瓦片命中前不会调用 done。
+   * 输出：Canvas 元素；真实瓦片命中前不会调用 done。
    */
   createTile(coords, done) {
-    const tile = document.createElement("img");
-    tile.alt = "";
+    const tile = document.createElement("canvas");
+    const tileSize = this.getTileSize();
+    tile.width = Math.max(1, Math.round(tileSize.x));
+    tile.height = Math.max(1, Math.round(tileSize.y));
     tile.setAttribute("role", "presentation");
     tile._plannerCancelled = false;
     tile._plannerDone = false;
-    tile._plannerObjectUrl = "";
     tile._plannerRetryTimer = 0;
     tile._plannerAbortController = null;
+    tile._plannerContext = tile.getContext("2d");
 
     const requestTile = async (attempt = 0) => {
       if (tile._plannerCancelled || tile._plannerDone) {
@@ -1660,6 +1781,14 @@ const AsyncCachedTileLayer = L.TileLayer.extend({
           throw new Error(`Tile request failed: ${response.status}`);
         }
         const buffer = await response.arrayBuffer();
+        if (isParentFallbackTileResponse(response)) {
+          const fallbackMimeType = supportedTileImageMimeType(buffer);
+          if (fallbackMimeType && !isAsyncCachedTilePlaceholderBuffer(buffer)) {
+            await applyAsyncCachedTileFallbackBuffer(tile, buffer, fallbackMimeType, coords);
+          }
+          scheduleAsyncCachedTileRetry(tile, attempt, requestTile);
+          return;
+        }
         if (isAsyncCachedTilePlaceholderBuffer(buffer)) {
           scheduleAsyncCachedTileRetry(tile, attempt, requestTile);
           return;
@@ -1668,7 +1797,7 @@ const AsyncCachedTileLayer = L.TileLayer.extend({
         if (!mimeType) {
           throw new Error("Tile response is not a supported image.");
         }
-        loadAsyncCachedTileBuffer(tile, buffer, mimeType, done);
+        await loadAsyncCachedTileBuffer(tile, buffer, mimeType, done);
       } catch (_error) {
         scheduleAsyncCachedTileRetry(tile, attempt, requestTile);
       } finally {

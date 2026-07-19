@@ -3057,6 +3057,12 @@ html[data-theme="day"] .selection-leg-turn {
   background: #d7dfdb;
 }
 
+/* 真瓦片尚未到达时显示同一 Canvas 中的父瓦片象限；放大平滑形成模糊预览。 */
+.leaflet-tile.planner-parent-fallback:not(.leaflet-tile-loaded) {
+  visibility: inherit;
+  image-rendering: auto;
+}
+
 .leaflet-map-pane {
   z-index: 210;
 }

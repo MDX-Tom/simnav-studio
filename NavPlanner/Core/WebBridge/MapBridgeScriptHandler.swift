@@ -19,6 +19,12 @@ final class MapBridgeScriptHandler: NSObject, WKScriptMessageHandler {
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let event = message.body as? [String: Any] else { return }
         let type = navString(event["type"])
+        if type == "runtimeDiagnostic" {
+#if DEBUG
+            writeRuntimeDiagnostic(event["payload"] as? [String: Any] ?? [:])
+#endif
+            return
+        }
         if type == "focusFormControl" {
             if Thread.isMainThread {
                 focusFormControlHandler?()
@@ -63,4 +69,35 @@ final class MapBridgeScriptHandler: NSObject, WKScriptMessageHandler {
             self?.environment?.handleMapEvent(event)
         }
     }
+
+#if DEBUG
+    private func writeRuntimeDiagnostic(_ payload: [String: Any]) {
+        let rawLevel = navString(payload["level"]).lowercased()
+        let level = rawLevel == "warning" ? "warning" : "error"
+        let message = String(navString(payload["message"]).prefix(8_000))
+        let source = String(navString(payload["source"]).prefix(2_000))
+        let line = navString(payload["line"])
+        let column = navString(payload["column"])
+        let stack = String(navString(payload["stack"]).prefix(12_000))
+
+        var location = source
+        if !line.isEmpty, line != "0" {
+            location += ":\(line)"
+            if !column.isEmpty, column != "0" {
+                location += ":\(column)"
+            }
+        }
+
+        var output = "[NavPlanner JS \(level)]"
+        if !location.isEmpty {
+            output += " \(location)"
+        }
+        output += " \(message)"
+        if !stack.isEmpty {
+            output += "\n\(stack)"
+        }
+        output += "\n"
+        FileHandle.standardError.write(Data(output.utf8))
+    }
+#endif
 }
