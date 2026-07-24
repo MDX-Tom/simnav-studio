@@ -140,6 +140,33 @@ func trackParityPayloadSummary(_ payload: [String: Any]) -> [String: Any] {
     ]
 }
 
+func trackParitySelectedProcedureItems(
+    service: PlannerService,
+    payload: [String: Any]
+) -> [String: [String]] {
+    let selected = payload["selected_procedures"] as? [String: Any] ?? [:]
+    var output: [String: [String]] = [:]
+    for type in ["sid", "star", "approach"] {
+        guard let item = selected[type] as? [String: Any] else { continue }
+        let airport = trackParityString(item["airport"])
+        let procedure = trackParityString(item["procedure"] ?? item["procedure_identifier"])
+        let transition = trackParityString(item["transition"] ?? item["transition_identifier"])
+        guard !airport.isEmpty, !procedure.isEmpty else { continue }
+        let details = service.procedurePayload(
+            type: type,
+            airport: airport,
+            procedure: procedure,
+            transition: transition
+        )
+        let rows = details["items"] as? [[String: Any]] ?? []
+        output[type] = rows.compactMap { row in
+            let ident = trackParityString(row["waypoint_identifier"]).uppercased()
+            return ident.isEmpty ? nil : ident
+        }
+    }
+    return output
+}
+
 @main
 struct TrackParityProbe {
     static func main() throws {
@@ -167,7 +194,14 @@ struct TrackParityProbe {
                 arrival: trackCase.arrival,
                 trackPoints: trackPoints
             )
-            results[trackCase.name] = trackParityPayloadSummary(payload)
+            var summary = trackParityPayloadSummary(payload)
+            if payload["error"] == nil {
+                summary["selected_procedure_items"] = trackParitySelectedProcedureItems(
+                    service: service,
+                    payload: payload
+                )
+            }
+            results[trackCase.name] = summary
         }
 
         let data = try JSONSerialization.data(withJSONObject: results, options: [.prettyPrinted, .sortedKeys])

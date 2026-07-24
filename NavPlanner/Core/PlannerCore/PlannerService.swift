@@ -592,16 +592,47 @@ final class PlannerService: @unchecked Sendable {
                     return ["error": "Imported track needs at least two lat/lon points."]
                 }
 
-                let matched = try matchTrackPointsToAirways(normalizedTrackPoints, database: database)
-                let procedureMatch = try matchProceduresForEnroute(
+                let procedureMatch = try matchProceduresForTrack(
                     departurePoint: departurePoint,
                     arrivalPoint: arrivalPoint,
-                    matched: matched,
                     departureRunway: "ALL",
                     arrivalRunway: "ALL",
+                    trackPoints: normalizedTrackPoints,
                     database: database
                 )
-                let matchedRoute = procedureMatch.matched
+                let airwayTrackPoints = procedureMatch.usesProcedureFirst
+                    ? procedureMatch.enrouteTrackPoints
+                    : normalizedTrackPoints
+                let matched = try matchTrackPointsToAirways(
+                    airwayTrackPoints,
+                    database: database
+                )
+                let matchedRoute: RoutePath
+                let selectedProcedures: [String: Any]
+                let selectedRunways: [String: String]
+                if procedureMatch.usesProcedureFirst {
+                    matchedRoute = try applyProcedureBoundaries(
+                        matched: matched,
+                        sid: procedureMatch.sid?.candidate,
+                        star: procedureMatch.star?.candidate,
+                        database: database
+                    )
+                    selectedProcedures = procedureMatch.selectedProcedures
+                    selectedRunways = procedureMatch.selectedRunways
+                } else {
+                    let legacyMatch = try matchProceduresAfterEnroute(
+                        departurePoint: departurePoint,
+                        arrivalPoint: arrivalPoint,
+                        matched: matched,
+                        departureRunway: "ALL",
+                        arrivalRunway: "ALL",
+                        trackPoints: normalizedTrackPoints,
+                        database: database
+                    )
+                    matchedRoute = legacyMatch.matched
+                    selectedProcedures = legacyMatch.selectedProcedures
+                    selectedRunways = legacyMatch.selectedRunways
+                }
                 let points = dedupeRoutePoints([departurePoint] + matchedRoute.points + [arrivalPoint])
                 return [
                     "departure": departurePoint,
@@ -612,8 +643,8 @@ final class PlannerService: @unchecked Sendable {
                     "generated": true,
                     "message": "已从 \(normalizedTrackPoints.count) 个导入轨迹点匹配本地航路。",
                     "route_display": matchedRoute.routeDisplay,
-                    "selected_procedures": procedureMatch.selectedProcedures,
-                    "selected_runways": procedureMatch.selectedRunways,
+                    "selected_procedures": selectedProcedures,
+                    "selected_runways": selectedRunways,
                     "distance_nm": pathLengthNM(points),
                     "source": [
                         "provider": "Imported track",
@@ -661,7 +692,29 @@ final class PlannerService: @unchecked Sendable {
         let routeDisplay: String
     }
 
+    private struct ProcedureTrackAlignment {
+        let candidate: ProcedureRouteCandidate
+        let candidateStartIndex: Int
+        let candidateEndIndex: Int
+        let trackStartIndex: Int
+        let trackEndIndex: Int
+        let matchedFitNM: Double
+        let fullFitNM: Double
+        let coverageScore: Double
+        let meanPointDistanceNM: Double
+    }
+
     private struct ProcedureMatch {
+        let sid: ProcedureTrackAlignment?
+        let star: ProcedureTrackAlignment?
+        let approach: ProcedureTrackAlignment?
+        let enrouteTrackPoints: [TrackPoint]
+        let selectedProcedures: [String: Any]
+        let selectedRunways: [String: String]
+        let usesProcedureFirst: Bool
+    }
+
+    private struct LegacyProcedureMatch {
         let matched: RoutePath
         let selectedProcedures: [String: Any]
         let selectedRunways: [String: String]
@@ -709,6 +762,12 @@ final class PlannerService: @unchecked Sendable {
         var adjacency: [String: [GraphEdge]]
         var nodeAirways: [String: Set<String>]
         var nodesByIdent: [String: [String]]
+        var spatialBuckets: [GraphSpatialKey: [String]]
+    }
+
+    private struct GraphSpatialKey: Hashable {
+        let latitude: Int
+        let longitude: Int
     }
 
     private struct RouteHeap {
@@ -926,7 +985,8 @@ final class PlannerService: @unchecked Sendable {
                 procedure: procedure,
                 transition: transition
             )
-            if !runwayMatches(candidate: candidateRunway, selected: runway) {
+            if candidateRunway != "ALL",
+               !runwayMatches(candidate: candidateRunway, selected: runway) {
                 continue
             }
             let points = group.rows.compactMap { procedureRoutePoint(from: $0, kind: mode) }
@@ -942,6 +1002,58 @@ final class PlannerService: @unchecked Sendable {
             ))
         }
         return candidates
+    }
+
+    /// Track matching needs the complete flyable path, not only the named
+    /// runway/transition branch. ARINC SID and approach branches run into the
+    /// common route; STAR runway branches run out of it. Keeping the selected
+    /// transition while joining the common rows lets a partial flown prefix
+    /// identify the complete procedure without shortening what is drawn.
+    private func trackProcedureRouteCandidates(
+        table: String,
+        airport: String,
+        mode: String,
+        runway: String,
+        database: SQLiteDatabase
+    ) throws -> [ProcedureRouteCandidate] {
+        let baseCandidates = try procedureRouteCandidates(
+            table: table,
+            airport: airport,
+            mode: mode,
+            runway: runway,
+            database: database
+        )
+        let normalizedMode = mode.lowercased()
+        let commonByProcedure = Dictionary(
+            uniqueKeysWithValues: baseCandidates
+                .filter { $0.transition == "ALL" }
+                .map { ($0.procedure, $0) }
+        )
+
+        return baseCandidates.map { candidate in
+            guard candidate.transition != "ALL",
+                  let common = commonByProcedure[candidate.procedure] else {
+                return candidate
+            }
+            let joinedPoints: [[String: Any]]
+            if normalizedMode == "star" {
+                joinedPoints = dedupeRoutePoints(common.points + candidate.points)
+            } else {
+                joinedPoints = dedupeRoutePoints(candidate.points + common.points)
+            }
+            guard !joinedPoints.isEmpty else { return candidate }
+            let endpoint = normalizedMode == "sid"
+                ? joinedPoints[joinedPoints.count - 1]
+                : joinedPoints[0]
+            return ProcedureRouteCandidate(
+                procedure: candidate.procedure,
+                transition: candidate.transition,
+                runway: candidate.runway,
+                points: joinedPoints,
+                endpoint: endpoint,
+                distanceNM: pathLengthNM(joinedPoints)
+            )
+        }
     }
 
     private func procedureDistanceSortKey(_ candidate: ProcedureRouteCandidate, reference: [String: Any]) -> String {
@@ -995,35 +1107,64 @@ final class PlannerService: @unchecked Sendable {
         }
     }
 
-    private func matchProceduresForEnroute(
+    private func matchProceduresAfterEnroute(
         departurePoint: [String: Any],
         arrivalPoint: [String: Any],
         matched: RoutePath,
         departureRunway: String = "ALL",
         arrivalRunway: String = "ALL",
+        trackPoints: [TrackPoint] = [],
         database: SQLiteDatabase
-    ) throws -> ProcedureMatch {
+    ) throws -> LegacyProcedureMatch {
         let departureIdent = navString(departurePoint["ident"]).uppercased()
         let arrivalIdent = navString(arrivalPoint["ident"]).uppercased()
         var matchedRoute = matched
         var selectedProcedures: [String: Any] = [:]
+        let trackDepartureRunway = try inferTrackRunway(
+            airport: departureIdent,
+            mode: "departure",
+            trackPoints: trackPoints,
+            database: database
+        )
+        let trackArrivalRunway = try inferTrackRunway(
+            airport: arrivalIdent,
+            mode: "arrival",
+            trackPoints: trackPoints,
+            database: database
+        )
+        let resolvedDepartureRunway = normalizedRunwayChoice(departureRunway) == "ALL"
+            ? trackDepartureRunway
+            : normalizedRunwayChoice(departureRunway)
+        let resolvedArrivalRunway = normalizedRunwayChoice(arrivalRunway) == "ALL"
+            ? trackArrivalRunway
+            : normalizedRunwayChoice(arrivalRunway)
         var selectedRunways = [
-            "departure": normalizedRunwayChoice(departureRunway),
-            "arrival": normalizedRunwayChoice(arrivalRunway)
+            "departure": resolvedDepartureRunway,
+            "arrival": resolvedArrivalRunway
         ]
 
         let sidCandidates = try procedureRouteCandidates(
             table: "tbl_sids",
             airport: departureIdent,
             mode: "sid",
-            runway: departureRunway,
+            runway: resolvedDepartureRunway,
             database: database
         )
-        let sid = try selectSIDCandidateForFirstAirway(
-            candidates: sidCandidates,
-            legs: matchedRoute.legs,
-            database: database
-        ) ?? nearestProcedureToRoute(
+        let trackSID = trackDepartureRunway == "ALL"
+            ? nil
+            : legacyBestProcedureCandidateForTrack(
+                candidates: sidCandidates,
+                mode: "sid",
+                trackPoints: trackPoints
+            )
+        let airwaySID = try trackSID == nil
+            ? selectSIDCandidateForFirstAirway(
+                candidates: sidCandidates,
+                legs: matchedRoute.legs,
+                database: database
+            )
+            : nil
+        let sid = trackSID ?? airwaySID ?? nearestProcedureToRoute(
             candidates: sidCandidates,
             routePoints: matchedRoute.points,
             maxDistanceNM: 15.0
@@ -1034,7 +1175,9 @@ final class PlannerService: @unchecked Sendable {
                 "procedure": sid.procedure,
                 "transition": sid.transition
             ]
-            selectedRunways["departure"] = sid.runway
+            if sid.runway != "ALL" {
+                selectedRunways["departure"] = sid.runway
+            }
             matchedRoute = try extendMatchedRouteFromSID(
                 matched: matchedRoute,
                 endpoint: sid.endpoint,
@@ -1046,7 +1189,7 @@ final class PlannerService: @unchecked Sendable {
             table: "tbl_stars",
             airport: arrivalIdent,
             mode: "star",
-            runway: arrivalRunway,
+            runway: resolvedArrivalRunway,
             database: database
         )
         matchedRoute = try replaceTerminalDirectWithSTARAirway(
@@ -1055,11 +1198,21 @@ final class PlannerService: @unchecked Sendable {
             graph: buildAirwayGraph(database: database),
             database: database
         )
-        let star = try selectSTARCandidateForRouteAirway(
-            candidates: starCandidates,
-            legs: matchedRoute.legs,
-            database: database
-        ) ?? nearestProcedureToRoute(
+        let trackSTAR = trackArrivalRunway == "ALL"
+            ? nil
+            : legacyBestProcedureCandidateForTrack(
+                candidates: starCandidates,
+                mode: "star",
+                trackPoints: trackPoints
+            )
+        let airwaySTAR = try trackSTAR == nil
+            ? selectSTARCandidateForRouteAirway(
+                candidates: starCandidates,
+                legs: matchedRoute.legs,
+                database: database
+            )
+            : nil
+        let star = trackSTAR ?? airwaySTAR ?? nearestProcedureToRoute(
             candidates: starCandidates,
             routePoints: matchedRoute.points,
             maxDistanceNM: 10.0
@@ -1070,7 +1223,9 @@ final class PlannerService: @unchecked Sendable {
                 "procedure": star.procedure,
                 "transition": star.transition
             ]
-            selectedRunways["arrival"] = star.runway
+            if star.runway != "ALL" {
+                selectedRunways["arrival"] = star.runway
+            }
             matchedRoute = try trimMatchedRouteAtFix(
                 matched: matchedRoute,
                 endpoint: star.endpoint,
@@ -1091,11 +1246,792 @@ final class PlannerService: @unchecked Sendable {
             selectedRunways["arrival"] = navString(approach["runway"])
         }
 
-        return ProcedureMatch(
+        return LegacyProcedureMatch(
             matched: matchedRoute,
             selectedProcedures: selectedProcedures,
             selectedRunways: selectedRunways
         )
+    }
+
+    private func legacyBestProcedureCandidateForTrack(
+        candidates: [ProcedureRouteCandidate],
+        mode: String,
+        trackPoints: [TrackPoint]
+    ) -> ProcedureRouteCandidate? {
+        guard trackPoints.count >= 2 else { return nil }
+        let normalizedMode = mode.lowercased()
+        let commonSTARs = normalizedMode == "star"
+            ? candidates.filter { $0.transition == "ALL" }
+            : []
+        let eligible = commonSTARs.isEmpty ? candidates : commonSTARs
+        var best: (fitNM: Double, procedureDistanceNM: Double, candidate: ProcedureRouteCandidate)?
+
+        for candidate in eligible {
+            let fit = legacyProcedureTrackFitNM(
+                candidate: candidate,
+                trackPoints: trackPoints
+            )
+            guard fit.isFinite, fit <= 18.0 else { continue }
+            let score = (fit, candidate.distanceNM, candidate)
+            if best == nil
+                || score.0 < best!.fitNM
+                || (score.0 == best!.fitNM && score.1 < best!.procedureDistanceNM)
+                || (score.0 == best!.fitNM && score.1 == best!.procedureDistanceNM && candidate.procedure < best!.candidate.procedure)
+                || (score.0 == best!.fitNM && score.1 == best!.procedureDistanceNM && candidate.procedure == best!.candidate.procedure && candidate.transition < best!.candidate.transition) {
+                best = score
+            }
+        }
+        return best?.candidate
+    }
+
+    private func legacyProcedureTrackFitNM(
+        candidate: ProcedureRouteCandidate,
+        trackPoints: [TrackPoint]
+    ) -> Double {
+        guard candidate.points.count >= 2, trackPoints.count >= 2,
+              let firstProcedurePoint = candidate.points.first,
+              let lastProcedurePoint = candidate.points.last else {
+            return .greatestFiniteMagnitude
+        }
+
+        let firstIndex = legacyNearestTrackIndex(to: firstProcedurePoint, trackPoints: trackPoints)
+        let lastIndex = legacyNearestTrackIndex(to: lastProcedurePoint, trackPoints: trackPoints)
+        let lower = min(firstIndex, lastIndex)
+        let upper = max(firstIndex, lastIndex)
+        guard upper > lower else { return .greatestFiniteMagnitude }
+
+        let count = upper - lower + 1
+        let step = max(1, count / 64)
+        var distances: [Double] = []
+        var index = lower
+        while index <= upper {
+            let point = trackPoints[index]
+            distances.append(distanceToPolylineNM(
+                lat: point.lat,
+                lon: point.lon,
+                routePoints: candidate.points
+            ))
+            index += step
+        }
+        if (upper - lower) % step != 0 {
+            let point = trackPoints[upper]
+            distances.append(distanceToPolylineNM(
+                lat: point.lat,
+                lon: point.lon,
+                routePoints: candidate.points
+            ))
+        }
+        distances = distances.filter(\.isFinite).sorted()
+        guard !distances.isEmpty else { return .greatestFiniteMagnitude }
+        let retainedCount = max(1, Int(ceil(Double(distances.count) * 0.9)))
+        return distances.prefix(retainedCount).reduce(0, +) / Double(retainedCount)
+    }
+
+    private func legacyNearestTrackIndex(to point: [String: Any], trackPoints: [TrackPoint]) -> Int {
+        guard let lat = navDouble(point["lat"]),
+              let lon = navDouble(point["lon"]),
+              !trackPoints.isEmpty else {
+            return 0
+        }
+        return trackPoints.indices.min { lhs, rhs in
+            greatCircleNM(lat1: trackPoints[lhs].lat, lon1: trackPoints[lhs].lon, lat2: lat, lon2: lon)
+                < greatCircleNM(lat1: trackPoints[rhs].lat, lon1: trackPoints[rhs].lon, lat2: lat, lon2: lon)
+        } ?? 0
+    }
+
+    private func matchProceduresForTrack(
+        departurePoint: [String: Any],
+        arrivalPoint: [String: Any],
+        departureRunway: String = "ALL",
+        arrivalRunway: String = "ALL",
+        trackPoints: [TrackPoint] = [],
+        database: SQLiteDatabase
+    ) throws -> ProcedureMatch {
+        let departureIdent = navString(departurePoint["ident"]).uppercased()
+        let arrivalIdent = navString(arrivalPoint["ident"]).uppercased()
+        var selectedProcedures: [String: Any] = [:]
+        let trackDepartureRunway = try inferTrackRunway(
+            airport: departureIdent,
+            mode: "departure",
+            trackPoints: trackPoints,
+            database: database
+        )
+        let trackArrivalRunway = try inferTrackRunway(
+            airport: arrivalIdent,
+            mode: "arrival",
+            trackPoints: trackPoints,
+            database: database
+        )
+        let resolvedDepartureRunway = normalizedRunwayChoice(departureRunway) == "ALL"
+            ? trackDepartureRunway
+            : normalizedRunwayChoice(departureRunway)
+        let resolvedArrivalRunway = normalizedRunwayChoice(arrivalRunway) == "ALL"
+            ? trackArrivalRunway
+            : normalizedRunwayChoice(arrivalRunway)
+        var selectedRunways = [
+            "departure": resolvedDepartureRunway,
+            "arrival": resolvedArrivalRunway
+        ]
+        // Procedure-first matching needs enough samples at both terminal ends.
+        // Short route sketches do not contain enough evidence to distinguish
+        // adjacent procedures, so they keep the established airway-first path.
+        let usesProcedureFirst = trackPoints.count >= 64
+            && trackDepartureRunway != "ALL"
+            && trackArrivalRunway != "ALL"
+        guard usesProcedureFirst else {
+            return ProcedureMatch(
+                sid: nil,
+                star: nil,
+                approach: nil,
+                enrouteTrackPoints: trackPoints,
+                selectedProcedures: [:],
+                selectedRunways: selectedRunways,
+                usesProcedureFirst: false
+            )
+        }
+
+        let sidCandidates = try trackProcedureRouteCandidates(
+            table: "tbl_sids",
+            airport: departureIdent,
+            mode: "sid",
+            runway: resolvedDepartureRunway,
+            database: database
+        )
+        let runwaySIDCandidates = sidCandidates.filter { $0.runway != "ALL" }
+        let sidPool = resolvedDepartureRunway != "ALL" && !runwaySIDCandidates.isEmpty
+            ? runwaySIDCandidates
+            : sidCandidates
+        let sid = bestProcedureAlignment(
+            candidates: sidPool,
+            mode: "sid",
+            trackPoints: trackPoints
+        )
+        if let sidCandidate = sid?.candidate {
+            selectedProcedures["sid"] = [
+                "airport": departureIdent,
+                "procedure": sidCandidate.procedure,
+                "transition": sidCandidate.transition
+            ]
+            if sidCandidate.runway != "ALL" {
+                selectedRunways["departure"] = sidCandidate.runway
+            }
+        }
+
+        let starCandidates = try trackProcedureRouteCandidates(
+            table: "tbl_stars",
+            airport: arrivalIdent,
+            mode: "star",
+            runway: resolvedArrivalRunway,
+            database: database
+        )
+        let star = bestProcedureAlignment(
+            candidates: starCandidates,
+            mode: "star",
+            trackPoints: trackPoints
+        )
+        if let starCandidate = star?.candidate {
+            selectedProcedures["star"] = [
+                "airport": arrivalIdent,
+                "procedure": starCandidate.procedure,
+                "transition": starCandidate.transition
+            ]
+            if starCandidate.runway != "ALL" {
+                selectedRunways["arrival"] = starCandidate.runway
+            }
+        }
+
+        let approachCandidates = try trackProcedureRouteCandidates(
+            table: "tbl_iaps",
+            airport: arrivalIdent,
+            mode: "approach",
+            runway: resolvedArrivalRunway,
+            database: database
+        )
+        let approach = bestApproachAlignment(
+            candidates: approachCandidates,
+            star: star,
+            trackPoints: trackPoints
+        )
+        if let approachCandidate = approach?.candidate {
+            selectedProcedures["approach"] = [
+                "airport": arrivalIdent,
+                "procedure": approachCandidate.procedure,
+                "transition": approachCandidate.transition
+            ]
+            if approachCandidate.runway != "ALL" {
+                selectedRunways["arrival"] = approachCandidate.runway
+            }
+        } else if let fallbackApproach = try selectApproachCandidate(
+            airport: arrivalIdent,
+            runway: selectedRunways["arrival"] ?? resolvedArrivalRunway,
+            database: database
+        ) {
+            selectedProcedures["approach"] = [
+                "airport": arrivalIdent,
+                "procedure": navString(fallbackApproach["procedure_identifier"]),
+                "transition": navString(fallbackApproach["transition_identifier"])
+            ]
+            selectedRunways["arrival"] = navString(fallbackApproach["runway"])
+        }
+
+        var enrouteStartIndex = 0
+        var enrouteEndIndex = max(0, trackPoints.count - 1)
+        if let sid {
+            enrouteStartIndex = min(max(0, sid.trackEndIndex), max(0, trackPoints.count - 2))
+            let endpointProjection = nearestTrackSegment(
+                to: sid.candidate.endpoint,
+                trackPoints: trackPoints
+            )
+            if endpointProjection.distanceNM <= 5.0,
+               endpointProjection.index >= enrouteStartIndex {
+                enrouteStartIndex = min(endpointProjection.index, max(0, trackPoints.count - 2))
+            }
+        }
+        if let star {
+            enrouteEndIndex = min(
+                max(1, star.trackStartIndex + 1),
+                max(1, trackPoints.count - 1)
+            )
+        }
+        let enrouteTrackPoints: [TrackPoint]
+        if trackPoints.count >= 2, enrouteEndIndex > enrouteStartIndex {
+            enrouteTrackPoints = Array(trackPoints[enrouteStartIndex...enrouteEndIndex])
+        } else {
+            enrouteTrackPoints = trackPoints
+        }
+
+        return ProcedureMatch(
+            sid: sid,
+            star: star,
+            approach: approach,
+            enrouteTrackPoints: enrouteTrackPoints,
+            selectedProcedures: selectedProcedures,
+            selectedRunways: selectedRunways,
+            usesProcedureFirst: true
+        )
+    }
+
+    private func bestProcedureAlignment(
+        candidates: [ProcedureRouteCandidate],
+        mode: String,
+        trackPoints: [TrackPoint]
+    ) -> ProcedureTrackAlignment? {
+        guard trackPoints.count >= 2 else { return nil }
+        func bestMatch(in pool: [ProcedureRouteCandidate]) -> ProcedureTrackAlignment? {
+            var best: ProcedureTrackAlignment?
+            for candidate in pool {
+                guard let alignment = procedureTrackAlignment(
+                    candidate: candidate,
+                    mode: mode,
+                    trackPoints: trackPoints
+                ) else { continue }
+                if best == nil || procedureAlignmentIsBetter(alignment, than: best!) {
+                    best = alignment
+                }
+            }
+            return best
+        }
+
+        let best = bestMatch(in: candidates)
+        if mode.lowercased() == "star",
+           let best,
+           let common = bestMatch(in: candidates.filter { $0.transition == "ALL" }),
+           Int(floor(common.matchedFitNM)) <= Int(floor(best.matchedFitNM)) + 1,
+           common.coverageScore >= best.coverageScore * 0.7 {
+            return common
+        }
+        return best
+    }
+
+    private func bestApproachAlignment(
+        candidates: [ProcedureRouteCandidate],
+        star: ProcedureTrackAlignment?,
+        trackPoints: [TrackPoint]
+    ) -> ProcedureTrackAlignment? {
+        guard !candidates.isEmpty else { return nil }
+        let bestPriority = candidates.map { approachPriority($0.procedure) }.min() ?? 5
+        let preferredType = candidates.filter { approachPriority($0.procedure) == bestPriority }
+        let starExitIdent = star?.candidate.points.last.map { navString($0["ident"]).uppercased() } ?? ""
+        if !starExitIdent.isEmpty {
+            let connected = preferredType.filter {
+                navString($0.points.first?["ident"]).uppercased() == starExitIdent
+            }
+            if let match = bestProcedureAlignment(
+                candidates: connected,
+                mode: "approach",
+                trackPoints: trackPoints
+            ) {
+                return match
+            }
+        }
+        let common = preferredType.filter { $0.transition == "ALL" }
+        if let match = bestProcedureAlignment(
+            candidates: common,
+            mode: "approach",
+            trackPoints: trackPoints
+        ) {
+            return match
+        }
+        return bestProcedureAlignment(
+            candidates: preferredType,
+            mode: "approach",
+            trackPoints: trackPoints
+        )
+    }
+
+    private func procedureTrackAlignment(
+        candidate: ProcedureRouteCandidate,
+        mode: String,
+        trackPoints: [TrackPoint]
+    ) -> ProcedureTrackAlignment? {
+        guard trackPoints.count >= 2 else { return nil }
+        let procedurePoints = primaryProcedureTrackPoints(candidate.points, mode: mode)
+        guard procedurePoints.count >= 2 else { return nil }
+        let projections = procedurePoints.map {
+            nearestTrackSegment(to: $0, trackPoints: trackPoints)
+        }
+        let maximumPointDistanceNM = 3.0
+        var best: ProcedureTrackAlignment?
+
+        for startIndex in procedurePoints.indices {
+            guard projections[startIndex].distanceNM <= maximumPointDistanceNM else { continue }
+            var lastTrackIndex = projections[startIndex].index
+            for endIndex in startIndex..<procedurePoints.count {
+                let projection = projections[endIndex]
+                guard projection.distanceNM <= maximumPointDistanceNM,
+                      projection.index >= lastTrackIndex else {
+                    break
+                }
+                lastTrackIndex = projection.index
+                let matchedPoints = Array(procedurePoints[startIndex...endIndex])
+                guard matchedPoints.count >= 2 else { continue }
+                let matchedFit = matchedProcedureTrackFitNM(
+                    procedurePoints: matchedPoints,
+                    trackStartIndex: projections[startIndex].index,
+                    trackEndIndex: projection.index,
+                    trackPoints: trackPoints
+                )
+                guard matchedFit.isFinite else { continue }
+                let distances = projections[startIndex...endIndex].map(\.distanceNM)
+                let coverage = pathLengthNM(matchedPoints) + Double(matchedPoints.count) * 4.0
+                let continuationFit = procedureContinuationFitNM(
+                    candidate: candidate,
+                    mode: mode,
+                    candidateEndIndex: endIndex,
+                    trackEndIndex: projection.index,
+                    trackPoints: trackPoints
+                )
+                let alignment = ProcedureTrackAlignment(
+                    candidate: candidate,
+                    candidateStartIndex: startIndex,
+                    candidateEndIndex: endIndex,
+                    trackStartIndex: projections[startIndex].index,
+                    trackEndIndex: projection.index,
+                    matchedFitNM: matchedFit,
+                    fullFitNM: continuationFit,
+                    coverageScore: coverage,
+                    meanPointDistanceNM: distances.reduce(0, +) / Double(distances.count)
+                )
+                if best == nil
+                    || alignment.coverageScore > best!.coverageScore
+                    || (alignment.coverageScore == best!.coverageScore && alignment.matchedFitNM < best!.matchedFitNM) {
+                    best = alignment
+                }
+            }
+        }
+        return best
+    }
+
+    private func procedureContinuationFitNM(
+        candidate: ProcedureRouteCandidate,
+        mode: String,
+        candidateEndIndex: Int,
+        trackEndIndex: Int,
+        trackPoints: [TrackPoint]
+    ) -> Double {
+        if mode.lowercased() == "approach" {
+            return 0
+        }
+        guard mode.lowercased() == "sid",
+              candidateEndIndex < candidate.points.count - 1,
+              trackEndIndex < trackPoints.count - 1,
+              let endpoint = candidate.points.last,
+              let lat = navDouble(endpoint["lat"]),
+              let lon = navDouble(endpoint["lon"]) else {
+            return procedureTrackFitNM(candidate: candidate, trackPoints: trackPoints)
+        }
+        var best = Double.greatestFiniteMagnitude
+        for index in trackEndIndex..<(trackPoints.count - 1) {
+            best = min(
+                best,
+                distanceToTrackSegmentNM(
+                    lat: lat,
+                    lon: lon,
+                    start: trackPoints[index],
+                    end: trackPoints[index + 1]
+                )
+            )
+        }
+        return best
+    }
+
+    private func primaryProcedureTrackPoints(
+        _ points: [[String: Any]],
+        mode: String
+    ) -> [[String: Any]] {
+        guard mode.lowercased() == "approach",
+              let runwayIndex = points.firstIndex(where: {
+                  navString($0["ident"]).uppercased().hasPrefix("RW")
+              }) else {
+            return points
+        }
+        return Array(points[...runwayIndex])
+    }
+
+    private func procedureAlignmentIsBetter(
+        _ lhs: ProcedureTrackAlignment,
+        than rhs: ProcedureTrackAlignment
+    ) -> Bool {
+        let lhsFitBand = Int(floor(lhs.matchedFitNM))
+        let rhsFitBand = Int(floor(rhs.matchedFitNM))
+        if lhsFitBand != rhsFitBand { return lhsFitBand < rhsFitBand }
+        if lhs.coverageScore != rhs.coverageScore { return lhs.coverageScore > rhs.coverageScore }
+        if lhs.fullFitNM != rhs.fullFitNM { return lhs.fullFitNM < rhs.fullFitNM }
+        if lhs.meanPointDistanceNM != rhs.meanPointDistanceNM {
+            return lhs.meanPointDistanceNM < rhs.meanPointDistanceNM
+        }
+        if lhs.candidate.procedure != rhs.candidate.procedure {
+            return lhs.candidate.procedure < rhs.candidate.procedure
+        }
+        return lhs.candidate.transition < rhs.candidate.transition
+    }
+
+    private func nearestTrackSegment(
+        to point: [String: Any],
+        trackPoints: [TrackPoint]
+    ) -> (index: Int, distanceNM: Double) {
+        guard let lat = navDouble(point["lat"]),
+              let lon = navDouble(point["lon"]),
+              trackPoints.count >= 2 else {
+            return (0, .greatestFiniteMagnitude)
+        }
+        var best = (index: 0, distanceNM: Double.greatestFiniteMagnitude)
+        for index in 0..<(trackPoints.count - 1) {
+            let distance = distanceToTrackSegmentNM(
+                lat: lat,
+                lon: lon,
+                start: trackPoints[index],
+                end: trackPoints[index + 1]
+            )
+            if distance < best.distanceNM {
+                best = (index, distance)
+            }
+        }
+        return best
+    }
+
+    private func distanceToTrackSegmentNM(
+        lat: Double,
+        lon: Double,
+        start: TrackPoint,
+        end: TrackPoint
+    ) -> Double {
+        let referenceLat = (lat + start.lat + end.lat) / 3
+        let startLon = wrapLongitude(start.lon, near: lon)
+        let endLon = wrapLongitude(end.lon, near: lon)
+        let point = projectXYNM(lat: lat, lon: lon, referenceLat: referenceLat)
+        let a = projectXYNM(lat: start.lat, lon: startLon, referenceLat: referenceLat)
+        let b = projectXYNM(lat: end.lat, lon: endLon, referenceLat: referenceLat)
+        let dx = b.x - a.x
+        let dy = b.y - a.y
+        if dx == 0, dy == 0 {
+            return hypot(point.x - a.x, point.y - a.y)
+        }
+        let projected = ((point.x - a.x) * dx + (point.y - a.y) * dy) / (dx * dx + dy * dy)
+        let t = min(1, max(0, projected))
+        return hypot(point.x - (a.x + t * dx), point.y - (a.y + t * dy))
+    }
+
+    private func matchedProcedureTrackFitNM(
+        procedurePoints: [[String: Any]],
+        trackStartIndex: Int,
+        trackEndIndex: Int,
+        trackPoints: [TrackPoint]
+    ) -> Double {
+        guard procedurePoints.count >= 2, trackPoints.count >= 2 else {
+            return .greatestFiniteMagnitude
+        }
+        let lower = min(trackStartIndex, trackEndIndex)
+        let upper = min(trackPoints.count - 1, max(trackStartIndex, trackEndIndex) + 1)
+        guard upper > lower else { return .greatestFiniteMagnitude }
+        let count = upper - lower + 1
+        let step = max(1, count / 64)
+        var distances: [Double] = []
+        var index = lower
+        while index <= upper {
+            let point = trackPoints[index]
+            distances.append(distanceToPolylineNM(
+                lat: point.lat,
+                lon: point.lon,
+                routePoints: procedurePoints
+            ))
+            index += step
+        }
+        if (upper - lower) % step != 0 {
+            let point = trackPoints[upper]
+            distances.append(distanceToPolylineNM(
+                lat: point.lat,
+                lon: point.lon,
+                routePoints: procedurePoints
+            ))
+        }
+        distances = distances.filter(\.isFinite).sorted()
+        guard !distances.isEmpty else { return .greatestFiniteMagnitude }
+        let retainedCount = max(1, Int(ceil(Double(distances.count) * 0.9)))
+        return distances.prefix(retainedCount).reduce(0, +) / Double(retainedCount)
+    }
+
+    private func procedureTrackFitNM(
+        candidate: ProcedureRouteCandidate,
+        trackPoints: [TrackPoint]
+    ) -> Double {
+        guard candidate.points.count >= 2, trackPoints.count >= 2,
+              let firstProcedurePoint = candidate.points.first,
+              let lastProcedurePoint = candidate.points.last else {
+            return .greatestFiniteMagnitude
+        }
+        let firstProjection = nearestTrackSegment(to: firstProcedurePoint, trackPoints: trackPoints)
+        let lastProjection = nearestTrackSegment(to: lastProcedurePoint, trackPoints: trackPoints)
+        return matchedProcedureTrackFitNM(
+            procedurePoints: candidate.points,
+            trackStartIndex: firstProjection.index,
+            trackEndIndex: lastProjection.index,
+            trackPoints: trackPoints
+        )
+    }
+
+    private func applyProcedureBoundaries(
+        matched: RoutePath,
+        sid: ProcedureRouteCandidate?,
+        star: ProcedureRouteCandidate?,
+        database: SQLiteDatabase
+    ) throws -> RoutePath {
+        var adjusted = matched
+        if let sid {
+            if let trimmed = try matchedRouteStartingAtFix(
+                matched: adjusted,
+                endpoint: sid.endpoint,
+                database: database
+            ) {
+                adjusted = trimmed
+            } else {
+                adjusted = try extendMatchedRouteFromSID(
+                    matched: adjusted,
+                    endpoint: sid.endpoint,
+                    database: database
+                )
+            }
+        }
+        if let star {
+            adjusted = try trimMatchedRouteAtFix(
+                matched: adjusted,
+                endpoint: star.endpoint,
+                database: database
+            )
+        }
+
+        var legs = adjusted.legs
+        if let sid,
+           let first = adjusted.points.first,
+           navString(first["ident"]) != navString(sid.endpoint["ident"]),
+           routeDistanceNM(sid.endpoint, first) > 0.5 {
+            legs.insert(directLeg(from: sid.endpoint, to: first), at: 0)
+        }
+        if let star,
+           let last = adjusted.points.last,
+           navString(last["ident"]) != navString(star.endpoint["ident"]),
+           routeDistanceNM(last, star.endpoint) > 0.5 {
+            legs.append(directLeg(from: last, to: star.endpoint))
+        }
+        legs = mergeRepeatedAirwayLegs(legs).filter {
+            navString($0["entry"]) != navString($0["exit"])
+        }
+        let points = try pointsFromLegs(legs, database: database)
+        return RoutePath(
+            points: points,
+            legs: legs,
+            routeDisplay: routeDisplayFromLegs(legs, fallback: "")
+        )
+    }
+
+    private func matchedRouteStartingAtFix(
+        matched: RoutePath,
+        endpoint: [String: Any],
+        database: SQLiteDatabase
+    ) throws -> RoutePath? {
+        let endpointIdent = navString(endpoint["ident"])
+        for index in matched.legs.indices {
+            let leg = matched.legs[index]
+            let type = navString(leg["type"])
+            if type == "airway",
+               let segment = try expandAirway(
+                   navString(leg["name"]),
+                   entry: navString(leg["entry"]),
+                   exit: navString(leg["exit"]),
+                   database: database
+               ),
+               let endpointIndex = indexOfMatchingPoint(segment.points, target: endpoint) {
+                var legs = Array(matched.legs[index...])
+                if endpointIndex >= segment.points.count - 1 {
+                    legs.removeFirst()
+                } else {
+                    legs[0]["entry"] = endpointIdent
+                    legs[0]["distance_nm"] = pathLengthNM(Array(segment.points[endpointIndex...]))
+                }
+                legs = legs.filter { navString($0["entry"]) != navString($0["exit"]) }
+                let points = try pointsFromLegs(legs, database: database)
+                return RoutePath(
+                    points: points,
+                    legs: legs,
+                    routeDisplay: routeDisplayFromLegs(legs, fallback: "")
+                )
+            }
+            if type == "direct" {
+                let entryIdent = navString(leg["entry"])
+                let exitIdent = navString(leg["exit"])
+                if entryIdent == endpointIdent {
+                    let legs = Array(matched.legs[index...])
+                    return RoutePath(
+                        points: try pointsFromLegs(legs, database: database),
+                        legs: legs,
+                        routeDisplay: routeDisplayFromLegs(legs, fallback: "")
+                    )
+                }
+                if exitIdent == endpointIdent {
+                    let legs = index + 1 < matched.legs.count
+                        ? Array(matched.legs[(index + 1)...])
+                        : []
+                    return RoutePath(
+                        points: try pointsFromLegs(legs, database: database),
+                        legs: legs,
+                        routeDisplay: routeDisplayFromLegs(legs, fallback: "")
+                    )
+                }
+            }
+        }
+        return nil
+    }
+
+    private func inferTrackRunway(
+        airport: String,
+        mode: String,
+        trackPoints: [TrackPoint],
+        database: SQLiteDatabase
+    ) throws -> String {
+        guard trackPoints.count >= 2 else { return "ALL" }
+        let rows = try database.rows(
+            sql: """
+            select runway_identifier, runway_latitude, runway_longitude, runway_true_bearing
+            from tbl_runways
+            where airport_identifier = ?
+            order by runway_identifier
+            """,
+            arguments: [.text(airport.uppercased())]
+        )
+        guard !rows.isEmpty else { return "ALL" }
+        let edgeCount = max(2, min(trackPoints.count, max(32, trackPoints.count / 3)))
+        let searchIndices: Range<Int> = mode == "arrival"
+            ? (trackPoints.count - edgeCount)..<trackPoints.count
+            : 0..<edgeCount
+        var best: (score: Double, runway: String)?
+
+        for row in rows {
+            guard let runwayLat = navDouble(row["runway_latitude"]),
+                  let runwayLon = navDouble(row["runway_longitude"]),
+                  let runwayBearing = navDouble(row["runway_true_bearing"]) else {
+                continue
+            }
+            let closestIndex = searchIndices.min { lhs, rhs in
+                greatCircleNM(lat1: trackPoints[lhs].lat, lon1: trackPoints[lhs].lon, lat2: runwayLat, lon2: runwayLon)
+                    < greatCircleNM(lat1: trackPoints[rhs].lat, lon1: trackPoints[rhs].lon, lat2: runwayLat, lon2: runwayLon)
+            } ?? searchIndices.lowerBound
+            let thresholdDistance = greatCircleNM(
+                lat1: trackPoints[closestIndex].lat,
+                lon1: trackPoints[closestIndex].lon,
+                lat2: runwayLat,
+                lon2: runwayLon
+            )
+            let nearbyTerminalSamples = searchIndices.reduce(into: 0) { count, index in
+                let distance = greatCircleNM(
+                    lat1: trackPoints[index].lat,
+                    lon1: trackPoints[index].lon,
+                    lat2: runwayLat,
+                    lon2: runwayLon
+                )
+                if distance <= 8.0 {
+                    count += 1
+                }
+            }
+            guard nearbyTerminalSamples >= 4 else { continue }
+            let course = trackCourseNearRunway(
+                closestIndex: closestIndex,
+                mode: mode,
+                trackPoints: trackPoints
+            )
+            let headingPenalty = course.map { angularDifferenceDegrees($0, runwayBearing) / 12.0 } ?? 15.0
+            let score = thresholdDistance * 3.0 + headingPenalty
+            let runway = normalizedRunwayChoice(navString(row["runway_identifier"]))
+            if best == nil || score < best!.score || (score == best!.score && runway < best!.runway) {
+                best = (score, runway)
+            }
+        }
+        return best?.runway ?? "ALL"
+    }
+
+    private func trackCourseNearRunway(
+        closestIndex: Int,
+        mode: String,
+        trackPoints: [TrackPoint]
+    ) -> Double? {
+        let minimumSeparationNM = 1.5
+        if mode == "arrival" {
+            for index in stride(from: closestIndex - 1, through: 0, by: -1) {
+                if greatCircleNM(
+                    lat1: trackPoints[index].lat,
+                    lon1: trackPoints[index].lon,
+                    lat2: trackPoints[closestIndex].lat,
+                    lon2: trackPoints[closestIndex].lon
+                ) >= minimumSeparationNM {
+                    return initialBearingDegrees(from: trackPoints[index], to: trackPoints[closestIndex])
+                }
+            }
+        } else if closestIndex + 1 < trackPoints.count {
+            for index in (closestIndex + 1)..<trackPoints.count {
+                if greatCircleNM(
+                    lat1: trackPoints[closestIndex].lat,
+                    lon1: trackPoints[closestIndex].lon,
+                    lat2: trackPoints[index].lat,
+                    lon2: trackPoints[index].lon
+                ) >= minimumSeparationNM {
+                    return initialBearingDegrees(from: trackPoints[closestIndex], to: trackPoints[index])
+                }
+            }
+        }
+        return nil
+    }
+
+    private func initialBearingDegrees(from start: TrackPoint, to end: TrackPoint) -> Double {
+        let lat1 = start.lat * .pi / 180
+        let lat2 = end.lat * .pi / 180
+        let deltaLon = (end.lon - start.lon) * .pi / 180
+        let y = sin(deltaLon) * cos(lat2)
+        let x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(deltaLon)
+        return (atan2(y, x) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)
+    }
+
+    private func angularDifferenceDegrees(_ lhs: Double, _ rhs: Double) -> Double {
+        let difference = abs(lhs - rhs).truncatingRemainder(dividingBy: 360)
+        return min(difference, 360 - difference)
     }
 
     private func selectSIDCandidateForFirstAirway(
@@ -2067,6 +3003,7 @@ final class PlannerService: @unchecked Sendable {
         var adjacency: [String: [GraphEdge]] = [:]
         var nodeAirways: [String: Set<String>] = [:]
         var nodesByIdent: [String: [String]] = [:]
+        var spatialBuckets: [GraphSpatialKey: [String]] = [:]
 
         for group in grouped {
             let ordered = group.rows.sorted {
@@ -2083,6 +3020,10 @@ final class PlannerService: @unchecked Sendable {
                         nodes[key] = graphPoint(from: row)
                         let ident = navString(row["waypoint_identifier"]).uppercased()
                         nodesByIdent[ident, default: []].append(key)
+                        if let lat = navDouble(row["waypoint_latitude"]),
+                           let lon = navDouble(row["waypoint_longitude"]) {
+                            spatialBuckets[graphSpatialKey(lat: lat, lon: lon), default: []].append(key)
+                        }
                     }
                     guard let previous = previousRow,
                           let previousKey = graphKey(row: previous),
@@ -2119,7 +3060,13 @@ final class PlannerService: @unchecked Sendable {
             }
         }
 
-        return AirwayGraph(nodes: nodes, adjacency: adjacency, nodeAirways: nodeAirways, nodesByIdent: nodesByIdent)
+        return AirwayGraph(
+            nodes: nodes,
+            adjacency: adjacency,
+            nodeAirways: nodeAirways,
+            nodesByIdent: nodesByIdent,
+            spatialBuckets: spatialBuckets
+        )
     }
 
     private func partitionAirwayRows(_ rows: [[String: Any]]) -> [[[String: Any]]] {
@@ -2229,20 +3176,95 @@ final class PlannerService: @unchecked Sendable {
         graph: AirwayGraph,
         limit: Int
     ) -> [(key: String, distanceNM: Double)] {
-        let distances = graph.nodes.compactMap { key, point -> (key: String, distanceNM: Double)? in
+        guard limit > 0 else { return [] }
+
+        if allowedNodes.count == graph.nodes.count {
+            let nearbyKeys = nearbyGraphNodeKeys(lat: lat, lon: lon, graph: graph)
+            let nearby = nearestGraphNodes(
+                lat: lat,
+                lon: lon,
+                candidateKeys: nearbyKeys,
+                allowedNodes: allowedNodes,
+                graph: graph,
+                limit: limit
+            )
+            if nearby.count == limit,
+               (nearby.last?.distanceNM ?? .greatestFiniteMagnitude) <= 80.0 {
+                return nearby
+            }
+        }
+
+        return nearestGraphNodes(
+            lat: lat,
+            lon: lon,
+            candidateKeys: Array(graph.nodes.keys),
+            allowedNodes: allowedNodes,
+            graph: graph,
+            limit: limit
+        )
+    }
+
+    private func nearestGraphNodes(
+        lat: Double,
+        lon: Double,
+        candidateKeys: [String],
+        allowedNodes: Set<String>,
+        graph: AirwayGraph,
+        limit: Int
+    ) -> [(key: String, distanceNM: Double)] {
+        var nearest: [(key: String, distanceNM: Double)] = []
+        for key in candidateKeys {
             guard allowedNodes.contains(key),
+                  let point = graph.nodes[key],
                   let pointLat = navDouble(point["lat"]),
                   let pointLon = navDouble(point["lon"]) else {
-                return nil
+                continue
             }
-            return (key, greatCircleNM(lat1: lat, lon1: lon, lat2: pointLat, lon2: pointLon))
-        }.sorted {
-            if $0.distanceNM != $1.distanceNM {
-                return $0.distanceNM < $1.distanceNM
+            let item = (
+                key: key,
+                distanceNM: greatCircleNM(lat1: lat, lon1: lon, lat2: pointLat, lon2: pointLon)
+            )
+            let insertionIndex = nearest.firstIndex {
+                item.distanceNM < $0.distanceNM
+                    || (item.distanceNM == $0.distanceNM && item.key < $0.key)
+            } ?? nearest.endIndex
+            if insertionIndex < limit {
+                nearest.insert(item, at: insertionIndex)
+                if nearest.count > limit {
+                    nearest.removeLast()
+                }
             }
-            return $0.key < $1.key
         }
-        return Array(distances.prefix(limit))
+        return nearest
+    }
+
+    private func graphSpatialKey(lat: Double, lon: Double) -> GraphSpatialKey {
+        let normalizedLon = ((lon + 180).truncatingRemainder(dividingBy: 360) + 360)
+            .truncatingRemainder(dividingBy: 360) - 180
+        return GraphSpatialKey(
+            latitude: Int(floor(min(89.999_999, max(-90, lat)))),
+            longitude: Int(floor(normalizedLon))
+        )
+    }
+
+    private func nearbyGraphNodeKeys(lat: Double, lon: Double, graph: AirwayGraph) -> [String] {
+        let center = graphSpatialKey(lat: lat, lon: lon)
+        let latitudeRadius = 2
+        let cosine = max(0.08, abs(cos(lat * .pi / 180)))
+        let longitudeRadius = min(24, max(2, Int(ceil(2.0 / cosine))))
+        var keys: [String] = []
+
+        for latitude in max(-90, center.latitude - latitudeRadius)...min(89, center.latitude + latitudeRadius) {
+            for longitudeOffset in (-longitudeRadius)...longitudeRadius {
+                var longitude = center.longitude + longitudeOffset
+                while longitude < -180 { longitude += 360 }
+                while longitude >= 180 { longitude -= 360 }
+                keys.append(contentsOf: graph.spatialBuckets[
+                    GraphSpatialKey(latitude: latitude, longitude: longitude)
+                ] ?? [])
+            }
+        }
+        return keys
     }
 
     private func compressAutoLegs(
@@ -2822,12 +3844,8 @@ final class PlannerService: @unchecked Sendable {
         exit: String,
         graph: AirwayGraph
     ) -> [String: Any]? {
-        let entryKeys = graph.nodes.compactMap { key, point in
-            navString(point["ident"]) == entry ? key : nil
-        }
-        let exitKeys = graph.nodes.compactMap { key, point in
-            navString(point["ident"]) == exit ? key : nil
-        }
+        let entryKeys = graph.nodesByIdent[entry.uppercased()] ?? []
+        let exitKeys = graph.nodesByIdent[exit.uppercased()] ?? []
         var best: (distanceNM: Double, leg: [String: Any])?
 
         for entryKey in entryKeys {
@@ -2876,21 +3894,24 @@ final class PlannerService: @unchecked Sendable {
         var distances: [String: Double] = [startKey: 0]
         var previous: [String: (from: String, airway: String)] = [:]
         var frontier = RouteHeap()
-        frontier.push(cost: 0, key: startKey)
+        frontier.push(cost: graphHeuristicNM(from: startKey, to: endKey, graph: graph), key: startKey)
 
         while let current = frontier.popMin() {
             if current.key == endKey {
                 break
             }
-            guard current.cost <= distances[current.key, default: .greatestFiniteMagnitude] else {
+            let currentDistance = distances[current.key, default: .greatestFiniteMagnitude]
+            let expectedPriority = currentDistance + graphHeuristicNM(from: current.key, to: endKey, graph: graph)
+            guard current.cost <= expectedPriority + 1e-9 else {
                 continue
             }
             for edge in graph.adjacency[current.key] ?? [] {
-                let nextCost = current.cost + edge.distanceNM
-                if nextCost < distances[edge.to, default: .greatestFiniteMagnitude] {
-                    distances[edge.to] = nextCost
+                let nextDistance = currentDistance + edge.distanceNM
+                if nextDistance < distances[edge.to, default: .greatestFiniteMagnitude] {
+                    distances[edge.to] = nextDistance
                     previous[edge.to] = (current.key, edge.airway)
-                    frontier.push(cost: nextCost, key: edge.to)
+                    let priority = nextDistance + graphHeuristicNM(from: edge.to, to: endKey, graph: graph)
+                    frontier.push(cost: priority, key: edge.to)
                 }
             }
         }
@@ -2912,6 +3933,11 @@ final class PlannerService: @unchecked Sendable {
         }
         nodes.append(startKey)
         return (Array(nodes.reversed()), Array(airways.reversed()))
+    }
+
+    private func graphHeuristicNM(from startKey: String, to endKey: String, graph: AirwayGraph) -> Double {
+        guard let start = graph.nodes[startKey], let end = graph.nodes[endKey] else { return 0 }
+        return routeDistanceNM(start, end)
     }
 
     private func directLeg(from startPoint: [String: Any], to endPoint: [String: Any]) -> [String: Any] {
@@ -3822,9 +4848,16 @@ final class PlannerService: @unchecked Sendable {
             )
         }
 
-        if table == "tbl_iaps", !["", "ALL"].contains(requestedTransition) {
-            return normalizeProcedureRows(try fetchRows(values: [requestedTransition]))
-                + normalizeProcedureRows(try fetchRows(values: ["", "ALL"]))
+        if !["", "ALL"].contains(requestedTransition) {
+            let transitionRows = normalizeProcedureRows(try fetchRows(values: [requestedTransition]))
+            let commonRows = normalizeProcedureRows(try fetchRows(values: ["", "ALL"]))
+            if table == "tbl_stars" {
+                return commonRows + transitionRows
+            }
+            if table == "tbl_sids" || table == "tbl_iaps" {
+                return transitionRows + commonRows
+            }
+            return transitionRows
         }
         let transitionValues = ["", "ALL"].contains(requestedTransition) ? ["", "ALL"] : [requestedTransition]
         return normalizeProcedureRows(try fetchRows(values: transitionValues))

@@ -474,6 +474,7 @@ const TRANSLATIONS = {
   "query.matchTrack": { "zh-Hans": "匹配轨迹", en: "Match Track" },
   "query.downloading": { "zh-Hans": "正在下载 FR24 GPX 轨迹...", en: "Downloading FR24 GPX track..." },
   "query.drawn": { "zh-Hans": "已绘制 FR24 GPX 轨迹，共 {count} 个点。", en: "FR24 GPX track drawn with {count} points." },
+  "query.airportsSynced": { "zh-Hans": "已按航班实际航线同步计划机场：{departure} → {arrival}。", en: "Plan airports synced to the flight's actual route: {departure} → {arrival}." },
   "query.matching": { "zh-Hans": "正在使用本地 airway 图匹配 FR24 轨迹...", en: "Matching FR24 track with the local airway graph..." },
   "query.matched": { "zh-Hans": "{message} 已匹配 {distance}nm。", en: "{message} Matched {distance}nm." },
   "query.profileTitle": { "zh-Hans": "FR24 高度剖面", en: "FR24 Altitude Profile" },
@@ -4341,6 +4342,14 @@ function drawingSnapshotHasContent(snapshot) {
   );
 }
 
+function hasCurrentDrawingState() {
+  return Boolean(
+    state.currentRoutePayload
+    || state.fr24TrackPayload
+    || Object.values(state.selectedProcedures).some(Boolean),
+  );
+}
+
 function drawingSnapshotsEqual(left, right) {
   return JSON.stringify(normalizeDrawingSnapshot(left)) === JSON.stringify(normalizeDrawingSnapshot(right));
 }
@@ -4361,7 +4370,10 @@ function pushDrawingUndoState() {
     updateTrackHistoryControlState();
     return false;
   }
-  state.drawingUndoStack.push(cloneDrawingSnapshot(snapshot));
+  // currentDrawingSnapshot() already returns detached route, procedure, and
+  // FR24 payloads. Re-cloning it made every procedure click copy the complete
+  // matched track twice before the new line could paint.
+  state.drawingUndoStack.push(snapshot);
   trimDrawingHistoryStack(state.drawingUndoStack);
   state.drawingRedoStack = [];
   updateTrackHistoryControlState();
@@ -4402,16 +4414,17 @@ function clearProcedureDrawingState(type) {
   state.selectedProcedures[type] = null;
 }
 
-function rerenderProcedureListsForLoadedAirports() {
-  if (state.departureAirport?.airport_identifier) {
-    rerenderProcedureLists("departure", state.departureAirport.airport_identifier);
-  }
-  if (state.arrivalAirport?.airport_identifier) {
-    rerenderProcedureLists("arrival", state.arrivalAirport.airport_identifier);
-  }
-  if (state.manualAirport?.airport_identifier) {
-    rerenderProcedureLists("manual", state.manualAirport.airport_identifier);
-  }
+function syncProcedureListSelection() {
+  document.querySelectorAll(".procedure-chip[data-procedure-type]").forEach((chip) => {
+    const type = chip.dataset.procedureType;
+    const selected = state.selectedProcedures[type];
+    chip.classList.toggle("active", Boolean(
+      selected
+      && selected.airport === chip.dataset.procedureAirport
+      && selected.procedure === chip.dataset.procedureIdent
+      && selected.transition === chip.dataset.procedureTransition
+    ));
+  });
 }
 
 function restoreRouteDrawingSnapshot(routeSnapshot) {
@@ -4469,7 +4482,7 @@ function restoreDrawingSnapshot(snapshot) {
     }
 
     renderSelectedProcedures();
-    rerenderProcedureListsForLoadedAirports();
+    syncProcedureListSelection();
     applyMapOverlayVisibility();
   } finally {
     state.restoringDrawingSnapshot = false;
@@ -4530,7 +4543,7 @@ function updateTrackHistoryControlState() {
   if (!trackHistoryControlContainer) {
     return;
   }
-  const hasDrawing = drawingSnapshotHasContent(currentDrawingSnapshot());
+  const hasDrawing = hasCurrentDrawingState();
   trackHistoryControlContainer.querySelectorAll("[data-track-history-action]").forEach((button) => {
     const action = button.dataset.trackHistoryAction;
     const disabled = action === "undo"
@@ -10538,15 +10551,7 @@ function clearProcedure(type, options = {}) {
     renderSelectionMessage(t("selection.chooseProcedure"));
   }
   renderSelectedProcedures();
-  if (state.departureAirport?.airport_identifier) {
-    rerenderProcedureLists("departure", state.departureAirport.airport_identifier);
-  }
-  if (state.arrivalAirport?.airport_identifier) {
-    rerenderProcedureLists("arrival", state.arrivalAirport.airport_identifier);
-  }
-  if (state.manualAirport?.airport_identifier) {
-    rerenderProcedureLists("manual", state.manualAirport.airport_identifier);
-  }
+  syncProcedureListSelection();
   updateTrackHistoryControlState();
   scheduleCalculateRender();
 }
@@ -10560,9 +10565,17 @@ function clearAllProcedures(options = {}) {
   if (options.recordHistory !== false && ["sid", "star", "approach"].some((type) => state.selectedProcedures[type])) {
     pushDrawingUndoState();
   }
-  clearProcedure("sid", { recordHistory: false });
-  clearProcedure("star", { recordHistory: false });
-  clearProcedure("approach", { recordHistory: false });
+  const clearedActiveSelection = Boolean(state.activeSelectionProcedure?.type);
+  ["sid", "star", "approach"].forEach((type) => clearProcedureDrawingState(type));
+  if (clearedActiveSelection) {
+    renderSelectionMessage(t("selection.chooseProcedure"));
+  }
+  renderSelectedProcedures();
+  syncProcedureListSelection();
+  updateTrackHistoryControlState();
+  if (!options.deferCalculate) {
+    scheduleCalculateRender();
+  }
 }
 
 /**
@@ -10571,15 +10584,34 @@ function clearAllProcedures(options = {}) {
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
 function clearAutoSelectedProcedures(exceptType = "", options = {}) {
-  if (options.recordHistory !== false && Object.entries(state.selectedProcedures).some(([type, value]) => value?.source === "auto" && type !== exceptType)) {
+  const cleared = Object.entries(state.selectedProcedures)
+    .filter(([type, value]) => value?.source === "auto" && type !== exceptType);
+  if (!cleared.length) {
+    return false;
+  }
+  if (options.recordHistory !== false) {
     pushDrawingUndoState();
   }
-  Object.entries(state.selectedProcedures).forEach(([type, value]) => {
-    if (!value || value.source !== "auto" || type === exceptType) {
-      return;
-    }
-    clearProcedure(type, { recordHistory: false });
-  });
+  const clearedActiveSelection = cleared.some(([type, value]) => (
+    state.activeSelectionProcedure?.type === type
+      && state.activeSelectionProcedure?.airport === value.airport
+      && state.activeSelectionProcedure?.procedure === value.procedure
+      && state.activeSelectionProcedure?.transition === value.transition
+  ));
+  cleared.forEach(([type]) => clearProcedureDrawingState(type));
+  if (options.deferUI) {
+    return true;
+  }
+  if (clearedActiveSelection) {
+    renderSelectionMessage(t("selection.chooseProcedure"));
+  }
+  renderSelectedProcedures();
+  syncProcedureListSelection();
+  updateTrackHistoryControlState();
+  if (!options.deferCalculate) {
+    scheduleCalculateRender();
+  }
+  return true;
 }
 
 /**
@@ -10935,6 +10967,10 @@ function renderProcedureList(container, items, type, airportIdent, slot) {
     chip.type = "button";
     chip.className = "procedure-chip";
     const transition = normalizeTransition(item.transition_identifier);
+    chip.dataset.procedureType = type;
+    chip.dataset.procedureAirport = airportIdent;
+    chip.dataset.procedureIdent = item.procedure_identifier;
+    chip.dataset.procedureTransition = transition;
     chip.textContent = `${item.procedure_identifier} ${transition}`;
     const selected = state.selectedProcedures[type];
     if (selected && selected.airport === airportIdent && selected.procedure === item.procedure_identifier && selected.transition === transition) {
@@ -11074,7 +11110,9 @@ async function loadAirportIntoPanel(ident, slot, options = {}) {
   state.airportProcedureData[prefix] = payload.procedures;
   state.airportPayloads[prefix] = payload;
   renderAirportPayload(prefix, payload);
-  setActiveAirportSlot(prefix);
+  if (options.activate !== false) {
+    setActiveAirportSlot(prefix);
+  }
 
   const airportPoint = {
     ident: payload.airport.airport_identifier,
@@ -11087,6 +11125,7 @@ async function loadAirportIntoPanel(ident, slot, options = {}) {
   if (options.focusMap) {
     map.flyTo([airportPoint.lat, airportPoint.lon], 8, { duration: 0.75 });
   }
+  return payload;
 }
 
 /**
@@ -11183,7 +11222,7 @@ async function previewProcedure(type, airport, procedure, transition, options = 
       pushDrawingUndoState();
     }
     if (source !== "auto") {
-      clearAutoSelectedProcedures(type, { recordHistory: false });
+      clearAutoSelectedProcedures(type, { recordHistory: false, deferUI: true, deferCalculate: true });
     }
     procedureLayerGroups[type].clearLayers();
     state.procedureVisualLayers[type] = null;
@@ -11203,22 +11242,18 @@ async function previewProcedure(type, airport, procedure, transition, options = 
       transition,
       source,
     };
-    renderSelectedProcedures();
-    updateTrackHistoryControlState();
-    if (state.departureAirport?.airport_identifier === airport) {
-      rerenderProcedureLists("departure", airport);
-    }
-    if (state.arrivalAirport?.airport_identifier === airport) {
-      rerenderProcedureLists("arrival", airport);
-    }
-    if (state.manualAirport?.airport_identifier === airport) {
-      rerenderProcedureLists("manual", airport);
-    }
+    if (!options.deferUI) {
+      renderSelectedProcedures();
+      updateTrackHistoryControlState();
+      syncProcedureListSelection();
 
-    if (!options.silent) {
-      renderProcedureSelectionTable(type, airport, procedure, transition, payload);
+      if (!options.silent) {
+        renderProcedureSelectionTable(type, airport, procedure, transition, payload);
+      }
     }
-    scheduleCalculateRender();
+    if (!options.deferCalculate) {
+      scheduleCalculateRender(80);
+    }
   } catch (error) {
     if (state.procedureRequestVersion[type] !== requestVersion) {
       return;
@@ -11234,7 +11269,7 @@ async function previewProcedure(type, airport, procedure, transition, options = 
  * 输出：Promise，解析为函数处理结果。
  */
 async function applyAutoSelectedProcedures(selectedProcedures = {}, options = {}) {
-  clearAllProcedures({ recordHistory: false });
+  clearAllProcedures({ recordHistory: false, deferCalculate: true });
   const order = ["sid", "star", "approach"];
   for (const type of order) {
     throwIfAborted(options.signal);
@@ -11242,17 +11277,30 @@ async function applyAutoSelectedProcedures(selectedProcedures = {}, options = {}
     if (!item) {
       continue;
     }
-    try {
-      await previewProcedure(type, item.airport, item.procedure, item.transition, {
-        source: "auto",
-        silent: true,
-        skipFitBounds: true,
-        signal: options.signal,
-      });
-    } catch {
-      continue;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        await previewProcedure(type, item.airport, item.procedure, item.transition, {
+          source: "auto",
+          silent: true,
+          skipFitBounds: true,
+          deferUI: true,
+          deferCalculate: true,
+          signal: options.signal,
+        });
+        break;
+      } catch (error) {
+        if (isAbortError(error)) {
+          throw error;
+        }
+        if (attempt === 0) {
+          await new Promise((resolve) => window.requestAnimationFrame(resolve));
+        }
+      }
     }
   }
+  renderSelectedProcedures();
+  syncProcedureListSelection();
+  updateTrackHistoryControlState();
   if (Object.keys(selectedProcedures).length) {
     const selectedType = ["approach", "star", "sid"].find((type) => state.selectedProcedures[type]);
     if (selectedType) {
@@ -11263,6 +11311,7 @@ async function applyAutoSelectedProcedures(selectedProcedures = {}, options = {}
   } else {
     renderSelectionMessage(t("selection.chooseProcedure"));
   }
+  scheduleCalculateRender(80);
 }
 
 /**
@@ -11411,6 +11460,87 @@ function optionalQueryRouteInputs() {
   return departure && arrival ? { departure, arrival } : null;
 }
 
+function fr24AirportCandidates(flight, side) {
+  const values = [
+    flight?.[`${side}_actual_code`],
+    flight?.[`${side}_icao`],
+    flight?.[`${side}_iata`],
+  ].map((value) => String(value || "").trim().toUpperCase()).filter(Boolean);
+  return [...new Set(values)];
+}
+
+async function loadFR24AirportIntoPlan(flight, side, slot, options = {}) {
+  const candidates = fr24AirportCandidates(flight, side);
+  let lastError = null;
+  for (const candidate of candidates) {
+    try {
+      const payload = await loadAirportIntoPanel(candidate, slot, {
+        signal: options.signal,
+        activate: false,
+      });
+      const ident = String(payload?.airport?.airport_identifier || candidate).trim().toUpperCase();
+      return { ident, payload };
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw error;
+      }
+      lastError = error;
+    }
+  }
+  if (lastError) {
+    throw lastError;
+  }
+  return null;
+}
+
+async function syncPlanAirportsFromFR24Flight(flight, options = {}) {
+  const originCandidates = fr24AirportCandidates(flight, "origin");
+  const destinationCandidates = fr24AirportCandidates(flight, "dest");
+  if (!originCandidates.length || !destinationCandidates.length) {
+    return optionalQueryRouteInputs();
+  }
+
+  const currentDeparture = elements.departureInput.value.trim().toUpperCase();
+  const currentArrival = elements.arrivalInput.value.trim().toUpperCase();
+  const advertisedDeparture = originCandidates[0];
+  const advertisedArrival = destinationCandidates[0];
+  const originHasActualCode = Boolean(String(flight?.origin_actual_code || "").trim());
+  const destinationHasActualCode = Boolean(String(flight?.dest_actual_code || "").trim());
+  const alreadyMatches = (originHasActualCode
+    ? currentDeparture === advertisedDeparture
+    : originCandidates.includes(currentDeparture))
+    && (destinationHasActualCode
+      ? currentArrival === advertisedArrival
+      : destinationCandidates.includes(currentArrival));
+  if (alreadyMatches) {
+    return { departure: currentDeparture, arrival: currentArrival };
+  }
+
+  const [departureResult, arrivalResult] = await Promise.all([
+    loadFR24AirportIntoPlan(flight, "origin", "departure", options),
+    loadFR24AirportIntoPlan(flight, "dest", "arrival", options),
+  ]);
+  throwIfAborted(options.signal);
+  const departure = departureResult?.ident || advertisedDeparture;
+  const arrival = arrivalResult?.ident || advertisedArrival;
+  elements.departureInput.value = departure;
+  elements.arrivalInput.value = arrival;
+  if (currentDeparture !== departure) {
+    state.selectedRunways.departure = "ALL";
+  }
+  if (currentArrival !== arrival) {
+    state.selectedRunways.arrival = "ALL";
+  }
+  renderRunwayButtons("departure");
+  renderRunwayButtons("arrival");
+  setActiveAirportSlot("departure");
+  hideSearchResults();
+  const message = t("query.airportsSynced", { departure, arrival });
+  setFR24QueryStatus(message);
+  setStatus(message, false, "success");
+  return { departure, arrival };
+}
+
 function fr24FlightKey(flight, index = 0, prefix = "flight") {
   return [
     prefix,
@@ -11506,6 +11636,7 @@ function renderFR24CacheActions(flight, key) {
   return `
     <div class="query-flight-actions query-cache-actions">
       <button class="ghost-button compact-button" type="button" data-fr24-action="draw" data-fr24-key="${escapeHtml(key)}">${escapeHtml(t("query.cacheDraw"))}</button>
+      <button class="ghost-button compact-button" type="button" data-fr24-action="match" data-fr24-key="${escapeHtml(key)}">${escapeHtml(t("query.matchTrack"))}</button>
       <button class="ghost-button compact-button" type="button" data-fr24-action="share-cache" data-fr24-key="${escapeHtml(key)}">${escapeHtml(t("query.cacheShare"))}</button>
       <button class="ghost-button compact-button" type="button" data-fr24-action="favorite-cache" data-fr24-key="${escapeHtml(key)}" data-fr24-favorite="${isFavorite ? "false" : "true"}">${escapeHtml(favoriteLabel)}</button>
       <button class="ghost-button compact-button danger-button" type="button" data-fr24-action="delete-cache" data-fr24-key="${escapeHtml(key)}">${escapeHtml(t("query.cacheDelete"))}</button>
@@ -11747,6 +11878,9 @@ async function searchFR24Cache() {
     const payload = await fetchJson(`/api/fr24/cache/list?${params.toString()}`);
     const items = payload.items || [];
     renderFR24CacheFlights(items);
+    if (items.length === 1) {
+      await syncPlanAirportsFromFR24Flight(items[0]);
+    }
     updateFR24CacheSummary(payload.cache || state.fr24CacheStatus || {});
     setFR24QueryStatus(items.length ? t("query.cacheLoaded", { count: items.length }) : t("query.cacheEmpty"), !items.length);
   } catch (error) {
@@ -11847,6 +11981,9 @@ async function searchFR24ManualHistory() {
     const flights = payload.flights || [];
     state.fr24HistoryByKey.clear();
     renderFR24Flights(flights, { history: true, prefix: "manual" });
+    if (flights.length === 1) {
+      await syncPlanAirportsFromFR24Flight(flights[0]);
+    }
     updateFR24CacheSummary(payload.cache || state.fr24CacheStatus || {});
     updateFR24AccessSummary(payload.access || state.fr24AccessStatus || {});
     setFR24QueryStatus(flights.length ? t("query.manualHistoryLoaded", { count: flights.length }) : t("query.noHistory"), !flights.length);
@@ -12423,6 +12560,7 @@ async function downloadAndDrawFR24Track(key) {
   setFR24QueryStatus(t("query.downloading"));
   try {
     const payload = await fetchFR24TrackPayload(flight);
+    await syncPlanAirportsFromFR24Flight(payload.flight || flight);
     const count = drawFR24TrackPoints(payload.track_points || []);
     updateFR24CacheSummary(payload.cache || state.fr24CacheStatus || {});
     updateFR24AccessSummary(payload.access || state.fr24AccessStatus || {});
@@ -12439,8 +12577,7 @@ async function downloadAndDrawFR24Track(key) {
 
 async function matchFR24FlightTrack(key) {
   const flight = getFR24FlightByKey(key);
-  const route = currentQueryRouteInputs();
-  if (!flight || !route) {
+  if (!flight) {
     return;
   }
   const controller = beginRouteOperation(t("track.operation"));
@@ -12449,6 +12586,13 @@ async function matchFR24FlightTrack(key) {
   setStatus(t("query.matching"), false, "progress");
   try {
     const download = await fetchFR24TrackPayload(flight, { signal: controller.signal });
+    throwIfAborted(controller.signal);
+    const route = await syncPlanAirportsFromFR24Flight(download.flight || flight, {
+      signal: controller.signal,
+    }) || currentQueryRouteInputs();
+    if (!route) {
+      return;
+    }
     throwIfAborted(controller.signal);
     drawFR24TrackPoints(download.track_points || [], { fitBounds: false });
     updateFR24CacheSummary(download.cache || state.fr24CacheStatus || {});

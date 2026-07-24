@@ -13,7 +13,7 @@ python3 Tools/TrackParity/track_parity.py
 - 使用 `NavPlanner-web/src.planner_database.NavDatabase.resolve_route(...)` 生成离线合成轨迹点，避免依赖 FR24 或任何远程服务。
 - 使用 `NavPlanner-web/src.planner_database.NavDatabase.match_imported_track_route(...)` 生成 Web 参考摘要。
 - 编译 `TrackParityProbe.swift`，直接调用 Swift `PlannerService.trackMatchPayload(...)`。
-- 对比 `route_display`、legs 摘要、点数、点列签名、跨日期变更线几何摘要、距离、SID / STAR / Approach、runway 选择、source provider 和导入轨迹点数量。
+- 对比 `route_display`、legs 摘要、点数、点列签名、跨日期变更线几何摘要、距离、SID / STAR / Approach、runway 选择、source provider 和导入轨迹点数量；Swift 专用回归还校验所选 Procedure 明细的首末航点，防止只按实际轨迹截断显示。
 - 任一字段不一致时以非 0 状态退出，并输出具体差异。
 
 ## 当前覆盖
@@ -21,6 +21,8 @@ python3 Tools/TrackParity/track_parity.py
 - 导入轨迹匹配：`KLAX->KPSP` 的 `DODGR V370 GARNE` 和 `DODGR *** GARNE`。
 - 自动航线合成轨迹：`ZBAA->ZSPD`、`VHHH->WSSS`。
 - 跨日期变更线合成轨迹：`NFFN->NSTU`。
+- 密集终端轨迹：`ZPPP->ZBAA` 固定断言 `DAD9W/RW03`、航路边界 `DADOL...GUVBA` 和 `GUVB7X`；该用例只校验改进后的 Swift 本地匹配，不要求旧 Web 参考实现输出相同 Procedure。
+- 部分飞行 SID 轨迹：`ZBAA->ZSSS` 固定断言 `ELKU9Z/RW36R`（虽然实际轨迹在 `AA138` 后偏离，Procedure 明细仍完整到 `ELKUR`）、航路边界 `ELKUR...SASAN`、`SAS62A/RW18B` 和 `I18LZ/SS201`。
 - 错误语义：导入轨迹点不足、出发机场无法解析。
 
 ## 约束
