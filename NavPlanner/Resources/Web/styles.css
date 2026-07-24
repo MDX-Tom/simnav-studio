@@ -2382,13 +2382,15 @@ body.left-panel-expanded .selection-table {
 }
 
 .waypoint-highlight-pulse {
-  animation: waypointHighlightPulse 1.45s ease-out infinite;
+  /* One complete pulse preserves the existing highlight entrance without
+     keeping every route/procedure SVG shape on WebKit's render timer forever. */
+  animation: waypointHighlightPulse 1.45s ease-out;
   pointer-events: none;
   vector-effect: non-scaling-stroke;
 }
 
 .waypoint-highlight-core {
-  animation: waypointHighlightCore 1.45s ease-in-out infinite;
+  animation: waypointHighlightCore 1.45s ease-in-out;
   filter: drop-shadow(0 0 4px rgba(255, 244, 181, 0.62));
   pointer-events: none;
   vector-effect: non-scaling-stroke;

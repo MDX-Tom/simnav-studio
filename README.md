@@ -69,9 +69,9 @@ The calculation model is local-first and works offline. Online weather is an enh
 2. Open the **Query** tab.
 3. For the first query, open the verification page in the in-app browser, complete the FR24 / Cloudflare check, then sync the browser session.
 4. Tap **Query** to list up to 10 recent flights for the route, or search a flight number / flightId manually.
-5. Download and draw a flight track, manually import a GPX file, review the altitude / speed profile, or match the track against the local route engine.
+5. Download and draw a flight track, manually import a GPX file, review the altitude / speed profile, or match the track against the local route engine. When a loaded flight reports different actual airports, Query synchronizes them back to Plan before matching. For dense tracks with reliable terminal samples, matching identifies the full SID / STAR / Approach first, then fits the enroute airway between the Procedure boundaries.
 
-Downloaded FR24 tracks are cached locally with GPX, playback JSON, and metadata. The Query tab can search the cache, draw cached tracks, share GPX files, favorite important tracks, open the cache folder, and clear non-favorited downloads.
+Downloaded FR24 tracks are cached locally with GPX, playback JSON, and metadata. The Query tab can search the cache, draw or match cached tracks, share GPX files, favorite important tracks, open the cache folder, and clear non-favorited downloads.
 
 FR24 is an online enhancement. When the network is unavailable, the browser session expires, or FR24 returns a verification page, local planning, airport lookup, procedures, nav overlays, and offline maps remain available. NavPlanner reuses only the browser session that the user completes inside the app; it does not bypass Cloudflare or automate CAPTCHA challenges.
 

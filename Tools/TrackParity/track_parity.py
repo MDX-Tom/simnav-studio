@@ -15,6 +15,10 @@ TMP_DIR = Path("/private/tmp")
 CASES_PATH = TMP_DIR / "navplanner_track_parity_cases.json"
 PROBE_BINARY = TMP_DIR / "NavPlannerTrackParityProbe"
 MODULE_CACHE = TMP_DIR / "NavPlannerTrackParityModuleCache"
+PROCEDURE_REGRESSION_PATHS = [
+    ROOT / "Tools/TrackParity/Fixtures/zppp_zbaa_fr24_procedure.json",
+    ROOT / "Tools/TrackParity/Fixtures/zbaa_zsss_partial_sid_procedure_first.json",
+]
 
 
 def reference_database_path(root: Path) -> Path:
@@ -207,20 +211,72 @@ def compare_results(web_results: dict[str, Any], swift_results: dict[str, Any]) 
     return issues
 
 
+def load_swift_regression_cases() -> list[dict[str, Any]]:
+    return [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in PROCEDURE_REGRESSION_PATHS
+    ]
+
+
+def compare_swift_regressions(
+    regression_cases: list[dict[str, Any]],
+    swift_results: dict[str, Any],
+) -> list[dict[str, Any]]:
+    issues: list[dict[str, Any]] = []
+    for case in regression_cases:
+        name = case["name"]
+        payload = swift_results.get(name) or {}
+        selected = payload.get("selected_procedures") or {}
+        runways = payload.get("selected_runways") or {}
+        legs = payload.get("legs") or []
+        procedure_items = payload.get("selected_procedure_items") or {}
+        actual = {
+            "sid.procedure": (selected.get("sid") or {}).get("procedure"),
+            "sid.transition": (selected.get("sid") or {}).get("transition"),
+            "star.procedure": (selected.get("star") or {}).get("procedure"),
+            "star.transition": (selected.get("star") or {}).get("transition"),
+            "approach.procedure": (selected.get("approach") or {}).get("procedure"),
+            "approach.transition": (selected.get("approach") or {}).get("transition"),
+            "departure_runway": runways.get("departure"),
+            "arrival_runway": runways.get("arrival"),
+            "enroute_start": legs[0].get("entry") if legs else None,
+            "enroute_end": legs[-1].get("exit") if legs else None,
+        }
+        for procedure_type in ("sid", "star", "approach"):
+            item_idents = procedure_items.get(procedure_type) or []
+            actual[f"{procedure_type}.items_first"] = item_idents[0] if item_idents else None
+            actual[f"{procedure_type}.items_last"] = item_idents[-1] if item_idents else None
+        for field, expected in (case.get("expected") or {}).items():
+            if actual.get(field) != expected:
+                issues.append({
+                    "case": name,
+                    "field": field,
+                    "swift": actual.get(field),
+                    "expected": expected,
+                })
+    return issues
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="对照 NavPlanner iOS Swift track-match 与 NavPlanner-web 参考输出。")
     parser.add_argument("--dump", action="store_true", help="输出完整 Web / Swift 摘要 JSON。")
     args = parser.parse_args()
 
     cases, web_results = run_web_reference(ROOT)
-    swift_results = run_swift_probe(ROOT, cases)
+    regression_cases = load_swift_regression_cases()
+    swift_results = run_swift_probe(ROOT, cases + regression_cases)
     issues = compare_results(web_results, swift_results)
+    issues.extend(compare_swift_regressions(regression_cases, swift_results))
 
     if args.dump:
-        print(json.dumps({"cases": cases, "web": web_results, "swift": swift_results}, ensure_ascii=False, indent=2, sort_keys=True))
+        print(json.dumps({
+            "cases": cases + regression_cases,
+            "web": web_results,
+            "swift": swift_results,
+        }, ensure_ascii=False, indent=2, sort_keys=True))
 
     summary = {
-        "cases": len(cases),
+        "cases": len(cases) + len(regression_cases),
         "issues": issues,
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True))
