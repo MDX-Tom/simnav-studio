@@ -11,6 +11,7 @@ final class MapBridgeScriptHandler: NSObject, WKScriptMessageHandler {
     var openFR24CacheDirectoryHandler: (() -> Void)?
     var shareFileHandler: ((String, String) -> Void)?
     var focusFormControlHandler: (() -> Void)?
+    var blurFormControlHandler: (() -> Void)?
 
     init(environment: AppEnvironment) {
         self.environment = environment
@@ -31,6 +32,16 @@ final class MapBridgeScriptHandler: NSObject, WKScriptMessageHandler {
             } else {
                 DispatchQueue.main.async { [weak self] in
                     self?.focusFormControlHandler?()
+                }
+            }
+            return
+        }
+        if type == "blurFormControl" {
+            if Thread.isMainThread {
+                blurFormControlHandler?()
+            } else {
+                DispatchQueue.main.async { [weak self] in
+                    self?.blurFormControlHandler?()
                 }
             }
             return

@@ -18,6 +18,7 @@ MODULE_CACHE = TMP_DIR / "NavPlannerTrackParityModuleCache"
 PROCEDURE_REGRESSION_PATHS = [
     ROOT / "Tools/TrackParity/Fixtures/zppp_zbaa_fr24_procedure.json",
     ROOT / "Tools/TrackParity/Fixtures/zbaa_zsss_partial_sid_procedure_first.json",
+    ROOT / "Tools/TrackParity/Fixtures/zbaa_zppp_parallel_runway_mebna.json",
 ]
 
 
