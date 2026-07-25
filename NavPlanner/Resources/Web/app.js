@@ -994,12 +994,18 @@ function isPhoneWorkbench() {
   return document.documentElement.dataset.device !== "pad";
 }
 
+function isMacCompatibilityWorkbench() {
+  return document.documentElement.dataset.platform === "mac";
+}
+
 function isTouchInputWorkbench() {
   return Boolean(
-    isPhoneWorkbench()
-    ||
-    navigator.maxTouchPoints > 0
-    || (window.matchMedia && window.matchMedia("(pointer: coarse)").matches),
+    !isMacCompatibilityWorkbench()
+    && (
+      isPhoneWorkbench()
+      || navigator.maxTouchPoints > 0
+      || (window.matchMedia && window.matchMedia("(pointer: coarse)").matches)
+    ),
   );
 }
 
@@ -6828,6 +6834,70 @@ function installMobilePanelDragHandle() {
  * 输出：只处理表单控件点击，不抢占 touchstart 原生输入流程。
  */
 function installMobileInputTouchFocus() {
+  if (isMacCompatibilityWorkbench()) {
+    const editableControlFromTarget = (target) => {
+      const control = target instanceof Element
+        ? target.closest("input, textarea, [contenteditable='true']")
+        : null;
+      if (!control || control.disabled || control.readOnly) {
+        return null;
+      }
+      return control;
+    };
+    const isEditableControl = (target) => Boolean(editableControlFromTarget(target));
+    const releaseNativeInputResponder = () => postNativeEvent("blurFormControl");
+    const activateEditableControl = (event) => {
+      const control = editableControlFromTarget(event.target);
+      if (!control) {
+        return;
+      }
+      if (document.activeElement !== control) {
+        try {
+          control.focus({ preventScroll: true });
+        } catch (_error) {
+          control.focus();
+        }
+      }
+      postNativeEvent("focusFormControl");
+    };
+    document.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (!isEditableControl(event.target)) {
+          releaseNativeInputResponder();
+        }
+      },
+      { capture: true, passive: true },
+    );
+    document.addEventListener("pointerup", activateEditableControl, { capture: true, passive: true });
+    document.addEventListener("click", activateEditableControl, { capture: true });
+    document.addEventListener(
+      "focusin",
+      (event) => {
+        if (isEditableControl(event.target)) {
+          postNativeEvent("focusFormControl");
+        }
+      },
+      true,
+    );
+    document.addEventListener(
+      "focusout",
+      () => {
+        window.setTimeout(() => {
+          if (!isEditableControl(document.activeElement)) {
+            releaseNativeInputResponder();
+          }
+        }, 0);
+      },
+      true,
+    );
+    window.requestAnimationFrame(() => {
+      if (!isEditableControl(document.activeElement)) {
+        releaseNativeInputResponder();
+      }
+    });
+    return;
+  }
   if (!isTouchInputWorkbench()) {
     return;
   }
@@ -10579,42 +10649,6 @@ function clearAllProcedures(options = {}) {
 }
 
 /**
- * 功能：清理 `clearAutoSelectedProcedures` 对应的业务逻辑。
- * 输入：exceptType。
- * 输出：函数处理结果，或对应的界面/地图副作用。
- */
-function clearAutoSelectedProcedures(exceptType = "", options = {}) {
-  const cleared = Object.entries(state.selectedProcedures)
-    .filter(([type, value]) => value?.source === "auto" && type !== exceptType);
-  if (!cleared.length) {
-    return false;
-  }
-  if (options.recordHistory !== false) {
-    pushDrawingUndoState();
-  }
-  const clearedActiveSelection = cleared.some(([type, value]) => (
-    state.activeSelectionProcedure?.type === type
-      && state.activeSelectionProcedure?.airport === value.airport
-      && state.activeSelectionProcedure?.procedure === value.procedure
-      && state.activeSelectionProcedure?.transition === value.transition
-  ));
-  cleared.forEach(([type]) => clearProcedureDrawingState(type));
-  if (options.deferUI) {
-    return true;
-  }
-  if (clearedActiveSelection) {
-    renderSelectionMessage(t("selection.chooseProcedure"));
-  }
-  renderSelectedProcedures();
-  syncProcedureListSelection();
-  updateTrackHistoryControlState();
-  if (!options.deferCalculate) {
-    scheduleCalculateRender();
-  }
-  return true;
-}
-
-/**
  * 功能：执行 `latLngsFromProcedurePath` 对应的业务逻辑。
  * 输入：path、points。
  * 输出：函数处理结果，或对应的界面/地图副作用。
@@ -10819,8 +10853,11 @@ function inferRunwayFromProcedure(type, item) {
   if (!match) {
     return "ALL";
   }
-  const runwayCore = match[1].replace(/^0/, "");
-  return `RW${runwayCore}`;
+  const runwayMatch = match[1].match(/^(0?[0-9]{1,2})([LCRB]?)$/);
+  if (!runwayMatch) {
+    return "ALL";
+  }
+  return `RW${String(Number(runwayMatch[1])).padStart(2, "0")}${runwayMatch[2] || ""}`;
 }
 
 /**
@@ -10873,11 +10910,25 @@ function runwayMatches(candidateRunway, selectedRunway) {
  * 输入：type、item、runway。
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
-function procedureMatchesRunway(type, item, runway) {
+function procedureMatchesRunway(type, item, runway, allItems = []) {
   if (!runway || runway === "ALL") {
     return true;
   }
-  return runwayMatches(inferRunwayFromProcedure(type, item), runway);
+  const candidateRunway = inferRunwayFromProcedure(type, item);
+  if (candidateRunway !== "ALL") {
+    return runwayMatches(candidateRunway, runway);
+  }
+  if (type !== "sid" && type !== "star") {
+    return true;
+  }
+  const procedure = String(item.procedure_identifier || "").toUpperCase();
+  const runwayBranches = allItems.filter((candidate) => (
+    String(candidate.procedure_identifier || "").toUpperCase() === procedure
+    && normalizeTransition(candidate.transition_identifier).toUpperCase().startsWith("RW")
+  ));
+  return !runwayBranches.length || runwayBranches.some((candidate) => (
+    runwayMatches(inferRunwayFromProcedure(type, candidate), runway)
+  ));
 }
 
 /**
@@ -10887,7 +10938,19 @@ function procedureMatchesRunway(type, item, runway) {
  */
 function normalizeRunwayChoice(slot, value) {
   const options = state.runwayButtonOptions[slot] || ["ALL"];
-  return options.includes(value) ? value : "ALL";
+  if (!value || value === "ALL") {
+    return "ALL";
+  }
+  const parsed = parseRunwayIdentifier(value);
+  if (!parsed) {
+    return options.includes(value) ? value : "ALL";
+  }
+  const canonical = `RW${parsed.number.padStart(2, "0")}${parsed.suffix}`;
+  return options.find((option) => {
+    const optionParts = parseRunwayIdentifier(option);
+    return optionParts
+      && `RW${optionParts.number.padStart(2, "0")}${optionParts.suffix}` === canonical;
+  }) || "ALL";
 }
 
 /**
@@ -10957,12 +11020,12 @@ function renderChoiceGroup(container, options, activeValue, onSelect, emptyLabel
 function renderProcedureList(container, items, type, airportIdent, slot) {
   container.innerHTML = "";
   const runway = state.selectedRunways[slot];
-  const filteredItems = items.filter((item) => procedureMatchesRunway(type, item, runway));
+  const filteredItems = items.filter((item) => procedureMatchesRunway(type, item, runway, items));
   if (!filteredItems.length) {
     container.innerHTML = `<div class="helper-text">${escapeHtml(t("procedure.noAvailable"))}</div>`;
     return;
   }
-  filteredItems.slice(0, 40).forEach((item) => {
+  filteredItems.forEach((item) => {
     const chip = document.createElement("button");
     chip.type = "button";
     chip.className = "procedure-chip";
@@ -11220,9 +11283,6 @@ async function previewProcedure(type, airport, procedure, transition, options = 
 
     if (options.recordHistory !== false && source !== "auto") {
       pushDrawingUndoState();
-    }
-    if (source !== "auto") {
-      clearAutoSelectedProcedures(type, { recordHistory: false, deferUI: true, deferCalculate: true });
     }
     procedureLayerGroups[type].clearLayers();
     state.procedureVisualLayers[type] = null;

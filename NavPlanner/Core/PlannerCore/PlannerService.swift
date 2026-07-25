@@ -1016,44 +1016,77 @@ final class PlannerService: @unchecked Sendable {
         runway: String,
         database: SQLiteDatabase
     ) throws -> [ProcedureRouteCandidate] {
-        let baseCandidates = try procedureRouteCandidates(
+        // Read every transition first. Filtering to one runway leaves the
+        // common STAR row behind even when that procedure only has branches
+        // for a different runway, which makes the common row look universal.
+        let allCandidates = try procedureRouteCandidates(
             table: table,
             airport: airport,
             mode: mode,
-            runway: runway,
+            runway: "ALL",
             database: database
         )
         let normalizedMode = mode.lowercased()
-        let commonByProcedure = Dictionary(
-            uniqueKeysWithValues: baseCandidates
-                .filter { $0.transition == "ALL" }
-                .map { ($0.procedure, $0) }
-        )
+        let selectedRunway = normalizedRunwayChoice(runway)
+        let grouped = Dictionary(grouping: allCandidates, by: \.procedure)
+        var output: [ProcedureRouteCandidate] = []
 
-        return baseCandidates.map { candidate in
-            guard candidate.transition != "ALL",
-                  let common = commonByProcedure[candidate.procedure] else {
-                return candidate
+        for procedure in grouped.keys.sorted() {
+            guard let candidates = grouped[procedure] else { continue }
+            let common = candidates.first { $0.transition == "ALL" }
+            let branches = candidates.filter { $0.transition != "ALL" }
+            let explicitRunwayBranches = branches.filter { $0.runway != "ALL" }
+            let compatibleRunwayBranches = explicitRunwayBranches.filter {
+                selectedRunway == "ALL" || runwayMatches(candidate: $0.runway, selected: selectedRunway)
             }
-            let joinedPoints: [[String: Any]]
-            if normalizedMode == "star" {
-                joinedPoints = dedupeRoutePoints(common.points + candidate.points)
-            } else {
-                joinedPoints = dedupeRoutePoints(candidate.points + common.points)
+
+            // A common route is eligible only if at least one of the
+            // procedure's explicit runway branches serves the selected runway.
+            if selectedRunway != "ALL",
+               !explicitRunwayBranches.isEmpty,
+               compatibleRunwayBranches.isEmpty {
+                continue
             }
-            guard !joinedPoints.isEmpty else { return candidate }
-            let endpoint = normalizedMode == "sid"
-                ? joinedPoints[joinedPoints.count - 1]
-                : joinedPoints[0]
-            return ProcedureRouteCandidate(
-                procedure: candidate.procedure,
-                transition: candidate.transition,
-                runway: candidate.runway,
-                points: joinedPoints,
-                endpoint: endpoint,
-                distanceNM: pathLengthNM(joinedPoints)
-            )
+
+            if let common {
+                output.append(common)
+            }
+
+            let eligibleBranches = branches.filter {
+                $0.runway == "ALL"
+                    || selectedRunway == "ALL"
+                    || runwayMatches(candidate: $0.runway, selected: selectedRunway)
+            }
+            for candidate in eligibleBranches {
+                guard let common else {
+                    output.append(candidate)
+                    continue
+                }
+                let joinedPoints: [[String: Any]]
+                if normalizedMode == "star" {
+                    joinedPoints = dedupeRoutePoints(common.points + candidate.points)
+                } else {
+                    joinedPoints = dedupeRoutePoints(candidate.points + common.points)
+                }
+                guard !joinedPoints.isEmpty else {
+                    output.append(candidate)
+                    continue
+                }
+                let endpoint = normalizedMode == "sid"
+                    ? joinedPoints[joinedPoints.count - 1]
+                    : joinedPoints[0]
+                output.append(ProcedureRouteCandidate(
+                    procedure: candidate.procedure,
+                    transition: candidate.transition,
+                    runway: candidate.runway,
+                    points: joinedPoints,
+                    endpoint: endpoint,
+                    distanceNM: pathLengthNM(joinedPoints)
+                ))
+            }
         }
+
+        return output
     }
 
     private func procedureDistanceSortKey(_ candidate: ProcedureRouteCandidate, reference: [String: Any]) -> String {
@@ -1536,7 +1569,7 @@ final class PlannerService: @unchecked Sendable {
         if mode.lowercased() == "star",
            let best,
            let common = bestMatch(in: candidates.filter { $0.transition == "ALL" }),
-           Int(floor(common.matchedFitNM)) <= Int(floor(best.matchedFitNM)) + 1,
+           floor(common.matchedFitNM) <= floor(best.matchedFitNM) + 1,
            common.coverageScore >= best.coverageScore * 0.7 {
             return common
         }
@@ -1632,9 +1665,7 @@ final class PlannerService: @unchecked Sendable {
                     coverageScore: coverage,
                     meanPointDistanceNM: distances.reduce(0, +) / Double(distances.count)
                 )
-                if best == nil
-                    || alignment.coverageScore > best!.coverageScore
-                    || (alignment.coverageScore == best!.coverageScore && alignment.matchedFitNM < best!.matchedFitNM) {
+                if best == nil || procedureAlignmentIsBetter(alignment, than: best!) {
                     best = alignment
                 }
             }
@@ -1692,9 +1723,17 @@ final class PlannerService: @unchecked Sendable {
         _ lhs: ProcedureTrackAlignment,
         than rhs: ProcedureTrackAlignment
     ) -> Bool {
-        let lhsFitBand = Int(floor(lhs.matchedFitNM))
-        let rhsFitBand = Int(floor(rhs.matchedFitNM))
+        let lhsFitBand = floor(lhs.matchedFitNM)
+        let rhsFitBand = floor(rhs.matchedFitNM)
         if lhsFitBand != rhsFitBand { return lhsFitBand < rhsFitBand }
+        let lhsMatchedPointCount = lhs.candidateEndIndex - lhs.candidateStartIndex + 1
+        let rhsMatchedPointCount = rhs.candidateEndIndex - rhs.candidateStartIndex + 1
+        if lhsMatchedPointCount != rhsMatchedPointCount {
+            return lhsMatchedPointCount > rhsMatchedPointCount
+        }
+        let lhsFullFitBand = floor(lhs.fullFitNM)
+        let rhsFullFitBand = floor(rhs.fullFitNM)
+        if lhsFullFitBand != rhsFullFitBand { return lhsFullFitBand < rhsFullFitBand }
         if lhs.coverageScore != rhs.coverageScore { return lhs.coverageScore > rhs.coverageScore }
         if lhs.fullFitNM != rhs.fullFitNM { return lhs.fullFitNM < rhs.fullFitNM }
         if lhs.meanPointDistanceNM != rhs.meanPointDistanceNM {
@@ -1951,16 +1990,6 @@ final class PlannerService: @unchecked Sendable {
                   let runwayBearing = navDouble(row["runway_true_bearing"]) else {
                 continue
             }
-            let closestIndex = searchIndices.min { lhs, rhs in
-                greatCircleNM(lat1: trackPoints[lhs].lat, lon1: trackPoints[lhs].lon, lat2: runwayLat, lon2: runwayLon)
-                    < greatCircleNM(lat1: trackPoints[rhs].lat, lon1: trackPoints[rhs].lon, lat2: runwayLat, lon2: runwayLon)
-            } ?? searchIndices.lowerBound
-            let thresholdDistance = greatCircleNM(
-                lat1: trackPoints[closestIndex].lat,
-                lon1: trackPoints[closestIndex].lon,
-                lat2: runwayLat,
-                lon2: runwayLon
-            )
             let nearbyTerminalSamples = searchIndices.reduce(into: 0) { count, index in
                 let distance = greatCircleNM(
                     lat1: trackPoints[index].lat,
@@ -1973,13 +2002,78 @@ final class PlannerService: @unchecked Sendable {
                 }
             }
             guard nearbyTerminalSamples >= 4 else { continue }
-            let course = trackCourseNearRunway(
-                closestIndex: closestIndex,
-                mode: mode,
-                trackPoints: trackPoints
-            )
-            let headingPenalty = course.map { angularDifferenceDegrees($0, runwayBearing) / 12.0 } ?? 15.0
-            let score = thresholdDistance * 3.0 + headingPenalty
+
+            // Parallel runways can have longitudinally staggered thresholds.
+            // FR24 may also omit the first seconds of a take-off roll. Measure
+            // the track against the extended runway centreline so lateral
+            // separation, rather than the nearest threshold alone, identifies
+            // the actual parallel runway.
+            let bearingRadians = runwayBearing * .pi / 180
+            let minimumAlongTrackNM = mode == "arrival" ? -10.0 : -1.0
+            let maximumAlongTrackNM = mode == "arrival" ? 3.0 : 10.0
+            var bestAlignmentScore = Double.greatestFiniteMagnitude
+
+            for index in searchIndices {
+                let point = trackPoints[index]
+                let referenceLat = (point.lat + runwayLat) / 2
+                let wrappedLon = wrapLongitude(point.lon, near: runwayLon)
+                let eastNM = (wrappedLon - runwayLon) * 60.0 * cos(referenceLat * .pi / 180)
+                let northNM = (point.lat - runwayLat) * 60.0
+                let alongTrackNM = eastNM * sin(bearingRadians) + northNM * cos(bearingRadians)
+                guard alongTrackNM >= minimumAlongTrackNM,
+                      alongTrackNM <= maximumAlongTrackNM else {
+                    continue
+                }
+                let crossTrackNM = abs(eastNM * cos(bearingRadians) - northNM * sin(bearingRadians))
+                guard crossTrackNM <= 4.0 else { continue }
+                let thresholdDistanceNM = hypot(eastNM, northNM)
+                let course = trackCourseNearRunway(
+                    closestIndex: index,
+                    mode: mode,
+                    trackPoints: trackPoints
+                )
+                let headingPenalty = course.map {
+                    angularDifferenceDegrees($0, runwayBearing) / 12.0
+                } ?? 15.0
+                let alignmentScore = crossTrackNM * 6.0
+                    + thresholdDistanceNM * 0.25
+                    + headingPenalty
+                bestAlignmentScore = min(bestAlignmentScore, alignmentScore)
+            }
+
+            let score: Double
+            if bestAlignmentScore.isFinite {
+                score = bestAlignmentScore
+            } else {
+                let closestIndex = searchIndices.min { lhs, rhs in
+                    greatCircleNM(
+                        lat1: trackPoints[lhs].lat,
+                        lon1: trackPoints[lhs].lon,
+                        lat2: runwayLat,
+                        lon2: runwayLon
+                    ) < greatCircleNM(
+                        lat1: trackPoints[rhs].lat,
+                        lon1: trackPoints[rhs].lon,
+                        lat2: runwayLat,
+                        lon2: runwayLon
+                    )
+                } ?? searchIndices.lowerBound
+                let thresholdDistance = greatCircleNM(
+                    lat1: trackPoints[closestIndex].lat,
+                    lon1: trackPoints[closestIndex].lon,
+                    lat2: runwayLat,
+                    lon2: runwayLon
+                )
+                let course = trackCourseNearRunway(
+                    closestIndex: closestIndex,
+                    mode: mode,
+                    trackPoints: trackPoints
+                )
+                let headingPenalty = course.map {
+                    angularDifferenceDegrees($0, runwayBearing) / 12.0
+                } ?? 15.0
+                score = thresholdDistance * 3.0 + headingPenalty
+            }
             let runway = normalizedRunwayChoice(navString(row["runway_identifier"]))
             if best == nil || score < best!.score || (score == best!.score && runway < best!.runway) {
                 best = (score, runway)
@@ -2456,7 +2550,9 @@ final class PlannerService: @unchecked Sendable {
 
     private func normalizedRunwayChoice(_ value: String) -> String {
         let runway = value.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        return runway.isEmpty ? "ALL" : runway
+        guard !runway.isEmpty else { return "ALL" }
+        guard let parts = parseRunwayIdentifier(runway) else { return runway }
+        return "RW\(parts.number)\(parts.suffix)"
     }
 
     private func inferProcedureRunway(mode: String, procedure: String, transition: String) -> String {
@@ -2496,9 +2592,8 @@ final class PlannerService: @unchecked Sendable {
             if cursor < characters.endIndex, characters[cursor].isNumber {
                 continue
             }
-            let number = String(Int(digits) ?? 0)
-            guard number != "0" else { continue }
-            return "RW\(number)\(suffix)"
+            guard let number = Int(digits), number > 0 else { continue }
+            return String(format: "RW%02d%@", number, suffix)
         }
         return "ALL"
     }
@@ -2538,7 +2633,7 @@ final class PlannerService: @unchecked Sendable {
         guard suffix.count <= 1, suffix.allSatisfy({ "LCRB".contains($0) }) else {
             return nil
         }
-        return (String(intValue), suffix)
+        return (String(format: "%02d", intValue), suffix)
     }
 
     private func runwayPenalty(candidate: String, selected: String) -> Double {

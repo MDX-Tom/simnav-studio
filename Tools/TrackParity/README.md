@@ -23,6 +23,7 @@ python3 Tools/TrackParity/track_parity.py
 - 跨日期变更线合成轨迹：`NFFN->NSTU`。
 - 密集终端轨迹：`ZPPP->ZBAA` 固定断言 `DAD9W/RW03`、航路边界 `DADOL...GUVBA` 和 `GUVB7X`；该用例只校验改进后的 Swift 本地匹配，不要求旧 Web 参考实现输出相同 Procedure。
 - 部分飞行 SID 轨迹：`ZBAA->ZSSS` 固定断言 `ELKU9Z/RW36R`（虽然实际轨迹在 `AA138` 后偏离，Procedure 明细仍完整到 `ELKUR`）、航路边界 `ELKUR...SASAN`、`SAS62A/RW18B` 和 `I18LZ/SS201`。
+- 相邻平行跑道与 MEBNA 进场：`ZBAA->ZPPP` 固定断言 `RUSD9Z/RW36R`、航路边界 `RUSDO...MEBNA`、`MEB1J` 和 `I03-Y/RW03`，并覆盖 FR24 缺少起飞滑跑前段时的中心线判别。
 - 错误语义：导入轨迹点不足、出发机场无法解析。
 
 ## 约束

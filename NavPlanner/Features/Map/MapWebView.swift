@@ -20,8 +20,9 @@ struct MapWebView: UIViewRepresentable {
             forURLScheme: "navplanner"
         )
         let deviceClass = UIDevice.current.userInterfaceIdiom == .pad ? "pad" : "phone"
+        let platformClass = ProcessInfo.processInfo.isiOSAppOnMac ? "mac" : "ios"
         configuration.userContentController.addUserScript(WKUserScript(
-            source: "document.documentElement.dataset.device = '\(deviceClass)';",
+            source: "document.documentElement.dataset.device = '\(deviceClass)'; document.documentElement.dataset.platform = '\(platformClass)';",
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         ))
@@ -61,7 +62,7 @@ struct MapWebView: UIViewRepresentable {
         webView.scrollView.contentInset = .zero
         webView.scrollView.scrollIndicatorInsets = .zero
         webView.scrollView.delaysContentTouches = false
-        if deviceClass == "phone" {
+        if deviceClass == "phone" || platformClass == "mac" {
             webView.inputAssistantItem.leadingBarButtonGroups = []
             webView.inputAssistantItem.trailingBarButtonGroups = []
         }
@@ -191,6 +192,9 @@ struct MapWebView: UIViewRepresentable {
             }
             self.scriptHandler.focusFormControlHandler = { [weak self] in
                 self?.focusFormControl()
+            }
+            self.scriptHandler.blurFormControlHandler = { [weak self] in
+                self?.blurFormControl()
             }
         }
 
@@ -455,6 +459,12 @@ struct MapWebView: UIViewRepresentable {
             if !webView.isFirstResponder {
                 webView.becomeFirstResponder()
             }
+        }
+
+        private func blurFormControl() {
+            guard ProcessInfo.processInfo.isiOSAppOnMac,
+                  let webView else { return }
+            webView.endEditing(true)
         }
 
         private func shareFile(path: String, title: String) {
