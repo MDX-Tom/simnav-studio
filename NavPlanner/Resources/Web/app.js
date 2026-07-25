@@ -410,6 +410,14 @@ const TRANSLATIONS = {
   "procedure.noAvailable": { "zh-Hans": "无可用程序。", en: "No procedures available." },
   "procedure.group.count": { "zh-Hans": "{count} 个程序", en: "{count} procedures" },
   "procedure.group.other": { "zh-Hans": "其他程序", en: "Other procedures" },
+  "procedure.overview.open": { "zh-Hans": "预览 {runway} 的全部 {type}", en: "Preview all {type} procedures for {runway}" },
+  "procedure.overview.close": { "zh-Hans": "关闭 {type} 全量预览", en: "Close the {type} overview" },
+  "procedure.overview.selectRunway": { "zh-Hans": "请先选择一个具体跑道，再点击 {type} 标题预览。", en: "Select a specific runway before opening the {type} overview." },
+  "procedure.overview.loading": { "zh-Hans": "正在加载 {airport} {runway} 的 {type} 航点和轨迹…", en: "Loading {type} waypoints and paths for {airport} {runway}…" },
+  "procedure.overview.ready": { "zh-Hans": "已高亮 {airport} {runway} 的 {count} 条 {type} 轨迹。", en: "Highlighted {count} {type} paths for {airport} {runway}." },
+  "procedure.overview.groupReady": { "zh-Hans": "已缩窄到航点 {group}：{count} 条 {type} 轨迹。", en: "Narrowed to waypoint {group}: {count} {type} paths." },
+  "procedure.overview.empty": { "zh-Hans": "当前跑道没有可绘制的 {type} 轨迹。", en: "No drawable {type} paths are available for this runway." },
+  "procedure.overview.failed": { "zh-Hans": "{type} 全量预览加载失败。", en: "The {type} overview failed to load." },
   "procedure.feature.left": { "zh-Hans": "左转", en: "Left turn" },
   "procedure.feature.right": { "zh-Hans": "右转", en: "Right turn" },
   "procedure.feature.turn": { "zh-Hans": "转弯 {turn}", en: "Turn {turn}" },
@@ -747,6 +755,10 @@ const state = {
     star: null,
     approach: null,
   },
+  procedureOverview: null,
+  procedureOverviewRequestVersion: 0,
+  procedureOverviewAbortController: null,
+  procedureOverviewCache: new Map(),
   procedureChips: new Map(),
   airwaySegmentLayers: new Map(),
   airwayLegChips: new Map(),
@@ -911,6 +923,21 @@ const NAV_AIRWAY_INTERACTIVE_MIN_ZOOM = 6;
 const NAV_TERMINAL_DETAIL_MIN_ZOOM = 9;
 const NAV_RUNWAY_LABEL_MIN_ZOOM = 11;
 const PROCEDURE_CACHE_LIMIT = 180;
+const PROCEDURE_OVERVIEW_CACHE_LIMIT = 24;
+const PROCEDURE_OVERVIEW_COLORS = Object.freeze([
+  "#ff5d67",
+  "#22a7c7",
+  "#43c97f",
+  "#d8b51e",
+  "#6e82ff",
+  "#d36ee8",
+  "#ff8d42",
+  "#2fc2b4",
+  "#9f7aea",
+  "#7caf35",
+  "#e667a1",
+  "#4f9ce5",
+]);
 const DRAWING_HISTORY_LIMIT = 30;
 const EMPTY_LIST = Object.freeze([]);
 const versionPathSegment = (value) => `_v${encodeURIComponent(String(value || 0))}`;
@@ -1180,6 +1207,7 @@ const elements = {
   manualStarList: document.querySelector("#manualStarList"),
   manualApproachList: document.querySelector("#manualApproachList"),
   manualRunwaySelect: document.querySelector("#manualRunwaySelect"),
+  procedureOverviewButtons: document.querySelectorAll("[data-procedure-overview-type]"),
   selectionInfo: document.querySelector("#selectionInfo"),
   focusDepartureButton: document.querySelector("#focusDepartureButton"),
   focusArrivalButton: document.querySelector("#focusArrivalButton"),
@@ -1861,6 +1889,7 @@ const pointRenderer = isPhoneWorkbench()
   ? L.svg({ pane: "pointPane", padding: 0.42 })
   : L.canvas({ pane: "pointPane", padding: 0.35 });
 const waypointHighlightRenderer = L.svg({ pane: "routePane", padding: 0.48 });
+const procedureOverviewRenderer = L.canvas({ pane: "routePane", padding: 0.48 });
 const markerLayerGroup = L.layerGroup().addTo(map);
 const selectionHighlightLayerGroup = L.layerGroup().addTo(map);
 const labelLayerGroup = L.layerGroup().addTo(map);
@@ -1869,6 +1898,7 @@ const procedureLayerGroups = {
   star: L.layerGroup().addTo(map),
   approach: L.layerGroup().addTo(map),
 };
+const procedureOverviewLayerGroup = L.layerGroup().addTo(map);
 createMapOverlayControl().addTo(map);
 createTrackHistoryControl().addTo(map);
 applyMapOverlayVisibility();
@@ -4177,6 +4207,7 @@ function applyMapOverlayVisibility() {
   Object.values(procedureLayerGroups).forEach((group) => {
     setLayerGroupVisible(group, isMapOverlayVisible("procedures"));
   });
+  setLayerGroupVisible(procedureOverviewLayerGroup, isMapOverlayVisible("procedures"));
   setLayerGroupVisible(fr24TrackLayerGroup, isMapOverlayVisible("fr24"));
   updateFR24ProfilePanel();
   setLayerGroupVisible(navTerminalLayerGroup, isMapOverlayVisible("terminalWaypoints"));
@@ -4480,6 +4511,7 @@ function restoreDrawingSnapshot(snapshot) {
   const normalized = normalizeDrawingSnapshot(snapshot);
   state.restoringDrawingSnapshot = true;
   try {
+    clearProcedureOverview({ announce: false });
     clearRouteDrawingState();
     ["sid", "star", "approach"].forEach((type) => clearProcedureDrawingState(type));
     fr24TrackLayerGroup.clearLayers();
@@ -4513,6 +4545,11 @@ function clearAllMapDrawings(options = {}) {
   const recordHistory = eventLike ? true : options.recordHistory !== false;
   const snapshot = currentDrawingSnapshot();
   if (!drawingSnapshotHasContent(snapshot)) {
+    if (state.procedureOverview) {
+      clearProcedureOverview({ announce: false });
+      setDrawingHistoryStatus(t("query.trackCleared"));
+      return;
+    }
     setDrawingHistoryStatus(t("query.noTrack"), true);
     updateTrackHistoryControlState();
     return;
@@ -7270,6 +7307,8 @@ async function refreshHeaderStatus({ announce = true } = {}) {
  */
 function resetDatabaseDependentCaches() {
   state.procedureCache.clear();
+  state.procedureOverviewCache.clear();
+  clearProcedureOverview({ announce: false });
   state.airportPopupCache.clear();
   state.navOverlayPayload = null;
   state.navOverlayFetchBounds = null;
@@ -7339,6 +7378,7 @@ function refreshLocalizedDynamicText() {
   updateMapTileZoomOffsetControl();
   updateMapOverlayControlLabels();
   updateTrackHistoryControlLabels();
+  syncProcedureOverviewHeadings();
   updateOfflineMapControlLabel();
   if (state.databaseStatus) {
     updateDatabaseStatus(state.databaseStatus);
@@ -10937,6 +10977,30 @@ function procedureMatchesRunway(type, item, runway, allItems = []) {
   ));
 }
 
+function procedureGroupIdentifier(type, item) {
+  const supplied = String(item?.group_identifier || "").trim().toUpperCase();
+  if (supplied) {
+    return supplied;
+  }
+  const transition = normalizeTransition(item?.transition_identifier).toUpperCase();
+  if (type === "approach") {
+    const inferredRunway = inferRunwayFromProcedure(type, item || {});
+    return inferredRunway === "ALL"
+      ? String(item?.procedure_identifier || "").toUpperCase()
+      : inferredRunway;
+  }
+  if (transition !== "ALL" && !transition.startsWith("RW")) {
+    return transition;
+  }
+  return String(item?.procedure_identifier || t("procedure.group.other")).toUpperCase();
+}
+
+function filteredProcedureItems(slot, type) {
+  const procedures = state.airportProcedureData[slot]?.[type] || EMPTY_LIST;
+  const runway = state.selectedRunways[slot] || "ALL";
+  return procedures.filter((item) => procedureMatchesRunway(type, item, runway, procedures));
+}
+
 /**
  * 功能：规范化 `normalizeRunwayChoice` 对应的业务逻辑。
  * 输入：slot、value。
@@ -10965,11 +11029,16 @@ function normalizeRunwayChoice(slot, value) {
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
 function updateRunwayChoice(slot, value) {
-  state.selectedRunways[slot] = normalizeRunwayChoice(slot, value);
+  const nextRunway = normalizeRunwayChoice(slot, value);
+  if (state.selectedRunways[slot] !== nextRunway && state.procedureOverview?.slot === slot) {
+    clearProcedureOverview({ announce: false });
+  }
+  state.selectedRunways[slot] = nextRunway;
   renderRunwayButtons(slot);
   if (state[`${slot}Airport`]) {
     rerenderProcedureLists(slot, state[`${slot}Airport`].airport_identifier);
   }
+  syncProcedureOverviewHeadings();
 }
 
 /**
@@ -10989,6 +11058,7 @@ function renderRunwayButtons(slot) {
   if (slot !== "manual" && planContainer) {
     renderChoiceGroup(planContainer, options, value, (choice) => updateRunwayChoice(slot, choice), t("common.auto"));
   }
+  syncProcedureOverviewHeadings();
 }
 
 /**
@@ -11038,27 +11108,10 @@ function renderProcedureList(container, items, type, airportIdent, slot) {
   }
 
   const selected = state.selectedProcedures[type];
-  const groupIdentifier = (item) => {
-    const supplied = String(item.group_identifier || "").trim().toUpperCase();
-    if (supplied) {
-      return supplied;
-    }
-    const transition = normalizeTransition(item.transition_identifier).toUpperCase();
-    if (type === "approach") {
-      const inferredRunway = inferRunwayFromProcedure(type, item);
-      return inferredRunway === "ALL"
-        ? String(item.procedure_identifier || "").toUpperCase()
-        : inferredRunway;
-    }
-    if (transition !== "ALL" && !transition.startsWith("RW")) {
-      return transition;
-    }
-    return String(item.procedure_identifier || t("procedure.group.other")).toUpperCase();
-  };
 
   const groups = new Map();
   filteredItems.forEach((item) => {
-    const identifier = groupIdentifier(item) || t("procedure.group.other");
+    const identifier = procedureGroupIdentifier(type, item) || t("procedure.group.other");
     if (!groups.has(identifier)) {
       groups.set(identifier, []);
     }
@@ -11071,6 +11124,9 @@ function renderProcedureList(container, items, type, airportIdent, slot) {
       const group = document.createElement("details");
       group.className = "procedure-group";
       group.dataset.procedureGroup = identifier;
+      group.dataset.procedureType = type;
+      group.dataset.procedureSlot = slot;
+      group.dataset.procedureAirport = airportIdent;
 
       const selectedInGroup = groupItems.some((item) => {
         const transition = normalizeTransition(item.transition_identifier);
@@ -11080,6 +11136,16 @@ function renderProcedureList(container, items, type, airportIdent, slot) {
           && selected.transition === transition;
       });
       group.open = expandedGroups.has(identifier) || selectedInGroup || groups.size <= 3;
+      group.classList.toggle(
+        "is-preview-scope",
+        Boolean(
+          state.procedureOverview
+          && state.procedureOverview.slot === slot
+          && state.procedureOverview.type === type
+          && state.procedureOverview.airport === airportIdent
+          && state.procedureOverview.groupIdentifier === identifier
+        ),
+      );
 
       const summary = document.createElement("summary");
       summary.className = "procedure-group-summary";
@@ -11120,13 +11186,30 @@ function renderProcedureList(container, items, type, airportIdent, slot) {
           ) {
             chip.classList.add("active");
           }
-          chip.addEventListener("click", () =>
-            previewProcedure(type, airportIdent, item.procedure_identifier, transition),
-          );
+          chip.addEventListener("click", () => {
+            clearProcedureOverview({ announce: false });
+            previewProcedure(type, airportIdent, item.procedure_identifier, transition).catch(setErrorStatus);
+          });
           chipList.appendChild(chip);
         });
       group.appendChild(chipList);
       container.appendChild(group);
+      let groupToggleReady = false;
+      group.addEventListener("toggle", () => {
+        if (!groupToggleReady) {
+          return;
+        }
+        handleProcedureOverviewGroupToggle({
+          slot,
+          type,
+          airport: airportIdent,
+          identifier,
+          open: group.open,
+        });
+      });
+      window.requestAnimationFrame(() => {
+        groupToggleReady = true;
+      });
     });
 }
 
@@ -11200,6 +11283,9 @@ function setActiveAirportSlot(slot) {
   if (!AIRPORT_SLOTS.includes(slot)) {
     return;
   }
+  if (state.procedureOverview && state.procedureOverview.slot !== slot) {
+    clearProcedureOverview({ announce: false });
+  }
   state.activeAirportSlot = slot;
   updateAirportPanelVisibility();
 }
@@ -11252,6 +11338,12 @@ async function loadAirportIntoPanel(ident, slot, options = {}) {
   throwIfAborted(options.signal);
 
   const prefix = AIRPORT_SLOTS.includes(slot) ? slot : "departure";
+  if (
+    state.procedureOverview?.slot === prefix
+    && state.procedureOverview.airport !== payload.airport.airport_identifier
+  ) {
+    clearProcedureOverview({ announce: false });
+  }
   state.selectedAirport = payload.airport;
   state[`${prefix}Airport`] = payload.airport;
   state.airportProcedureData[prefix] = payload.procedures;
@@ -11300,6 +11392,425 @@ function rerenderProcedureLists(prefix, ident) {
   renderProcedureList(elements[`${prefix}SidList`], procedures.sid, "sid", ident, prefix);
   renderProcedureList(elements[`${prefix}StarList`], procedures.star, "star", ident, prefix);
   renderProcedureList(elements[`${prefix}ApproachList`], procedures.approach, "approach", ident, prefix);
+  syncProcedureOverviewHeadings();
+}
+
+function procedureOverviewMatches(overview, slot, type, airport = null) {
+  return Boolean(
+    overview
+    && overview.slot === slot
+    && overview.type === type
+    && (!airport || overview.airport === airport)
+  );
+}
+
+function syncProcedureOverviewHeadings() {
+  elements.procedureOverviewButtons.forEach((button) => {
+    const slot = button.dataset.procedureOverviewSlot;
+    const type = button.dataset.procedureOverviewType;
+    const airport = airportForSlot(slot)?.airport_identifier || "";
+    const runway = state.selectedRunways[slot] || "ALL";
+    const active = procedureOverviewMatches(state.procedureOverview, slot, type, airport);
+    const loading = active && state.procedureOverview.loading;
+    const needsRunway = !airport || runway === "ALL";
+    button.classList.toggle("active", active);
+    button.classList.toggle("is-loading", loading);
+    button.classList.toggle("requires-runway", needsRunway);
+    button.setAttribute("aria-pressed", String(active));
+    button.setAttribute("aria-busy", String(Boolean(loading)));
+    button.setAttribute("aria-disabled", String(needsRunway));
+    const typeLabel = procedureTypeLabel(type);
+    const label = active
+      ? t("procedure.overview.close", { type: typeLabel })
+      : needsRunway
+        ? t("procedure.overview.selectRunway", { type: typeLabel })
+        : t("procedure.overview.open", { type: typeLabel, runway });
+    button.setAttribute("aria-label", label);
+    button.setAttribute("title", label);
+  });
+}
+
+function syncProcedureOverviewGroupState() {
+  document.querySelectorAll(".procedure-group[data-procedure-type]").forEach((group) => {
+    const active = state.procedureOverview;
+    group.classList.toggle(
+      "is-preview-scope",
+      Boolean(
+        active
+        && active.slot === group.dataset.procedureSlot
+        && active.type === group.dataset.procedureType
+        && active.airport === group.dataset.procedureAirport
+        && active.groupIdentifier === group.dataset.procedureGroup
+      ),
+    );
+  });
+}
+
+function collapseProcedureOverviewGroups(slot, type, airport) {
+  document.querySelectorAll(".procedure-group[data-procedure-type]").forEach((group) => {
+    if (
+      group.dataset.procedureSlot === slot
+      && group.dataset.procedureType === type
+      && group.dataset.procedureAirport === airport
+      && group.open
+    ) {
+      group.open = false;
+    }
+  });
+}
+
+function clearProcedureOverview(options = {}) {
+  const previous = state.procedureOverview;
+  state.procedureOverviewRequestVersion += 1;
+  state.procedureOverviewAbortController?.abort();
+  state.procedureOverviewAbortController = null;
+  state.procedureOverview = null;
+  procedureOverviewLayerGroup.clearLayers();
+  syncProcedureOverviewHeadings();
+  syncProcedureOverviewGroupState();
+  if (options.announce && previous) {
+    setStatus(t("procedure.overview.close", { type: procedureTypeLabel(previous.type) }));
+  }
+}
+
+function procedureOverviewCacheKey(type, airport, items) {
+  const signature = items
+    .map((item) => [
+      String(item.procedure_identifier || "").toUpperCase(),
+      normalizeTransition(item.transition_identifier).toUpperCase(),
+      procedureGroupIdentifier(type, item),
+    ].join("|"))
+    .sort()
+    .join(";");
+  return `${String(type).toUpperCase()}|${String(airport).toUpperCase()}|${signature}`;
+}
+
+function rememberProcedureOverviewPayload(key, payload) {
+  if (state.procedureOverviewCache.has(key)) {
+    state.procedureOverviewCache.delete(key);
+  }
+  state.procedureOverviewCache.set(key, payload);
+  while (state.procedureOverviewCache.size > PROCEDURE_OVERVIEW_CACHE_LIMIT) {
+    state.procedureOverviewCache.delete(state.procedureOverviewCache.keys().next().value);
+  }
+}
+
+async function loadProcedureOverviewPayload(type, airport, items, options = {}) {
+  const key = procedureOverviewCacheKey(type, airport, items);
+  const cached = state.procedureOverviewCache.get(key);
+  if (cached) {
+    return cached;
+  }
+  const procedures = items.map((item) => ({
+    procedure_identifier: item.procedure_identifier,
+    transition_identifier: normalizeTransition(item.transition_identifier),
+    group_identifier: procedureGroupIdentifier(type, item),
+  }));
+  const payload = await fetchJson(
+    `/api/procedure-preview/${encodeURIComponent(type)}/${encodeURIComponent(airport)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ procedures }),
+      signal: options.signal,
+    },
+  );
+  rememberProcedureOverviewPayload(key, payload);
+  return payload;
+}
+
+function procedureOverviewColor(identifier) {
+  const text = String(identifier || "").toUpperCase();
+  let hash = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    hash = ((hash * 31) + text.charCodeAt(index)) >>> 0;
+  }
+  return PROCEDURE_OVERVIEW_COLORS[hash % PROCEDURE_OVERVIEW_COLORS.length];
+}
+
+function procedureOverviewLatLngs(path) {
+  return (path || []).flatMap((point) => {
+    const lat = Number(point?.lat);
+    const lon = Number(point?.lon);
+    return Number.isFinite(lat) && Number.isFinite(lon) ? [[lat, lon]] : [];
+  });
+}
+
+function procedureOverviewAnchor(item, type, groupIdentifier) {
+  const waypoints = (item.waypoints || []).flatMap((waypoint) => {
+    const lat = Number(waypoint?.lat);
+    const lon = Number(waypoint?.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return [];
+    }
+    return [{
+      identifier: String(waypoint.identifier || "").toUpperCase(),
+      lat,
+      lon,
+    }];
+  });
+  const exact = waypoints.find((waypoint) => waypoint.identifier === groupIdentifier);
+  if (exact) {
+    return L.latLng(exact.lat, exact.lon);
+  }
+  const runway = waypoints.find((waypoint) => waypoint.identifier.startsWith("RW"));
+  const fallback = type === "star"
+    ? waypoints[0]
+    : type === "approach"
+      ? (runway || waypoints.at(-1))
+      : waypoints.at(-1);
+  return fallback ? L.latLng(fallback.lat, fallback.lon) : null;
+}
+
+function addProcedureOverviewPath(path, color, options = {}) {
+  const latlngs = procedureOverviewLatLngs(path);
+  if (latlngs.length < 2) {
+    return latlngs;
+  }
+  const focused = Boolean(options.focused);
+  const dashArray = options.missed ? "6 7" : null;
+  L.polyline(latlngs, {
+    pane: "routePane",
+    renderer: procedureOverviewRenderer,
+    color: "#102335",
+    weight: routeStrokeWeight(focused ? 7.2 : 6.2),
+    opacity: focused ? 0.72 : 0.56,
+    dashArray,
+    interactive: false,
+    lineCap: "round",
+    lineJoin: "round",
+  }).addTo(procedureOverviewLayerGroup);
+  L.polyline(latlngs, {
+    pane: "routePane",
+    renderer: procedureOverviewRenderer,
+    color,
+    weight: routeStrokeWeight(focused ? 4.5 : 3.7),
+    opacity: focused ? 1 : 0.92,
+    dashArray,
+    interactive: false,
+    lineCap: "round",
+    lineJoin: "round",
+  }).addTo(procedureOverviewLayerGroup);
+  return latlngs;
+}
+
+function addProcedureOverviewWaypoint(latlng, color, focused) {
+  L.circleMarker(latlng, {
+    pane: "routePane",
+    renderer: procedureOverviewRenderer,
+    radius: compactPhoneValue(focused ? 4.8 : 3.8, 0.78, 3),
+    color: "#fff8ce",
+    weight: compactPhoneValue(1.8, 0.8, 1.2),
+    opacity: 0.98,
+    fillColor: color,
+    fillOpacity: 0.95,
+    interactive: false,
+  }).addTo(procedureOverviewLayerGroup);
+}
+
+function addProcedureOverviewLabel(groupIdentifier, labelData, focused) {
+  if (!labelData?.latlng) {
+    return;
+  }
+  const maxNames = focused ? 8 : 5;
+  const names = labelData.names.slice(0, maxNames);
+  const remaining = Math.max(0, labelData.names.length - names.length);
+  const tags = names.map((item) => `
+    <span style="--procedure-overview-color:${escapeHtml(item.color)}">${escapeHtml(item.name)}</span>
+  `).join("");
+  const more = remaining
+    ? `<span class="procedure-overview-label-more">+${escapeHtml(remaining)}</span>`
+    : "";
+  const icon = L.divIcon({
+    className: "procedure-overview-label-icon",
+    iconSize: [1, 1],
+    iconAnchor: [0, 8],
+    html: `
+      <div class="procedure-overview-map-label${focused ? " is-focused" : ""}">
+        <strong>${escapeHtml(groupIdentifier)}</strong>
+        <div>${tags}${more}</div>
+      </div>
+    `,
+  });
+  L.marker(labelData.latlng, {
+    pane: "labelPane",
+    icon,
+    interactive: false,
+    keyboard: false,
+  }).addTo(procedureOverviewLayerGroup);
+}
+
+function drawProcedureOverview() {
+  const overview = state.procedureOverview;
+  if (!overview?.payload) {
+    return;
+  }
+  procedureOverviewLayerGroup.clearLayers();
+  const focused = Boolean(overview.groupIdentifier);
+  const procedures = (overview.payload.procedures || []).filter((item) => (
+    !focused || String(item.group_identifier || "").toUpperCase() === overview.groupIdentifier
+  ));
+  if (!procedures.length) {
+    setStatus(t("procedure.overview.empty", { type: procedureTypeLabel(overview.type) }), true);
+    syncProcedureOverviewHeadings();
+    syncProcedureOverviewGroupState();
+    return;
+  }
+
+  const bounds = L.latLngBounds([]);
+  const waypointKeys = new Set();
+  const labels = new Map();
+  procedures.forEach((item) => {
+    const procedure = String(item.procedure_identifier || "").toUpperCase();
+    const transition = normalizeTransition(item.transition_identifier).toUpperCase();
+    const groupIdentifier = String(item.group_identifier || t("procedure.group.other")).toUpperCase();
+    const color = procedureOverviewColor(`${procedure}|${transition}`);
+    const primaryPath = overview.type === "approach" ? item.primary_path : item.path;
+    const primaryLatLngs = addProcedureOverviewPath(primaryPath, color, { focused });
+    primaryLatLngs.forEach((latlng) => bounds.extend(latlng));
+    if (overview.type === "approach") {
+      const missedLatLngs = addProcedureOverviewPath(item.missed_path, color, { focused, missed: true });
+      missedLatLngs.forEach((latlng) => bounds.extend(latlng));
+    }
+
+    (item.waypoints || []).forEach((waypoint) => {
+      const lat = Number(waypoint?.lat);
+      const lon = Number(waypoint?.lon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+        return;
+      }
+      const identifier = String(waypoint.identifier || "").toUpperCase();
+      const key = `${identifier}|${lat.toFixed(6)}|${lon.toFixed(6)}`;
+      if (!waypointKeys.has(key)) {
+        waypointKeys.add(key);
+        addProcedureOverviewWaypoint([lat, lon], color, focused);
+      }
+      bounds.extend([lat, lon]);
+    });
+
+    if (!labels.has(groupIdentifier)) {
+      labels.set(groupIdentifier, {
+        latlng: procedureOverviewAnchor(item, overview.type, groupIdentifier),
+        names: [],
+        nameKeys: new Set(),
+      });
+    }
+    const labelData = labels.get(groupIdentifier);
+    if (!labelData.latlng) {
+      labelData.latlng = procedureOverviewAnchor(item, overview.type, groupIdentifier);
+    }
+    if (!labelData.nameKeys.has(procedure)) {
+      labelData.nameKeys.add(procedure);
+      labelData.names.push({ name: procedure, color });
+    }
+  });
+
+  labels.forEach((labelData, groupIdentifier) => {
+    addProcedureOverviewLabel(groupIdentifier, labelData, focused);
+  });
+  if (bounds.isValid()) {
+    map.fitBounds(bounds.pad(focused ? 0.12 : 0.08), {
+      animate: true,
+      duration: 0.42,
+      padding: compactPhoneSize(focused ? [30, 30] : [24, 24]),
+      maxZoom: focused ? 10 : 9,
+    });
+  }
+  syncProcedureOverviewHeadings();
+  syncProcedureOverviewGroupState();
+  const statusKey = focused ? "procedure.overview.groupReady" : "procedure.overview.ready";
+  setStatus(t(statusKey, {
+    airport: overview.airport,
+    runway: overview.runway,
+    group: overview.groupIdentifier || "",
+    count: formatCount(procedures.length),
+    type: procedureTypeLabel(overview.type),
+  }), false, "success");
+}
+
+async function activateProcedureOverview(slot, type, options = {}) {
+  const airport = airportForSlot(slot)?.airport_identifier || "";
+  const runway = state.selectedRunways[slot] || "ALL";
+  if (!airport || runway === "ALL") {
+    const message = t("procedure.overview.selectRunway", { type: procedureTypeLabel(type) });
+    setStatus(message, true);
+    renderSelectionMessage(message);
+    return;
+  }
+  if (!options.force && procedureOverviewMatches(state.procedureOverview, slot, type, airport)) {
+    clearProcedureOverview({ announce: true });
+    return;
+  }
+
+  const items = filteredProcedureItems(slot, type);
+  if (!items.length) {
+    const message = t("procedure.overview.empty", { type: procedureTypeLabel(type) });
+    setStatus(message, true);
+    renderSelectionMessage(message);
+    return;
+  }
+
+  clearProcedureOverview({ announce: false });
+  collapseProcedureOverviewGroups(slot, type, airport);
+  const requestVersion = (state.procedureOverviewRequestVersion += 1);
+  const controller = new AbortController();
+  state.procedureOverviewAbortController = controller;
+  state.procedureOverview = {
+    slot,
+    type,
+    airport,
+    runway,
+    groupIdentifier: null,
+    loading: true,
+    payload: null,
+    requestVersion,
+  };
+  procedureOverviewLayerGroup.clearLayers();
+  syncProcedureOverviewHeadings();
+  syncProcedureOverviewGroupState();
+  setStatus(t("procedure.overview.loading", {
+    airport,
+    runway,
+    type: procedureTypeLabel(type),
+  }), false, "progress");
+
+  try {
+    const payload = await loadProcedureOverviewPayload(type, airport, items, { signal: controller.signal });
+    if (state.procedureOverviewRequestVersion !== requestVersion || state.procedureOverview?.requestVersion !== requestVersion) {
+      return;
+    }
+    state.procedureOverview.loading = false;
+    state.procedureOverview.payload = payload;
+    state.procedureOverviewAbortController = null;
+    drawProcedureOverview();
+  } catch (error) {
+    if (isAbortError(error) || state.procedureOverviewRequestVersion !== requestVersion) {
+      return;
+    }
+    clearProcedureOverview({ announce: false });
+    const message = t("procedure.overview.failed", { type: procedureTypeLabel(type) });
+    setStatus(message, true);
+    renderSelectionMessage(message);
+  }
+}
+
+function handleProcedureOverviewGroupToggle({ slot, type, airport, identifier, open }) {
+  const overview = state.procedureOverview;
+  if (!procedureOverviewMatches(overview, slot, type, airport)) {
+    return;
+  }
+  if (open) {
+    overview.groupIdentifier = identifier;
+  } else if (overview.groupIdentifier === identifier) {
+    overview.groupIdentifier = null;
+  } else {
+    return;
+  }
+  if (overview.payload) {
+    drawProcedureOverview();
+  } else {
+    syncProcedureOverviewGroupState();
+  }
 }
 
 /**
@@ -11465,6 +11976,7 @@ async function applyAutoSelectedProcedures(selectedProcedures = {}, options = {}
  */
 async function applyRoutePayload(payload, departure, arrival, options = {}) {
   throwIfAborted(options.signal);
+  clearProcedureOverview({ announce: false });
   state.selectedRunways.departure = payload.selected_runways?.departure || state.selectedRunways.departure || "ALL";
   state.selectedRunways.arrival = payload.selected_runways?.arrival || state.selectedRunways.arrival || "ALL";
   await Promise.all([
@@ -13079,6 +13591,15 @@ registerSettingsPage({
   applyMapTileZoomOffset,
   setStatus,
   setErrorStatus,
+});
+
+elements.procedureOverviewButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    activateProcedureOverview(
+      button.dataset.procedureOverviewSlot,
+      button.dataset.procedureOverviewType,
+    ).catch(setErrorStatus);
+  });
 });
 
 elements.mapExpandButton?.addEventListener("click", () => {

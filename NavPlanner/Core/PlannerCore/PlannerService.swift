@@ -227,6 +227,132 @@ final class PlannerService: @unchecked Sendable {
         }
     }
 
+    func procedurePreviewPayload(
+        type: String,
+        airport: String,
+        selections: [[String: Any]]
+    ) -> [String: Any] {
+        guard let table = procedureTable(for: type) else {
+            return ["error": "未知 Procedure 类型"]
+        }
+
+        let normalizedAirport = airport.uppercased()
+        var normalizedSelections: [[String: String]] = []
+        var seenSelections = Set<String>()
+        for selection in selections {
+            let procedure = navString(selection["procedure_identifier"])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .uppercased()
+            guard !procedure.isEmpty else { continue }
+            let transition = normalizedProcedureTransition(selection["transition_identifier"])
+            let key = "\(procedure)\u{0}\(transition)"
+            guard !seenSelections.contains(key) else { continue }
+            seenSelections.insert(key)
+            normalizedSelections.append([
+                "procedure_identifier": procedure,
+                "transition_identifier": transition,
+                "group_identifier": navString(selection["group_identifier"])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .uppercased()
+            ])
+        }
+
+        guard !normalizedSelections.isEmpty else {
+            return [
+                "airport": normalizedAirport,
+                "type": type.lowercased(),
+                "procedures": []
+            ]
+        }
+
+        let fallback: [String: Any] = [
+            "airport": normalizedAirport,
+            "type": type.lowercased(),
+            "procedures": []
+        ]
+        return dataStore.read(fallback: fallback) { database in
+            let procedures = Array(Set(normalizedSelections.compactMap { $0["procedure_identifier"] })).sorted()
+            var rows: [[String: Any]] = []
+            // 分块只用于避开不同 SQLite 构建的绑定变量上限；对当前机场通常仍只执行一块。
+            for start in stride(from: 0, to: procedures.count, by: 400) {
+                let end = min(start + 400, procedures.count)
+                let chunk = Array(procedures[start..<end])
+                let placeholders = chunk.map { _ in "?" }.joined(separator: ", ")
+                rows.append(contentsOf: try database.rows(
+                    sql: """
+                    select procedure_identifier, transition_identifier,
+                           seqno, waypoint_identifier, waypoint_latitude, waypoint_longitude,
+                           waypoint_description_code, turn_direction, rnp,
+                           path_termination, route_type, magnetic_course, route_distance_holding_distance_time,
+                           distance_time, altitude_description, altitude1, altitude2,
+                           transition_altitude, speed_limit_description, speed_limit, vertical_angle,
+                           arc_radius, theta, rho, center_waypoint,
+                           center_waypoint_latitude, center_waypoint_longitude
+                    from \(table)
+                    where airport_identifier = ?
+                      and upper(procedure_identifier) in (\(placeholders))
+                    order by procedure_identifier, transition_identifier, seqno
+                    """,
+                    arguments: [.text(normalizedAirport)] + chunk.map { .text($0) }
+                ))
+            }
+
+            var rowsByVariant: [String: [[String: Any]]] = [:]
+            for row in rows {
+                let procedure = navString(row["procedure_identifier"]).uppercased()
+                let transition = normalizedProcedureTransition(row["transition_identifier"])
+                rowsByVariant["\(procedure)\u{0}\(transition)", default: []].append(row)
+            }
+
+            let previews = normalizedSelections.compactMap { selection -> [String: Any]? in
+                guard let procedure = selection["procedure_identifier"],
+                      let transition = selection["transition_identifier"] else {
+                    return nil
+                }
+                let commonRows = normalizeProcedureRows(rowsByVariant["\(procedure)\u{0}ALL"] ?? [])
+                let transitionRows = transition == "ALL"
+                    ? []
+                    : normalizeProcedureRows(rowsByVariant["\(procedure)\u{0}\(transition)"] ?? [])
+                let items: [[String: Any]]
+                if transition == "ALL" {
+                    items = commonRows
+                } else if table == "tbl_stars" {
+                    items = commonRows + transitionRows
+                } else {
+                    items = transitionRows + commonRows
+                }
+                guard items.contains(where: { procedureItemPoint($0) != nil }) else {
+                    return nil
+                }
+
+                let geometry = buildProcedureGeometry(items: items)
+                let waypoints = items.compactMap { item -> [String: Any]? in
+                    guard let point = procedureItemPoint(item) else { return nil }
+                    return [
+                        "identifier": navString(item["waypoint_identifier"]).uppercased(),
+                        "lat": point["lat"] ?? 0,
+                        "lon": point["lon"] ?? 0
+                    ]
+                }
+                return [
+                    "procedure_identifier": procedure,
+                    "transition_identifier": transition,
+                    "group_identifier": selection["group_identifier"] ?? "",
+                    "path": geometry["path"] ?? [],
+                    "primary_path": geometry["primary_path"] ?? [],
+                    "missed_path": geometry["missed_path"] ?? [],
+                    "waypoints": waypoints
+                ]
+            }
+
+            return [
+                "airport": normalizedAirport,
+                "type": type.lowercased(),
+                "procedures": previews
+            ]
+        }
+    }
+
     func navOverlayPayload(south: Double, west: Double, north: Double, east: Double, zoom: Int) -> [String: Any] {
         let southBound = min(south, north)
         let northBound = max(south, north)

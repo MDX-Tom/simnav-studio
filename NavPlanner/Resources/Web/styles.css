@@ -811,6 +811,11 @@ textarea:focus-visible {
     animation: none;
     border-right-color: currentColor;
   }
+
+  .procedure-heading-button.is-loading .procedure-heading-preview-icon {
+    animation: none;
+    border-right-color: currentColor;
+  }
 }
 
 .route-legs,
@@ -836,6 +841,12 @@ textarea:focus-visible {
 
 .procedure-group[open] {
   background: rgba(84, 189, 255, 0.045);
+}
+
+.procedure-group.is-preview-scope {
+  border-color: color-mix(in srgb, var(--accent) 68%, transparent);
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 78%, transparent);
 }
 
 .procedure-group-summary {
@@ -889,6 +900,62 @@ textarea:focus-visible {
   flex-wrap: wrap;
   gap: 6px;
   padding: 0 8px 8px 26px;
+}
+
+.procedure-overview-label-icon {
+  width: 1px !important;
+  height: 1px !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+
+.procedure-overview-map-label {
+  width: max-content;
+  max-width: 150px;
+  padding: 5px 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 54%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--panel-raised) 92%, transparent);
+  color: var(--text);
+  box-shadow: 0 4px 12px rgba(3, 12, 22, 0.34);
+  pointer-events: none;
+  transform: translate(-50%, -100%);
+}
+
+.procedure-overview-map-label.is-focused {
+  border-color: color-mix(in srgb, var(--accent-2) 72%, transparent);
+  box-shadow: 0 5px 15px rgba(3, 12, 22, 0.42);
+}
+
+.procedure-overview-map-label strong {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--text);
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+}
+
+.procedure-overview-map-label > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.procedure-overview-map-label span {
+  padding: 2px 4px;
+  border: 1px solid color-mix(in srgb, var(--procedure-overview-color, var(--accent)) 72%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--procedure-overview-color, var(--accent)) 15%, var(--panel-raised));
+  color: var(--text);
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.procedure-overview-map-label .procedure-overview-label-more {
+  --procedure-overview-color: var(--muted);
 }
 
 .route-leg,
@@ -1203,6 +1270,93 @@ textarea:focus-visible {
 
 .procedure-heading {
   color: rgba(84, 189, 255, 0.86);
+}
+
+.procedure-heading-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 28px;
+  padding: 4px 7px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease, background-color 120ms ease;
+}
+
+.procedure-heading-button:hover,
+.procedure-heading-button:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 36%, transparent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  outline: none;
+}
+
+.procedure-heading-button.active {
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+.procedure-heading-button.requires-runway:not(.active) {
+  color: color-mix(in srgb, var(--muted) 72%, transparent);
+}
+
+.procedure-heading-preview-icon {
+  position: relative;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 10px;
+  color: currentColor;
+  opacity: 0.78;
+}
+
+.procedure-heading-preview-icon::before {
+  content: "";
+  position: absolute;
+  left: 1px;
+  top: 5px;
+  width: 13px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  transform: rotate(-18deg);
+  transform-origin: center;
+}
+
+.procedure-heading-preview-icon::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 5px;
+  height: 5px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  background: var(--panel);
+}
+
+.procedure-heading-button.is-loading .procedure-heading-preview-icon {
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: procedureOverviewSpin 0.75s linear infinite;
+}
+
+.procedure-heading-button.is-loading .procedure-heading-preview-icon::before,
+.procedure-heading-button.is-loading .procedure-heading-preview-icon::after {
+  display: none;
+}
+
+@keyframes procedureOverviewSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .list-table {
@@ -5675,6 +5829,17 @@ html[data-theme="day"] .offline-progress {
 
   html:not([data-device="pad"]) .procedure-heading {
     font-size: 7px;
+  }
+
+  html:not([data-device="pad"]) .procedure-heading-button {
+    min-height: 20px;
+    padding: 2px 4px;
+    border-radius: 6px;
+  }
+
+  html:not([data-device="pad"]) .procedure-heading-preview-icon {
+    transform: scale(0.72);
+    transform-origin: right center;
   }
 
   html:not([data-device="pad"]) .detail-block {

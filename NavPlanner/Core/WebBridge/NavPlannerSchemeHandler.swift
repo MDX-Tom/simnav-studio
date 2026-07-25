@@ -225,6 +225,17 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
             let transition = pathComponents[4].removingPercentEncoding ?? pathComponents[4]
             return jsonResponse(plannerService.procedurePayload(type: type, airport: airport, procedure: procedure, transition: transition))
         }
+        if pathComponents.first == "procedure-preview", pathComponents.count == 3, request.httpMethod == "POST" {
+            let type = pathComponents[1]
+            let airport = pathComponents[2].removingPercentEncoding ?? pathComponents[2]
+            let body = jsonBody(from: request)
+            let selections = body["procedures"] as? [[String: Any]] ?? []
+            return jsonResponse(plannerService.procedurePreviewPayload(
+                type: type,
+                airport: airport,
+                selections: selections
+            ))
+        }
         if pathComponents.first == "airway", pathComponents.count == 2 {
             let airway = pathComponents[1].removingPercentEncoding ?? pathComponents[1]
             return jsonResponse(plannerService.airwayPayload(airway: airway))

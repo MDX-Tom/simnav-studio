@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
     <base href="navplanner://app/" />
-    <meta name="navplanner-resource-version" content="20260725-procedure-groups-v52" />
+    <meta name="navplanner-resource-version" content="20260725-procedure-overview-v54" />
     <title>航空航路规划器</title>
     <script>
       (() => {
@@ -197,15 +197,21 @@
                 <div id="departureRunwaySelect" class="button-choice-group"></div>
                 <div class="procedure-grid">
                   <div>
-                    <div class="procedure-heading">SID</div>
+                    <button type="button" class="procedure-heading procedure-heading-button" data-procedure-overview-slot="departure" data-procedure-overview-type="sid">
+                      <span>SID</span><span class="procedure-heading-preview-icon" aria-hidden="true"></span>
+                    </button>
                     <div class="procedure-list" id="departureSidList"></div>
                   </div>
                   <div>
-                    <div class="procedure-heading">STAR</div>
+                    <button type="button" class="procedure-heading procedure-heading-button" data-procedure-overview-slot="departure" data-procedure-overview-type="star">
+                      <span>STAR</span><span class="procedure-heading-preview-icon" aria-hidden="true"></span>
+                    </button>
                     <div class="procedure-list" id="departureStarList"></div>
                   </div>
                   <div>
-                    <div class="procedure-heading">APPROACH</div>
+                    <button type="button" class="procedure-heading procedure-heading-button" data-procedure-overview-slot="departure" data-procedure-overview-type="approach">
+                      <span>APPROACH</span><span class="procedure-heading-preview-icon" aria-hidden="true"></span>
+                    </button>
                     <div class="procedure-list" id="departureApproachList"></div>
                   </div>
                 </div>
@@ -235,15 +241,21 @@
                 <div id="arrivalRunwaySelect" class="button-choice-group"></div>
                 <div class="procedure-grid">
                   <div>
-                    <div class="procedure-heading">SID</div>
+                    <button type="button" class="procedure-heading procedure-heading-button" data-procedure-overview-slot="arrival" data-procedure-overview-type="sid">
+                      <span>SID</span><span class="procedure-heading-preview-icon" aria-hidden="true"></span>
+                    </button>
                     <div class="procedure-list" id="arrivalSidList"></div>
                   </div>
                   <div>
-                    <div class="procedure-heading">STAR</div>
+                    <button type="button" class="procedure-heading procedure-heading-button" data-procedure-overview-slot="arrival" data-procedure-overview-type="star">
+                      <span>STAR</span><span class="procedure-heading-preview-icon" aria-hidden="true"></span>
+                    </button>
                     <div class="procedure-list" id="arrivalStarList"></div>
                   </div>
                   <div>
-                    <div class="procedure-heading">APPROACH</div>
+                    <button type="button" class="procedure-heading procedure-heading-button" data-procedure-overview-slot="arrival" data-procedure-overview-type="approach">
+                      <span>APPROACH</span><span class="procedure-heading-preview-icon" aria-hidden="true"></span>
+                    </button>
                     <div class="procedure-list" id="arrivalApproachList"></div>
                   </div>
                 </div>
@@ -273,15 +285,21 @@
                 <div id="manualRunwaySelect" class="button-choice-group"></div>
                 <div class="procedure-grid">
                   <div>
-                    <div class="procedure-heading">SID</div>
+                    <button type="button" class="procedure-heading procedure-heading-button" data-procedure-overview-slot="manual" data-procedure-overview-type="sid">
+                      <span>SID</span><span class="procedure-heading-preview-icon" aria-hidden="true"></span>
+                    </button>
                     <div class="procedure-list" id="manualSidList"></div>
                   </div>
                   <div>
-                    <div class="procedure-heading">STAR</div>
+                    <button type="button" class="procedure-heading procedure-heading-button" data-procedure-overview-slot="manual" data-procedure-overview-type="star">
+                      <span>STAR</span><span class="procedure-heading-preview-icon" aria-hidden="true"></span>
+                    </button>
                     <div class="procedure-list" id="manualStarList"></div>
                   </div>
                   <div>
-                    <div class="procedure-heading">APPROACH</div>
+                    <button type="button" class="procedure-heading procedure-heading-button" data-procedure-overview-slot="manual" data-procedure-overview-type="approach">
+                      <span>APPROACH</span><span class="procedure-heading-preview-icon" aria-hidden="true"></span>
+                    </button>
                     <div class="procedure-list" id="manualApproachList"></div>
                   </div>
                 </div>
