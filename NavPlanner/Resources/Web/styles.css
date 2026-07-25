@@ -814,12 +814,81 @@ textarea:focus-visible {
 }
 
 .route-legs,
-.procedure-list,
 .selected-procedures {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   min-height: 32px;
+}
+
+.procedure-list {
+  display: grid;
+  gap: 7px;
+  min-height: 32px;
+}
+
+.procedure-group {
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: rgba(84, 189, 255, 0.025);
+}
+
+.procedure-group[open] {
+  background: rgba(84, 189, 255, 0.045);
+}
+
+.procedure-group-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 6px 9px;
+  color: var(--text);
+  cursor: pointer;
+  list-style: none;
+}
+
+.procedure-group-summary::-webkit-details-marker {
+  display: none;
+}
+
+.procedure-group-summary::before {
+  content: "›";
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1;
+  transform: rotate(0deg);
+  transition: transform 120ms ease;
+}
+
+.procedure-group[open] > .procedure-group-summary::before {
+  transform: rotate(90deg);
+}
+
+.procedure-group-ident {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.procedure-group-count {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.procedure-group-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 8px 8px 26px;
 }
 
 .route-leg,
@@ -5640,10 +5709,41 @@ html[data-theme="day"] .offline-progress {
   }
 
   html:not([data-device="pad"]) .route-legs,
-  html:not([data-device="pad"]) .procedure-list,
   html:not([data-device="pad"]) .selected-procedures {
     gap: 3px;
     min-height: 17px;
+  }
+
+  html:not([data-device="pad"]) .procedure-list {
+    gap: 3px;
+    min-height: 17px;
+  }
+
+  html:not([data-device="pad"]) .procedure-group {
+    border-radius: 7px;
+  }
+
+  html:not([data-device="pad"]) .procedure-group-summary {
+    gap: 4px;
+    min-height: 21px;
+    padding: 3px 5px;
+  }
+
+  html:not([data-device="pad"]) .procedure-group-summary::before {
+    font-size: 11px;
+  }
+
+  html:not([data-device="pad"]) .procedure-group-ident {
+    font-size: 7.6px;
+  }
+
+  html:not([data-device="pad"]) .procedure-group-count {
+    font-size: 6.6px;
+  }
+
+  html:not([data-device="pad"]) .procedure-group-chips {
+    gap: 3px;
+    padding: 0 4px 4px 13px;
   }
 
   html:not([data-device="pad"]) .route-leg,
