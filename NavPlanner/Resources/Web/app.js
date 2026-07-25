@@ -408,6 +408,8 @@ const TRANSLATIONS = {
   "procedure.loadFailed": { "zh-Hans": "{type} {procedure}/{transition} 加载失败。", en: "{type} {procedure}/{transition} failed to load." },
   "procedure.autoLoaded": { "zh-Hans": "已加载自动选择的 SID / STAR / APPROACH，可手动替换任意项目。", en: "Auto-selected SID / STAR / APPROACH loaded. You can manually replace any item." },
   "procedure.noAvailable": { "zh-Hans": "无可用程序。", en: "No procedures available." },
+  "procedure.group.count": { "zh-Hans": "{count} 个程序", en: "{count} procedures" },
+  "procedure.group.other": { "zh-Hans": "其他程序", en: "Other procedures" },
   "procedure.feature.left": { "zh-Hans": "左转", en: "Left turn" },
   "procedure.feature.right": { "zh-Hans": "右转", en: "Right turn" },
   "procedure.feature.turn": { "zh-Hans": "转弯 {turn}", en: "Turn {turn}" },
@@ -4424,12 +4426,16 @@ function syncProcedureListSelection() {
   document.querySelectorAll(".procedure-chip[data-procedure-type]").forEach((chip) => {
     const type = chip.dataset.procedureType;
     const selected = state.selectedProcedures[type];
-    chip.classList.toggle("active", Boolean(
+    const isSelected = Boolean(
       selected
       && selected.airport === chip.dataset.procedureAirport
       && selected.procedure === chip.dataset.procedureIdent
       && selected.transition === chip.dataset.procedureTransition
-    ));
+    );
+    chip.classList.toggle("active", isSelected);
+    if (isSelected) {
+      chip.closest(".procedure-group")?.setAttribute("open", "");
+    }
   });
 }
 
@@ -11018,6 +11024,11 @@ function renderChoiceGroup(container, options, activeValue, onSelect, emptyLabel
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
 function renderProcedureList(container, items, type, airportIdent, slot) {
+  const expandedGroups = new Set(
+    Array.from(container.querySelectorAll(".procedure-group[open]"))
+      .map((group) => group.dataset.procedureGroup)
+      .filter(Boolean),
+  );
   container.innerHTML = "";
   const runway = state.selectedRunways[slot];
   const filteredItems = items.filter((item) => procedureMatchesRunway(type, item, runway, items));
@@ -11025,25 +11036,98 @@ function renderProcedureList(container, items, type, airportIdent, slot) {
     container.innerHTML = `<div class="helper-text">${escapeHtml(t("procedure.noAvailable"))}</div>`;
     return;
   }
-  filteredItems.forEach((item) => {
-    const chip = document.createElement("button");
-    chip.type = "button";
-    chip.className = "procedure-chip";
-    const transition = normalizeTransition(item.transition_identifier);
-    chip.dataset.procedureType = type;
-    chip.dataset.procedureAirport = airportIdent;
-    chip.dataset.procedureIdent = item.procedure_identifier;
-    chip.dataset.procedureTransition = transition;
-    chip.textContent = `${item.procedure_identifier} ${transition}`;
-    const selected = state.selectedProcedures[type];
-    if (selected && selected.airport === airportIdent && selected.procedure === item.procedure_identifier && selected.transition === transition) {
-      chip.classList.add("active");
+
+  const selected = state.selectedProcedures[type];
+  const groupIdentifier = (item) => {
+    const supplied = String(item.group_identifier || "").trim().toUpperCase();
+    if (supplied) {
+      return supplied;
     }
-    chip.addEventListener("click", () =>
-      previewProcedure(type, airportIdent, item.procedure_identifier, transition),
-    );
-    container.appendChild(chip);
+    const transition = normalizeTransition(item.transition_identifier).toUpperCase();
+    if (type === "approach") {
+      const inferredRunway = inferRunwayFromProcedure(type, item);
+      return inferredRunway === "ALL"
+        ? String(item.procedure_identifier || "").toUpperCase()
+        : inferredRunway;
+    }
+    if (transition !== "ALL" && !transition.startsWith("RW")) {
+      return transition;
+    }
+    return String(item.procedure_identifier || t("procedure.group.other")).toUpperCase();
+  };
+
+  const groups = new Map();
+  filteredItems.forEach((item) => {
+    const identifier = groupIdentifier(item) || t("procedure.group.other");
+    if (!groups.has(identifier)) {
+      groups.set(identifier, []);
+    }
+    groups.get(identifier).push(item);
   });
+
+  Array.from(groups.entries())
+    .sort(([left], [right]) => left.localeCompare(right, "en"))
+    .forEach(([identifier, groupItems]) => {
+      const group = document.createElement("details");
+      group.className = "procedure-group";
+      group.dataset.procedureGroup = identifier;
+
+      const selectedInGroup = groupItems.some((item) => {
+        const transition = normalizeTransition(item.transition_identifier);
+        return selected
+          && selected.airport === airportIdent
+          && selected.procedure === item.procedure_identifier
+          && selected.transition === transition;
+      });
+      group.open = expandedGroups.has(identifier) || selectedInGroup || groups.size <= 3;
+
+      const summary = document.createElement("summary");
+      summary.className = "procedure-group-summary";
+      summary.innerHTML = `
+        <span class="procedure-group-ident">${escapeHtml(identifier)}</span>
+        <span class="procedure-group-count">${escapeHtml(t("procedure.group.count", { count: groupItems.length }))}</span>
+      `;
+      group.appendChild(summary);
+
+      const chipList = document.createElement("div");
+      chipList.className = "procedure-group-chips";
+      groupItems
+        .slice()
+        .sort((left, right) => {
+          const procedureOrder = String(left.procedure_identifier || "")
+            .localeCompare(String(right.procedure_identifier || ""), "en");
+          if (procedureOrder !== 0) {
+            return procedureOrder;
+          }
+          return normalizeTransition(left.transition_identifier)
+            .localeCompare(normalizeTransition(right.transition_identifier), "en");
+        })
+        .forEach((item) => {
+          const chip = document.createElement("button");
+          chip.type = "button";
+          chip.className = "procedure-chip";
+          const transition = normalizeTransition(item.transition_identifier);
+          chip.dataset.procedureType = type;
+          chip.dataset.procedureAirport = airportIdent;
+          chip.dataset.procedureIdent = item.procedure_identifier;
+          chip.dataset.procedureTransition = transition;
+          chip.textContent = `${item.procedure_identifier} ${transition}`;
+          if (
+            selected
+            && selected.airport === airportIdent
+            && selected.procedure === item.procedure_identifier
+            && selected.transition === transition
+          ) {
+            chip.classList.add("active");
+          }
+          chip.addEventListener("click", () =>
+            previewProcedure(type, airportIdent, item.procedure_identifier, transition),
+          );
+          chipList.appendChild(chip);
+        });
+      group.appendChild(chipList);
+      container.appendChild(group);
+    });
 }
 
 /**

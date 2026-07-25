@@ -4880,7 +4880,8 @@ final class PlannerService: @unchecked Sendable {
     }
 
     private func procedureSummaries(table: String, airport: String, database: SQLiteDatabase) throws -> [[String: Any]] {
-        try database.rows(
+        let normalizedAirport = airport.uppercased()
+        let summaries = try database.rows(
             sql: """
             select procedure_identifier,
                    case
@@ -4899,8 +4900,78 @@ final class PlannerService: @unchecked Sendable {
             order by procedure_identifier, transition_identifier
             limit 200
             """,
-            arguments: [.text(airport.uppercased())]
+            arguments: [.text(normalizedAirport)]
         )
+
+        // Group the airport panel by operational endpoint instead of one long
+        // alphabetic list: SID uses the final outbound fix, STAR the first
+        // inbound fix, and APPROACH the runway waypoint in its final segment.
+        let legRows = try database.rows(
+            sql: """
+            select procedure_identifier, transition_identifier, seqno, waypoint_identifier
+            from \(table)
+            where airport_identifier = ?
+            order by procedure_identifier, transition_identifier, seqno
+            """,
+            arguments: [.text(normalizedAirport)]
+        )
+
+        var legsByProcedure: [String: [String: [[String: Any]]]] = [:]
+        for row in legRows {
+            let procedure = navString(row["procedure_identifier"]).uppercased()
+            let transition = normalizedProcedureTransition(row["transition_identifier"])
+            guard !procedure.isEmpty else { continue }
+            legsByProcedure[procedure, default: [:]][transition, default: []].append(row)
+        }
+
+        func firstWaypoint(in rows: [[String: Any]]) -> String? {
+            rows.lazy
+                .map { navString($0["waypoint_identifier"]).uppercased() }
+                .first(where: { !$0.isEmpty })
+        }
+
+        func lastWaypoint(in rows: [[String: Any]]) -> String? {
+            rows.reversed().lazy
+                .map { navString($0["waypoint_identifier"]).uppercased() }
+                .first(where: { !$0.isEmpty })
+        }
+
+        return summaries.map { summary in
+            var enriched = summary
+            let procedure = navString(summary["procedure_identifier"]).uppercased()
+            let transition = normalizedProcedureTransition(summary["transition_identifier"])
+            let procedureLegs = legsByProcedure[procedure] ?? [:]
+            let commonLegs = procedureLegs["ALL"] ?? []
+            let transitionLegs = procedureLegs[transition] ?? []
+            let allLegs = procedureLegs.keys.sorted().flatMap { procedureLegs[$0] ?? [] }
+
+            let groupIdentifier: String
+            switch table {
+            case "tbl_sids":
+                groupIdentifier = lastWaypoint(in: commonLegs)
+                    ?? lastWaypoint(in: transitionLegs)
+                    ?? procedure
+            case "tbl_stars":
+                groupIdentifier = firstWaypoint(in: commonLegs)
+                    ?? firstWaypoint(in: transitionLegs)
+                    ?? procedure
+            case "tbl_iaps":
+                let runwayWaypoints = allLegs.lazy
+                    .map { navString($0["waypoint_identifier"]).uppercased() }
+                    .filter { $0.hasPrefix("RW") }
+                let inferredRunway = inferRunwayIdentifier(procedure: procedure, transition: transition)
+                let matchingRunwayWaypoint = inferredRunway == "ALL"
+                    ? nil
+                    : runwayWaypoints.first(where: { normalizedRunwayChoice($0) == inferredRunway })
+                let runwayWaypoint = matchingRunwayWaypoint ?? runwayWaypoints.first
+                groupIdentifier = runwayWaypoint.map(normalizedRunwayChoice)
+                    ?? (inferredRunway == "ALL" ? procedure : inferredRunway)
+            default:
+                groupIdentifier = procedure
+            }
+            enriched["group_identifier"] = groupIdentifier
+            return enriched
+        }
     }
 
     private func procedureTable(for type: String) -> String? {
