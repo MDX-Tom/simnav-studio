@@ -26,6 +26,13 @@ struct MapWebView: UIViewRepresentable {
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         ))
+        if platformClass == "mac" {
+            configuration.userContentController.addUserScript(WKUserScript(
+                source: macTextInputTraitsScript(),
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            ))
+        }
 #if DEBUG
         configuration.userContentController.addUserScript(WKUserScript(
             source: runtimeDiagnosticsScript(),
@@ -152,6 +159,45 @@ struct MapWebView: UIViewRepresentable {
         return "window.__NAVPLANNER_SIM_DEBUG_JSON = \(literal);"
     }
 
+    private func macTextInputTraitsScript() -> String {
+        """
+        (() => {
+          if (window.__navplannerMacTextInputTraitsInstalled) return;
+          window.__navplannerMacTextInputTraitsInstalled = true;
+
+          const editableTypes = new Set([
+            "text", "search", "password", "email", "url", "tel", "number", "decimal"
+          ]);
+          const configure = (control) => {
+            if (!(control instanceof Element)) return;
+            const isTextArea = control instanceof HTMLTextAreaElement;
+            const isEditable = control.getAttribute("contenteditable") === "true";
+            const isTextInput = control instanceof HTMLInputElement
+              && editableTypes.has((control.getAttribute("type") || "text").toLowerCase());
+            if (!isTextArea && !isEditable && !isTextInput) return;
+
+            // Since iOS 15, disabling autocorrection alone no longer removes the
+            // QuickType strip. WebKit maps spellcheck=false to
+            // UITextSpellCheckingType.no, which is Apple's supported way to hide it.
+            control.setAttribute("spellcheck", "false");
+            control.setAttribute("autocorrect", "off");
+            control.setAttribute("autocapitalize", "none");
+            control.setAttribute("autocomplete", "off");
+          };
+          const configureTree = (root) => {
+            configure(root);
+            if (!(root instanceof Document || root instanceof Element)) return;
+            root.querySelectorAll("input, textarea, [contenteditable='true']").forEach(configure);
+          };
+
+          configureTree(document);
+          new MutationObserver((records) => {
+            records.forEach((record) => record.addedNodes.forEach(configureTree));
+          }).observe(document, { childList: true, subtree: true });
+        })();
+        """
+    }
+
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, UIDocumentPickerDelegate, UIDocumentInteractionControllerDelegate, UIScrollViewDelegate {
         let scriptHandler: MapBridgeScriptHandler
         weak var webView: WKWebView?
@@ -159,6 +205,7 @@ struct MapWebView: UIViewRepresentable {
         private var documentInteractionController: UIDocumentInteractionController?
         private var documentPickerPurpose: DocumentPickerPurpose = .database
         var locksOuterScroll = false
+        private var macFormControlIsActive = false
 
         private enum DocumentPickerPurpose {
             case database
@@ -281,6 +328,10 @@ struct MapWebView: UIViewRepresentable {
                 })
                 top.present(alert, animated: true)
             }
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            configureMacTextInput(in: webView)
         }
 
         func webView(
@@ -456,14 +507,38 @@ struct MapWebView: UIViewRepresentable {
 
         private func focusFormControl() {
             guard let webView else { return }
+            if ProcessInfo.processInfo.isiOSAppOnMac {
+                configureMacTextInput(in: webView)
+                // WKContentView can remain first responder even when no HTML form
+                // control is editing, so walking UIKit's responder tree gives a false
+                // positive. Track the HTML focus lifecycle instead: promote WebKit once
+                // when editing begins, not again while focus moves between controls.
+                if macFormControlIsActive {
+                    return
+                }
+                macFormControlIsActive = true
+            }
             if !webView.isFirstResponder {
                 webView.becomeFirstResponder()
             }
+            if ProcessInfo.processInfo.isiOSAppOnMac {
+                DispatchQueue.main.async { [weak self, weak webView] in
+                    guard let self, let webView else { return }
+                    self.configureMacTextInput(in: webView)
+                }
+            }
+        }
+
+        private func configureMacTextInput(in webView: WKWebView) {
+            guard ProcessInfo.processInfo.isiOSAppOnMac else { return }
+            webView.inputAssistantItem.leadingBarButtonGroups = []
+            webView.inputAssistantItem.trailingBarButtonGroups = []
         }
 
         private func blurFormControl() {
             guard ProcessInfo.processInfo.isiOSAppOnMac,
                   let webView else { return }
+            macFormControlIsActive = false
             webView.endEditing(true)
         }
 
