@@ -1015,6 +1015,25 @@ function onlineMapTileLayerSignature() {
 }
 
 /**
+ * 功能：为正清晰度 Offset 保留源瓦片中实际可供当前屏幕使用的像素。
+ * 输入：layer 为当前在线瓦片层。
+ * 输出：Canvas backing store 相对 Leaflet CSS tileSize 的倍率。
+ *
+ * Leaflet 的 zoomOffset=+1 会把 256px 源瓦片显示为 128 CSS px。旧实现同时把
+ * Canvas backing store 缩到 128px，导致源图先损失一半像素，再由 Retina 屏放大。
+ * 这里最多保留源瓦片所含的像素密度，同时不超过设备 DPR；不改变瓦片坐标或请求。
+ */
+function asyncCachedTileCanvasPixelRatio(layer) {
+  const zoomOffset = normalizeMapTileZoomOffset(layer?.options?.zoomOffset);
+  if (zoomOffset <= 0) {
+    return 1;
+  }
+  const sourcePixelRatio = Math.pow(2, zoomOffset);
+  const devicePixelRatio = Math.max(1, Number(window.devicePixelRatio) || 1);
+  return Math.max(1, Math.min(sourcePixelRatio, devicePixelRatio));
+}
+
+/**
  * 功能：判断当前是否运行在 iPhone 紧凑工作台。
  * 输入：无。
  * 输出：iPad 返回 false；iPhone / 小屏返回 true。
@@ -1788,9 +1807,15 @@ const AsyncCachedTileLayer = L.TileLayer.extend({
   createTile(coords, done) {
     const tile = document.createElement("canvas");
     const tileSize = this.getTileSize();
-    tile.width = Math.max(1, Math.round(tileSize.x));
-    tile.height = Math.max(1, Math.round(tileSize.y));
+    const canvasPixelRatio = asyncCachedTileCanvasPixelRatio(this);
+    tile.width = Math.max(1, Math.round(tileSize.x * canvasPixelRatio));
+    tile.height = Math.max(1, Math.round(tileSize.y * canvasPixelRatio));
+    // Leaflet positions tiles in CSS pixels; the larger backing store only prevents
+    // Retina compositing from re-enlarging an already downsampled Canvas.
+    tile.style.width = `${tileSize.x}px`;
+    tile.style.height = `${tileSize.y}px`;
     tile.setAttribute("role", "presentation");
+    tile.dataset.plannerCanvasPixelRatio = String(canvasPixelRatio);
     tile._plannerCancelled = false;
     tile._plannerDone = false;
     tile._plannerRetryTimer = 0;
