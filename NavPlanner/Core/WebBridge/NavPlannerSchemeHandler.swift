@@ -135,7 +135,8 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
 
         workQueue.async { [weak self] in
             guard let self else { return }
-            let response = self.response(for: url, request: urlSchemeTask.request)
+            guard !self.consumeStoppedTask(taskID) else { return }
+            let response = self.response(for: url, request: urlSchemeTask.request, taskID: taskID)
             self.deliver(response: response, to: urlSchemeTask)
         }
     }
@@ -147,15 +148,19 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
         }
     }
 
-    private func response(for url: URL, request: URLRequest) -> SchemeResponse {
+    private func response(
+        for url: URL,
+        request: URLRequest,
+        taskID: ObjectIdentifier? = nil
+    ) -> SchemeResponse {
         switch url.host {
         case "app":
             if url.path == "/api" || url.path.hasPrefix("/api/") {
-                return apiResponse(for: url, request: request)
+                return apiResponse(for: url, request: request, taskID: taskID)
             }
             return appResourceResponse(for: url)
         case "api":
-            return apiResponse(for: url, request: request)
+            return apiResponse(for: url, request: request, taskID: taskID)
         case "tiles":
             return tileResponse(for: url)
         default:
@@ -176,7 +181,11 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
         )
     }
 
-    private func apiResponse(for url: URL, request: URLRequest) -> SchemeResponse {
+    private func apiResponse(
+        for url: URL,
+        request: URLRequest,
+        taskID: ObjectIdentifier? = nil
+    ) -> SchemeResponse {
         let path = normalizedAPIPath(url.path)
         let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         let queryValue: (String, String) -> String = { name, fallback in
@@ -191,7 +200,7 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
             return jsonResponse(onlineTileCache.clearPayload())
         }
         if pathComponents.first == "map-cache" || pathComponents.first == "terrain" {
-            return onlineTileResponse(pathComponents: pathComponents)
+            return onlineTileResponse(pathComponents: pathComponents, taskID: taskID)
         }
         if pathComponents.first == "offline-maps" {
             return offlineMapsResponse(for: url, request: request, path: path, pathComponents: pathComponents)
@@ -391,15 +400,19 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
         )
     }
 
-    private func onlineTileResponse(pathComponents: [String]) -> SchemeResponse {
+    private func onlineTileResponse(
+        pathComponents: [String],
+        taskID: ObjectIdentifier? = nil
+    ) -> SchemeResponse {
         let providerKey: String
         let zText: String
         let xText: String
         let yPath: String
+        let coordinateStart: Int
 
         if pathComponents.first == "map-cache", pathComponents.count >= 5 {
             providerKey = pathComponents[1]
-            let coordinateStart = versionAdjustedIndex(in: pathComponents, defaultIndex: 2)
+            coordinateStart = versionAdjustedIndex(in: pathComponents, defaultIndex: 2)
             guard pathComponents.count > coordinateStart + 2 else {
                 return jsonResponse(["error": "Invalid map tile path"], statusCode: 404)
             }
@@ -408,7 +421,7 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
             yPath = pathComponents[coordinateStart + 2]
         } else if pathComponents.first == "terrain", pathComponents.count >= 5 {
             providerKey = pathComponents[1] == "terrarium" ? "terrain_terrarium" : pathComponents[1]
-            let coordinateStart = versionAdjustedIndex(in: pathComponents, defaultIndex: 2)
+            coordinateStart = versionAdjustedIndex(in: pathComponents, defaultIndex: 2)
             guard pathComponents.count > coordinateStart + 2 else {
                 return jsonResponse(["error": "Invalid terrain tile path"], statusCode: 404)
             }
@@ -423,38 +436,66 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
         guard let z = Int(zText), let x = Int(xText), let y = Int(yText) else {
             return jsonResponse(["error": "Invalid map tile coordinate"], statusCode: 404)
         }
+        let demandGeneration = onlineTileDemandGeneration(
+            pathComponents: pathComponents,
+            coordinateStart: coordinateStart
+        )
+        let shouldCancel = { [weak self] in
+            guard let self, let taskID else { return false }
+            return self.isStoppedTask(taskID)
+        }
 
         let initialState = onlineTileCache.tile(
             providerKey: providerKey,
             z: z,
             x: x,
             y: y,
-            waitForDownload: 0
+            waitForDownload: 0,
+            demandGeneration: demandGeneration,
+            priority: .visible,
+            shouldCancel: shouldCancel
         )
         if case let .hit(data, contentType) = initialState {
             return onlineTileHitResponse(data: data, contentType: contentType)
         }
 
-        // 在线栅格瓦片缺失时，同时准备低一级父瓦片。父瓦片一张可覆盖四张子瓦片，
-        // 通常已存在于刚才的缩放视图缓存中；即使未命中，也只会被缓存队列去重下载一次。
+        // 优先复用最多三级的已有祖先瓦片作为低清预览。只下载最近一级父瓦片，
+        // 避免为了预览额外放大队列；父瓦片一张仍可覆盖四张当前瓦片。
         let allowsParentFallback = pathComponents.first == "map-cache" && z > 0
-        let parentCoordinate = (z: z - 1, x: x >> 1, y: y >> 1)
-        if allowsParentFallback {
-            let parentState = onlineTileCache.tile(
+        let fallbackCoordinates: [(levels: Int, z: Int, x: Int, y: Int)] = allowsParentFallback
+            ? (1...min(3, z)).map { levels in
+                (levels, z - levels, x >> levels, y >> levels)
+            }
+            : []
+        for coordinate in fallbackCoordinates {
+            if case let .hit(data, contentType) = onlineTileCache.cachedTile(
                 providerKey: providerKey,
-                z: parentCoordinate.z,
-                x: parentCoordinate.x,
-                y: parentCoordinate.y,
-                waitForDownload: 0
-            )
-            if case let .hit(data, contentType) = parentState {
+                z: coordinate.z,
+                x: coordinate.x,
+                y: coordinate.y
+            ) {
                 return onlineTileFallbackResponse(
                     data: data,
                     contentType: contentType,
-                    sourceZoom: parentCoordinate.z,
+                    sourceZoom: coordinate.z,
+                    fallbackLevels: coordinate.levels,
                     targetState: initialState
                 )
             }
+        }
+
+        let parentCoordinate = fallbackCoordinates.first
+        if allowsParentFallback {
+            _ = onlineTileCache.tile(
+                providerKey: providerKey,
+                z: parentCoordinate?.z ?? z - 1,
+                x: parentCoordinate?.x ?? x >> 1,
+                y: parentCoordinate?.y ?? y >> 1,
+                waitForDownload: 0,
+                demandGeneration: demandGeneration,
+                priority: .preview,
+                shouldCancel: shouldCancel
+            )
         }
 
         let finalState: OnlineTileCache.TileState
@@ -465,7 +506,10 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
                 z: z,
                 x: x,
                 y: y,
-                waitForDownload: OnlineTileCache.tileResponseWaitTimeout
+                waitForDownload: OnlineTileCache.tileResponseWaitTimeout,
+                demandGeneration: demandGeneration,
+                priority: .visible,
+                shouldCancel: shouldCancel
             )
         case .failed:
             finalState = initialState
@@ -476,19 +520,21 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
         if case let .hit(data, contentType) = finalState {
             return onlineTileHitResponse(data: data, contentType: contentType)
         }
-        if allowsParentFallback,
-           case let .hit(data, contentType) = onlineTileCache.cachedTile(
-            providerKey: providerKey,
-            z: parentCoordinate.z,
-            x: parentCoordinate.x,
-            y: parentCoordinate.y
-           ) {
-            return onlineTileFallbackResponse(
-                data: data,
-                contentType: contentType,
-                sourceZoom: parentCoordinate.z,
-                targetState: finalState
-            )
+        for coordinate in fallbackCoordinates {
+            if case let .hit(data, contentType) = onlineTileCache.cachedTile(
+                providerKey: providerKey,
+                z: coordinate.z,
+                x: coordinate.x,
+                y: coordinate.y
+            ) {
+                return onlineTileFallbackResponse(
+                    data: data,
+                    contentType: contentType,
+                    sourceZoom: coordinate.z,
+                    fallbackLevels: coordinate.levels,
+                    targetState: finalState
+                )
+            }
         }
 
         switch finalState {
@@ -519,6 +565,7 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
         data: Data,
         contentType: String,
         sourceZoom: Int,
+        fallbackLevels: Int,
         targetState: OnlineTileCache.TileState
     ) -> SchemeResponse {
         SchemeResponse(
@@ -528,6 +575,7 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
             headers: cacheHeaders.merging([
                 "Cache-Control": "no-store",
                 "X-Map-Cache": "FALLBACK",
+                "X-Map-Fallback-Levels": String(fallbackLevels),
                 "X-Map-Fallback-Zoom": String(sourceZoom),
                 "X-Map-Fallback-Target-State": onlineTileStateName(targetState)
             ]) { _, new in new }
@@ -541,6 +589,19 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
         case .pending: "PENDING"
         case .failed: "MISS"
         }
+    }
+
+    private func onlineTileDemandGeneration(
+        pathComponents: [String],
+        coordinateStart: Int
+    ) -> UInt64 {
+        let suffixStart = coordinateStart + 3
+        guard pathComponents.count > suffixStart + 1,
+              pathComponents[suffixStart] == "demand"
+        else {
+            return 0
+        }
+        return UInt64(pathComponents[suffixStart + 1]) ?? 0
     }
 
     private func offlineMapsResponse(
@@ -908,7 +969,7 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
     private func deliver(response: SchemeResponse, to task: WKURLSchemeTask) {
         let taskID = ObjectIdentifier(task as AnyObject)
         DispatchQueue.main.async {
-            guard !self.lock.withLock({ self.stoppedTasks.contains(taskID) }) else { return }
+            guard !self.consumeStoppedTask(taskID) else { return }
             guard let url = task.request.url,
                   let httpResponse = HTTPURLResponse(
                     url: url,
@@ -926,6 +987,19 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
         }
     }
 
+    private func isStoppedTask(_ taskID: ObjectIdentifier) -> Bool {
+        lock.withLock {
+            stoppedTasks.contains(taskID)
+        }
+    }
+
+    @discardableResult
+    private func consumeStoppedTask(_ taskID: ObjectIdentifier) -> Bool {
+        lock.withLock {
+            stoppedTasks.remove(taskID) != nil
+        }
+    }
+
     private var cacheHeaders: [String: String] {
         [
             "Access-Control-Allow-Origin": "*",
@@ -936,6 +1010,7 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
                 "Date",
                 "ETag",
                 "X-Map-Cache",
+                "X-Map-Fallback-Levels",
                 "X-Map-Fallback-Target-State",
                 "X-Map-Fallback-Zoom",
                 "X-Offline-Map",
@@ -3608,27 +3683,127 @@ private final class OnlineTileCache {
         case failed
     }
 
+    enum RequestPriority: Int {
+        case visible = 1
+        case preview = 2
+
+        var operationQueuePriority: Operation.QueuePriority {
+            switch self {
+            case .visible: .high
+            case .preview: .veryHigh
+            }
+        }
+    }
+
+    private final class TileDownloadJob {
+        let key: String
+        let operation = BlockOperation()
+        let sequence: UInt64
+        var demandGeneration: UInt64
+        var priority: RequestPriority
+
+        private let taskLock = NSLock()
+        private var activeTask: URLSessionTask?
+
+        init(
+            key: String,
+            sequence: UInt64,
+            demandGeneration: UInt64,
+            priority: RequestPriority
+        ) {
+            self.key = key
+            self.sequence = sequence
+            self.demandGeneration = demandGeneration
+            self.priority = priority
+            operation.queuePriority = priority.operationQueuePriority
+        }
+
+        func promote(to newPriority: RequestPriority) {
+            guard newPriority.rawValue > priority.rawValue else { return }
+            priority = newPriority
+            operation.queuePriority = newPriority.operationQueuePriority
+        }
+
+        func installActiveTask(_ task: URLSessionTask) -> Bool {
+            taskLock.withLock {
+                guard !operation.isCancelled else { return false }
+                activeTask = task
+                return true
+            }
+        }
+
+        func clearActiveTask(_ task: URLSessionTask) {
+            taskLock.withLock {
+                if activeTask === task {
+                    activeTask = nil
+                }
+            }
+        }
+
+        func cancel() {
+            operation.cancel()
+            let task = taskLock.withLock { () -> URLSessionTask? in
+                let task = activeTask
+                activeTask = nil
+                return task
+            }
+            task?.cancel()
+        }
+    }
+
     static let tileResponseWaitTimeout: TimeInterval = 2.4
     private static let tileDownloadRequestTimeout: TimeInterval = 8
     private static let tileDownloadResourceTimeout: TimeInterval = 14
     private static let tileDownloadWorkers = 8
     private static let tileDownloadRetries = 1
     private static let tileDownloadRetryDelay: TimeInterval = 0.35
+    private static let maxPendingDownloads = 512
+    // Network.framework reports child-endpoint identifier wrapping after a
+    // long burst on one session. Rotate well before the observed threshold,
+    // while allowing already running tasks from the previous session to drain.
+    private static let maxDownloadTasksPerSession = 48
 
     private struct TilePayload {
         let data: Data
         let contentType: String
     }
 
+    private final class TileDownloadResult: @unchecked Sendable {
+        private let lock = NSLock()
+        private var data: Data?
+        private var response: HTTPURLResponse?
+
+        func store(data: Data?, response: URLResponse?) {
+            lock.withLock {
+                self.data = data
+                self.response = response as? HTTPURLResponse
+            }
+        }
+
+        func value() -> (Data?, HTTPURLResponse?) {
+            lock.withLock { (data, response) }
+        }
+    }
+
     private let fileManager: FileManager
     private let rootDirectory: URL
     private let previousRootDirectory: URL
     private let legacyRootDirectory: URL
-    private let session: URLSession
+    private var session: URLSession
+    private let sessionLock = NSLock()
+    private var sessionTaskCount = 0
+    private var sessionRotationCount = 0
     private let downloadQueue: OperationQueue
     private let lock = NSLock()
-    private var pendingKeys = Set<String>()
+    private var pendingJobs: [String: TileDownloadJob] = [:]
+    private var activeJobIDs = Set<ObjectIdentifier>()
     private var failedAtByKey: [String: Date] = [:]
+    private var latestDemandGeneration: UInt64 = 0
+    private var nextJobSequence: UInt64 = 0
+    private var peakPendingCount = 0
+    private var cancelledStaleCount = 0
+    private var cancelledOverflowCount = 0
+    private var successfulDownloadCount = 0
     private let failureCooldown: TimeInterval = 8
 
     private let providers: [String: OnlineTileProvider] = [
@@ -3717,13 +3892,7 @@ private final class OnlineTileCache {
             .appendingPathComponent("NavPlanner", isDirectory: true)
             .appendingPathComponent("MapCacheV3", isDirectory: true)
 
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = Self.tileDownloadRequestTimeout
-        configuration.timeoutIntervalForResource = Self.tileDownloadResourceTimeout
-        configuration.httpMaximumConnectionsPerHost = Self.tileDownloadWorkers
-        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        configuration.urlCache = nil
-        self.session = URLSession(configuration: configuration)
+        self.session = URLSession(configuration: Self.tileSessionConfiguration())
 
         let downloadQueue = OperationQueue()
         downloadQueue.name = "com.navplanner.online-map-cache"
@@ -3734,7 +3903,16 @@ private final class OnlineTileCache {
         try? fileManager.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
     }
 
-    func tile(providerKey: String, z: Int, x: Int, y: Int, waitForDownload: TimeInterval = 0) -> TileState {
+    func tile(
+        providerKey: String,
+        z: Int,
+        x: Int,
+        y: Int,
+        waitForDownload: TimeInterval = 0,
+        demandGeneration: UInt64 = 0,
+        priority: RequestPriority = .visible,
+        shouldCancel: () -> Bool = { false }
+    ) -> TileState {
         guard let provider = providers[providerKey],
               z >= 0, z <= provider.maxZoom, x >= 0, y >= 0 else {
             return .failed
@@ -3750,8 +3928,31 @@ private final class OnlineTileCache {
         }
 
         let key = cacheKey(provider: provider, z: z, x: x, y: y)
+        var jobsToCancel: [TileDownloadJob] = []
+        var jobToEnqueue: TileDownloadJob?
         let state = lock.withLock { () -> TileState? in
-            if pendingKeys.contains(key) {
+            if demandGeneration > 0 {
+                guard demandGeneration >= latestDemandGeneration else {
+                    // A late response from a viewport that has already been replaced
+                    // must not re-enter the queue ahead of the current visible region.
+                    return .failed
+                }
+                if demandGeneration > latestDemandGeneration {
+                    latestDemandGeneration = demandGeneration
+                    let staleJobs = pendingJobs.values.filter {
+                        $0.demandGeneration > 0 && $0.demandGeneration < demandGeneration
+                    }
+                    for job in staleJobs where pendingJobs[job.key] === job {
+                        pendingJobs.removeValue(forKey: job.key)
+                    }
+                    cancelledStaleCount += staleJobs.count
+                    jobsToCancel.append(contentsOf: staleJobs)
+                }
+            }
+
+            if let pendingJob = pendingJobs[key] {
+                pendingJob.demandGeneration = max(pendingJob.demandGeneration, demandGeneration)
+                pendingJob.promote(to: priority)
                 return .pending
             }
             if let failedAt = failedAtByKey[key] {
@@ -3760,21 +3961,68 @@ private final class OnlineTileCache {
                 }
                 failedAtByKey.removeValue(forKey: key)
             }
-            pendingKeys.insert(key)
+
+            nextJobSequence &+= 1
+            let job = TileDownloadJob(
+                key: key,
+                sequence: nextJobSequence,
+                demandGeneration: demandGeneration,
+                priority: priority
+            )
+            pendingJobs[key] = job
+            jobToEnqueue = job
+            peakPendingCount = max(peakPendingCount, pendingJobs.count)
+
+            let overflow = max(0, pendingJobs.count - Self.maxPendingDownloads)
+            if overflow > 0 {
+                let overflowJobs = pendingJobs.values
+                    .filter { $0 !== job && !$0.operation.isExecuting }
+                    .sorted {
+                        if $0.priority.rawValue != $1.priority.rawValue {
+                            return $0.priority.rawValue < $1.priority.rawValue
+                        }
+                        return $0.sequence < $1.sequence
+                    }
+                    .prefix(overflow)
+                for overflowJob in overflowJobs where pendingJobs[overflowJob.key] === overflowJob {
+                    pendingJobs.removeValue(forKey: overflowJob.key)
+                    jobsToCancel.append(overflowJob)
+                    cancelledOverflowCount += 1
+                }
+            }
             return nil
         }
+        jobsToCancel.forEach { $0.cancel() }
+
         if let state {
             if case .pending = state,
                waitForDownload > 0,
-               let payload = waitForCachedTile(provider: provider, localURL: localURL, timeout: waitForDownload) {
+               let payload = waitForCachedTile(
+                provider: provider,
+                localURL: localURL,
+                timeout: waitForDownload,
+                shouldCancel: shouldCancel
+               ) {
                 return .hit(data: payload.data, contentType: payload.contentType)
             }
             return state
         }
 
-        downloadTile(provider: provider, remoteURLs: remoteURLs, localURL: localURL, key: key)
+        if let jobToEnqueue {
+            downloadTile(
+                provider: provider,
+                remoteURLs: remoteURLs,
+                localURL: localURL,
+                job: jobToEnqueue
+            )
+        }
         if waitForDownload > 0,
-           let payload = waitForCachedTile(provider: provider, localURL: localURL, timeout: waitForDownload) {
+           let payload = waitForCachedTile(
+            provider: provider,
+            localURL: localURL,
+            timeout: waitForDownload,
+            shouldCancel: shouldCancel
+           ) {
             return .hit(data: payload.data, contentType: payload.contentType)
         }
         return .queued
@@ -3794,10 +4042,28 @@ private final class OnlineTileCache {
 
     func statusPayload() -> [String: Any] {
         let usage = diskUsage()
-        let runtime = lock.withLock {
-            [
-                "pending_count": pendingKeys.count,
-                "failed_count": failedAtByKey.count
+        let sessionRuntime = sessionLock.withLock {
+            (
+                taskCount: sessionTaskCount,
+                rotationCount: sessionRotationCount
+            )
+        }
+        let runtime = lock.withLock { () -> [String: Any] in
+            let activeCount = pendingJobs.values.reduce(into: 0) { count, job in
+                if activeJobIDs.contains(ObjectIdentifier(job)) {
+                    count += 1
+                }
+            }
+            return [
+                "pending_count": pendingJobs.count,
+                "active_count": activeCount,
+                "queued_count": max(0, pendingJobs.count - activeCount),
+                "failed_count": failedAtByKey.count,
+                "latest_demand_generation": latestDemandGeneration,
+                "peak_pending_count": peakPendingCount,
+                "cancelled_stale_count": cancelledStaleCount,
+                "cancelled_overflow_count": cancelledOverflowCount,
+                "successful_download_count": successfulDownloadCount
             ]
         }
         return [
@@ -3808,16 +4074,37 @@ private final class OnlineTileCache {
                 .sorted { $0.key < $1.key }
                 .map { ["key": $0.key, "format": $0.format, "max_zoom": $0.maxZoom] },
             "pending_count": runtime["pending_count"] ?? 0,
+            "active_count": runtime["active_count"] ?? 0,
+            "queued_count": runtime["queued_count"] ?? 0,
             "failed_count": runtime["failed_count"] ?? 0,
+            "latest_demand_generation": runtime["latest_demand_generation"] ?? 0,
+            "peak_pending_count": runtime["peak_pending_count"] ?? 0,
+            "cancelled_stale_count": runtime["cancelled_stale_count"] ?? 0,
+            "cancelled_overflow_count": runtime["cancelled_overflow_count"] ?? 0,
+            "successful_download_count": runtime["successful_download_count"] ?? 0,
+            "queue_capacity": Self.maxPendingDownloads,
+            "session_task_count": sessionRuntime.taskCount,
+            "session_rotation_count": sessionRuntime.rotationCount,
+            "session_task_capacity": Self.maxDownloadTasksPerSession,
             "message": "在线底图缓存状态已读取。"
         ]
     }
 
     func clearPayload() -> [String: Any] {
-        lock.withLock {
-            pendingKeys.removeAll()
+        let jobs = lock.withLock { () -> [TileDownloadJob] in
+            let jobs = Array(pendingJobs.values)
+            pendingJobs.removeAll()
             failedAtByKey.removeAll()
+            activeJobIDs.removeAll()
+            latestDemandGeneration = 0
+            peakPendingCount = 0
+            cancelledStaleCount = 0
+            cancelledOverflowCount = 0
+            successfulDownloadCount = 0
+            return jobs
         }
+        jobs.forEach { $0.cancel() }
+        downloadQueue.cancelAllOperations()
         for directory in [rootDirectory, previousRootDirectory, legacyRootDirectory] {
             if let items = try? fileManager.contentsOfDirectory(
                 at: directory,
@@ -3860,10 +4147,14 @@ private final class OnlineTileCache {
     private func waitForCachedTile(
         provider: OnlineTileProvider,
         localURL: URL,
-        timeout: TimeInterval
+        timeout: TimeInterval,
+        shouldCancel: () -> Bool
     ) -> TilePayload? {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
+            if shouldCancel() {
+                return nil
+            }
             Thread.sleep(forTimeInterval: 0.08)
             if let payload = cachedTilePayload(provider: provider, localURL: localURL) {
                 return payload
@@ -3872,23 +4163,43 @@ private final class OnlineTileCache {
         return nil
     }
 
-    private func downloadTile(provider: OnlineTileProvider, remoteURLs: [URL], localURL: URL, key: String) {
-        downloadQueue.addOperation { [weak self] in
-            guard let self else { return }
+    private func downloadTile(
+        provider: OnlineTileProvider,
+        remoteURLs: [URL],
+        localURL: URL,
+        job: TileDownloadJob
+    ) {
+        job.operation.addExecutionBlock { [weak self, weak job] in
+            guard let self, let job, !job.operation.isCancelled else { return }
+            let jobID = ObjectIdentifier(job)
+            self.lock.withLock {
+                _ = self.activeJobIDs.insert(jobID)
+            }
             defer {
                 self.lock.withLock {
-                    _ = self.pendingKeys.remove(key)
+                    self.activeJobIDs.remove(jobID)
+                    if self.pendingJobs[job.key] === job {
+                        self.pendingJobs.removeValue(forKey: job.key)
+                    }
                 }
             }
 
             for retry in 0...Self.tileDownloadRetries {
+                guard !job.operation.isCancelled else { return }
                 for remoteURL in remoteURLs {
-                    guard let payload = self.downloadTilePayload(provider: provider, remoteURL: remoteURL) else {
+                    guard !job.operation.isCancelled else { return }
+                    guard let payload = self.downloadTilePayload(
+                        provider: provider,
+                        remoteURL: remoteURL,
+                        job: job
+                    ) else {
                         continue
                     }
+                    guard !job.operation.isCancelled else { return }
                     if self.writeCacheData(payload.data, to: localURL) {
                         self.lock.withLock {
-                            _ = self.failedAtByKey.removeValue(forKey: key)
+                            _ = self.failedAtByKey.removeValue(forKey: job.key)
+                            self.successfulDownloadCount += 1
                         }
                         return
                     }
@@ -3898,38 +4209,81 @@ private final class OnlineTileCache {
                 }
             }
 
-            self.markFailure(key: key)
+            guard !job.operation.isCancelled else { return }
+            self.markFailure(key: job.key)
         }
+        downloadQueue.addOperation(job.operation)
     }
 
-    private func downloadTilePayload(provider: OnlineTileProvider, remoteURL: URL) -> TilePayload? {
+    private func downloadTilePayload(
+        provider: OnlineTileProvider,
+        remoteURL: URL,
+        job: TileDownloadJob
+    ) -> TilePayload? {
+        guard !job.operation.isCancelled else { return nil }
         let request = tileRequest(for: remoteURL)
         let semaphore = DispatchSemaphore(value: 0)
-        let resultLock = NSLock()
-        var resultData: Data?
-        var resultResponse: HTTPURLResponse?
+        let result = TileDownloadResult()
 
-        let task = session.dataTask(with: request) { data, response, _ in
-            resultLock.withLock {
-                resultData = data
-                resultResponse = response as? HTTPURLResponse
-            }
+        let task = makeDownloadTask(for: request) { data, response, _ in
+            result.store(data: data, response: response)
             semaphore.signal()
         }
         task.priority = URLSessionTask.highPriority
+        guard job.installActiveTask(task) else {
+            task.cancel()
+            return nil
+        }
         task.resume()
 
         guard semaphore.wait(timeout: .now() + Self.tileDownloadResourceTimeout + 1) == .success else {
             task.cancel()
+            job.clearActiveTask(task)
             return nil
         }
-        let result = resultLock.withLock { (resultData, resultResponse) }
-        guard let response = result.1,
+        job.clearActiveTask(task)
+        guard !job.operation.isCancelled else { return nil }
+        let value = result.value()
+        guard let response = value.1,
               (200..<300).contains(response.statusCode),
-              let data = result.0 else {
+              let data = value.0 else {
             return nil
         }
         return cacheTilePayload(from: data, provider: provider)
+    }
+
+    private static func tileSessionConfiguration() -> URLSessionConfiguration {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = tileDownloadRequestTimeout
+        configuration.timeoutIntervalForResource = tileDownloadResourceTimeout
+        configuration.httpMaximumConnectionsPerHost = tileDownloadWorkers
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.urlCache = nil
+        return configuration
+    }
+
+    private func makeDownloadTask(
+        for request: URLRequest,
+        completionHandler: @escaping @Sendable (Data?, URLResponse?, Error?) -> Void
+    ) -> URLSessionDataTask {
+        var previousSession: URLSession?
+        let task = sessionLock.withLock { () -> URLSessionDataTask in
+            if sessionTaskCount >= Self.maxDownloadTasksPerSession {
+                previousSession = session
+                session = URLSession(configuration: Self.tileSessionConfiguration())
+                sessionTaskCount = 0
+                sessionRotationCount += 1
+            }
+            sessionTaskCount += 1
+            // Create the task while sessionLock is held so another worker cannot
+            // finish/invalidate this session between selecting it and registering
+            // the task with Foundation.
+            return session.dataTask(with: request, completionHandler: completionHandler)
+        }
+        // Do not invalidate while holding sessionLock: completion callbacks from
+        // the old session are allowed to drain independently.
+        previousSession?.finishTasksAndInvalidate()
+        return task
     }
 
     private func tileRequest(for remoteURL: URL) -> URLRequest {

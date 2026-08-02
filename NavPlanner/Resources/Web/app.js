@@ -998,6 +998,27 @@ function onlineMapTileUrl(provider = state.onlineMapProvider) {
   return apiResourceUrl(`/api/map-cache/${key}/${versionPathSegment(state.mapCacheTileVersion)}/{z}/{x}/{y}.${config.format}`);
 }
 
+let onlineTileDemandGeneration = Math.max(1, Date.now());
+
+/**
+ * 功能：切换在线瓦片“当前视野代次”，让原生下载器淘汰旧区域任务。
+ * 输入：无。
+ * 输出：新的单调递增代次。
+ */
+function advanceOnlineTileDemandGeneration() {
+  onlineTileDemandGeneration += 1;
+  return onlineTileDemandGeneration;
+}
+
+/**
+ * 功能：把当前视野代次附加到瓦片路径，避免依赖自定义请求头在 WKURLScheme 中透传。
+ * 输入：tileUrl 为 Leaflet 生成的实际瓦片地址。
+ * 输出：带 `/demand/<generation>` 后缀的地址；瓦片坐标和缓存键不变。
+ */
+function onlineTileDemandUrl(tileUrl, generation = onlineTileDemandGeneration) {
+  return `${tileUrl}/demand/${generation}`;
+}
+
 function onlineMapTileLayerOptions() {
   const provider = currentOnlineMapProviderConfig();
   const maxProviderZoom = provider.maxZoom || 20;
@@ -1362,6 +1383,8 @@ const map = L.map("map", {
   worldCopyJump: true,
 }).setView([28.6, 104.0], 4);
 
+map.on("movestart", advanceOnlineTileDemandGeneration);
+
 map.getContainer().dataset.baseMap = state.baseMap;
 map.getPane("popupPane").classList.add("planner-popup-pane");
 map.createPane("terrainPane");
@@ -1400,7 +1423,7 @@ const baseLayers = {
     updateWhenZooming: true,
     updateWhenIdle: false,
     updateInterval: 80,
-    keepBuffer: 5,
+    keepBuffer: isPhoneWorkbench() ? 2 : 5,
     pane: "terrainPane",
     attribution: "Offline terrain from map_offline",
   }),
@@ -1565,6 +1588,8 @@ function cancelAsyncCachedTile(tile) {
     tile._plannerAbortController.abort();
     tile._plannerAbortController = null;
   }
+  tile._plannerRequestSerial = (tile._plannerRequestSerial || 0) + 1;
+  tile._plannerRequestTile = null;
   releaseAsyncCachedTileFallback(tile);
   if (tile._plannerContext) {
     tile._plannerContext.clearRect(0, 0, tile.width, tile.height);
@@ -1585,6 +1610,7 @@ function releaseAsyncCachedTileFallback(tile) {
   }
   tile.classList.remove("planner-parent-fallback");
   delete tile.dataset.plannerCacheState;
+  delete tile.dataset.plannerFallbackLevels;
 }
 
 /**
@@ -1622,11 +1648,61 @@ function isAsyncCachedTilePlaceholderBuffer(buffer) {
  * 输出：无返回值；通过定时器触发后续请求。
  */
 function scheduleAsyncCachedTileRetry(tile, attempt, requestTile) {
-  if (tile._plannerCancelled) {
+  if (tile._plannerCancelled
+    || tile._plannerDone
+    || tile._plannerDemandGeneration !== onlineTileDemandGeneration) {
     return;
   }
   const delay = ASYNC_CACHED_TILE_RETRY_DELAYS_MS[Math.min(attempt, ASYNC_CACHED_TILE_RETRY_DELAYS_MS.length - 1)];
-  tile._plannerRetryTimer = window.setTimeout(() => requestTile(attempt + 1), delay);
+  tile._plannerRetryTimer = window.setTimeout(() => {
+    tile._plannerRetryTimer = 0;
+    requestTile(attempt + 1);
+  }, delay);
+}
+
+/**
+ * 功能：地图视野开始变化时停止未完成瓦片的旧请求和轮询。
+ * 输入：layer 为当前异步在线底图层。
+ * 输出：无；已绘制完成的 Canvas 保留，避免移动中闪白。
+ */
+function pauseObsoleteAsyncCachedTiles(layer) {
+  Object.values(layer?._tiles || {}).forEach((entry) => {
+    const tile = entry?.el;
+    if (!tile || tile._plannerCancelled || tile._plannerDone) {
+      return;
+    }
+    if (tile._plannerRetryTimer) {
+      window.clearTimeout(tile._plannerRetryTimer);
+      tile._plannerRetryTimer = 0;
+    }
+    tile._plannerRequestSerial = (tile._plannerRequestSerial || 0) + 1;
+    if (tile._plannerAbortController) {
+      tile._plannerAbortController.abort();
+      tile._plannerAbortController = null;
+    }
+  });
+}
+
+/**
+ * 功能：视野稳定后只恢复仍属于当前可见网格的未完成瓦片。
+ * 输入：layer 为当前异步在线底图层。
+ * 输出：无；Leaflet 缓冲区中的旧区域瓦片不会重新进入下载队列。
+ */
+function resumeCurrentAsyncCachedTiles(layer) {
+  Object.values(layer?._tiles || {}).forEach((entry) => {
+    const tile = entry?.el;
+    if (!entry?.current
+      || !tile
+      || tile._plannerCancelled
+      || tile._plannerDone
+      || tile._plannerAbortController
+      || tile._plannerRetryTimer
+      || typeof tile._plannerRequestTile !== "function") {
+      return;
+    }
+    tile._plannerDemandGeneration = onlineTileDemandGeneration;
+    tile._plannerRequestTile(0);
+  });
 }
 
 function supportedTileImageMimeType(buffer) {
@@ -1728,15 +1804,19 @@ async function drawAsyncCachedTileBuffer(tile, buffer, mimeType) {
 }
 
 /**
- * 功能：把低一级父瓦片裁成当前子瓦片对应的四分之一区域，作为真瓦片到达前的背景。
- * 输入：tile 为目标 Canvas，buffer 为父瓦片数据，mimeType 为图片类型，coords 为子瓦片坐标。
+ * 功能：把祖先瓦片裁成当前子瓦片对应区域，作为真瓦片到达前的背景。
+ * 输入：tile 为目标 Canvas，buffer 为祖先瓦片数据，coords 为子瓦片坐标，fallbackLevels 为相差层级。
  * 输出：Promise<boolean>；成功安装或已经存在兜底图时返回 true。
  */
-async function applyAsyncCachedTileFallbackBuffer(tile, buffer, mimeType, coords) {
+async function applyAsyncCachedTileFallbackBuffer(tile, buffer, mimeType, coords, fallbackLevels = 1) {
   if (tile._plannerCancelled || tile._plannerDone) {
     return false;
   }
-  if (tile.classList.contains("planner-parent-fallback")) {
+  const normalizedLevels = Math.max(1, Math.min(3, Number.parseInt(fallbackLevels, 10) || 1));
+  const existingLevels = Number.parseInt(tile.dataset.plannerFallbackLevels || "", 10);
+  if (tile.classList.contains("planner-parent-fallback")
+    && Number.isFinite(existingLevels)
+    && existingLevels <= normalizedLevels) {
     return true;
   }
   const image = await decodeAsyncCachedTileBuffer(buffer, mimeType);
@@ -1750,10 +1830,11 @@ async function applyAsyncCachedTileFallbackBuffer(tile, buffer, mimeType, coords
     }
     const imageWidth = Math.max(1, Number(image.width) || tile.width);
     const imageHeight = Math.max(1, Number(image.height) || tile.height);
-    const sourceWidth = imageWidth / 2;
-    const sourceHeight = imageHeight / 2;
-    const quadrantX = ((Number(coords.x) % 2) + 2) % 2;
-    const quadrantY = ((Number(coords.y) % 2) + 2) % 2;
+    const divisions = Math.pow(2, normalizedLevels);
+    const sourceWidth = imageWidth / divisions;
+    const sourceHeight = imageHeight / divisions;
+    const quadrantX = ((Number(coords.x) % divisions) + divisions) % divisions;
+    const quadrantY = ((Number(coords.y) % divisions) + divisions) % divisions;
     context.clearRect(0, 0, tile.width, tile.height);
     context.imageSmoothingEnabled = true;
     context.drawImage(
@@ -1769,6 +1850,7 @@ async function applyAsyncCachedTileFallbackBuffer(tile, buffer, mimeType, coords
     );
     tile.classList.add("planner-parent-fallback");
     tile.dataset.plannerCacheState = "fallback";
+    tile.dataset.plannerFallbackLevels = String(normalizedLevels);
     return true;
   } finally {
     if (typeof image.close === "function") {
@@ -1820,13 +1902,26 @@ const AsyncCachedTileLayer = L.TileLayer.extend({
     tile._plannerDone = false;
     tile._plannerRetryTimer = 0;
     tile._plannerAbortController = null;
+    tile._plannerDemandGeneration = onlineTileDemandGeneration;
+    tile._plannerRequestSerial = 0;
     tile._plannerContext = tile.getContext("2d");
 
     const requestTile = async (attempt = 0) => {
-      if (tile._plannerCancelled || tile._plannerDone) {
+      if (tile._plannerCancelled
+        || tile._plannerDone
+        || tile._plannerDemandGeneration !== onlineTileDemandGeneration) {
         return;
       }
-      const tileUrl = this.getTileUrl(coords);
+      const requestGeneration = tile._plannerDemandGeneration;
+      const requestSerial = tile._plannerRequestSerial + 1;
+      tile._plannerRequestSerial = requestSerial;
+      const requestIsCurrent = () => (
+        !tile._plannerCancelled
+        && !tile._plannerDone
+        && tile._plannerDemandGeneration === requestGeneration
+        && tile._plannerRequestSerial === requestSerial
+      );
+      const tileUrl = onlineTileDemandUrl(this.getTileUrl(coords), requestGeneration);
       const controller = new AbortController();
       const timeoutTimer = ASYNC_CACHED_TILE_REQUEST_TIMEOUT_MS > 0
         ? window.setTimeout(() => controller.abort(), ASYNC_CACHED_TILE_REQUEST_TIMEOUT_MS)
@@ -1837,25 +1932,43 @@ const AsyncCachedTileLayer = L.TileLayer.extend({
           cache: "no-store",
           signal: controller.signal,
         });
+        if (!requestIsCurrent()) {
+          return;
+        }
         if (isQueuedTileResponse(response)) {
           await response.arrayBuffer().catch(() => {});
-          scheduleAsyncCachedTileRetry(tile, attempt, requestTile);
+          if (requestIsCurrent()) {
+            scheduleAsyncCachedTileRetry(tile, attempt, requestTile);
+          }
           return;
         }
         if (!response.ok) {
           throw new Error(`Tile request failed: ${response.status}`);
         }
         const buffer = await response.arrayBuffer();
+        if (!requestIsCurrent()) {
+          return;
+        }
         if (isParentFallbackTileResponse(response)) {
           const fallbackMimeType = supportedTileImageMimeType(buffer);
           if (fallbackMimeType && !isAsyncCachedTilePlaceholderBuffer(buffer)) {
-            await applyAsyncCachedTileFallbackBuffer(tile, buffer, fallbackMimeType, coords);
+            await applyAsyncCachedTileFallbackBuffer(
+              tile,
+              buffer,
+              fallbackMimeType,
+              coords,
+              response.headers.get("X-Map-Fallback-Levels"),
+            );
           }
-          scheduleAsyncCachedTileRetry(tile, attempt, requestTile);
+          if (requestIsCurrent()) {
+            scheduleAsyncCachedTileRetry(tile, attempt, requestTile);
+          }
           return;
         }
         if (isAsyncCachedTilePlaceholderBuffer(buffer)) {
-          scheduleAsyncCachedTileRetry(tile, attempt, requestTile);
+          if (requestIsCurrent()) {
+            scheduleAsyncCachedTileRetry(tile, attempt, requestTile);
+          }
           return;
         }
         const mimeType = supportedTileImageMimeType(buffer);
@@ -1864,7 +1977,9 @@ const AsyncCachedTileLayer = L.TileLayer.extend({
         }
         await loadAsyncCachedTileBuffer(tile, buffer, mimeType, done);
       } catch (_error) {
-        scheduleAsyncCachedTileRetry(tile, attempt, requestTile);
+        if (requestIsCurrent()) {
+          scheduleAsyncCachedTileRetry(tile, attempt, requestTile);
+        }
       } finally {
         if (timeoutTimer) {
           window.clearTimeout(timeoutTimer);
@@ -1875,6 +1990,7 @@ const AsyncCachedTileLayer = L.TileLayer.extend({
       }
     };
 
+    tile._plannerRequestTile = requestTile;
     requestTile();
     return tile;
   },
@@ -1883,6 +1999,8 @@ const AsyncCachedTileLayer = L.TileLayer.extend({
 baseLayers.terrain = createOnlineBaseLayer();
 
 baseLayers.terrain.addTo(map);
+map.on("movestart", () => pauseObsoleteAsyncCachedTiles(baseLayers.terrain));
+map.on("moveend", () => resumeCurrentAsyncCachedTiles(baseLayers.terrain));
 L.control.zoom({ position: "bottomright" }).addTo(map);
 
 installSmoothWheelZoom(map);
@@ -3807,6 +3925,7 @@ function refreshOfflineBaseLayer() {
  * 输出：无返回值；仅影响在线底图层。
  */
 function refreshOnlineBaseLayer({ bumpVersion = false } = {}) {
+  advanceOnlineTileDemandGeneration();
   if (bumpVersion) {
     state.mapCacheTileVersion = Date.now();
   }
