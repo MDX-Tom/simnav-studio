@@ -1,129 +1,198 @@
-# NavPlanner
+<div align="center">
 
-<p align="center">
-  <img src="NavPlanner/Resources/Web/app-icons/day-medium.png" alt="NavPlanner icon" width="104" height="104" />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="Media/navplanner-hero-dark.webp" />
+  <source media="(prefers-color-scheme: light)" srcset="Media/navplanner-hero-light.webp" />
+  <img src="Media/navplanner-hero-light.webp" alt="NavPlanner — a local-first sim-flight planning desk" width="84%" />
+</picture><br />
+
+<p>
+  <a href="https://github.com/MDX-Tom/NavPlanner-App/stargazers"><img src="https://img.shields.io/github/stars/MDX-Tom/NavPlanner-App?logo=github&label=Stars" alt="GitHub Stars" /></a>
+  <img src="https://img.shields.io/badge/iOS-17.0%2B-0A84FF?logo=apple&logoColor=white" alt="iOS 17.0+" />
+  <img src="https://img.shields.io/badge/Swift-5.0-F05138?logo=swift&logoColor=white" alt="Swift 5.0" />
+  <img src="https://img.shields.io/badge/UI-SwiftUI-0D96F6?logo=swift&logoColor=white" alt="SwiftUI" />
+  <img src="https://img.shields.io/badge/Devices-iPhone%20%7C%20iPad-475569" alt="iPhone and iPad" />
+  <img src="https://img.shields.io/badge/Version-0.1.0-0F766E" alt="Version 0.1.0" />
+  <img src="https://img.shields.io/badge/Mode-Local--first-7C3AED" alt="Local-first" />
 </p>
 
-<p align="center">
-  An all-in-one sim-flight planning desk for iPhone and iPad.
-  <br />
-  <a href="README.zh-CN.md">简体中文</a>
+<p>
+  <a href="README.md"><img src="https://img.shields.io/badge/lang-English-2563EB.svg" alt="English" /></a>
+  <a href="README.zh-CN.md"><img src="https://img.shields.io/badge/语言-简体中文-DC2626.svg" alt="简体中文" /></a>
 </p>
 
+<h1>NavPlanner</h1>
+
+<p><strong>From route planning to map review—an all-in-one flight-simulation workspace with local computation.</strong></p>
+<p>Native on iPhone &amp; iPad · Route planning · Procedure inspection · Track comparison · Offline maps</p>
+
+<p>
+  <a href="#overview">Overview</a> ·
+  <a href="#highlights">Highlights</a> ·
+  <a href="#showcase">Showcase</a> ·
+  <a href="#workflows">Workflows</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="#build-from-source">Build</a>
+</p>
+
+</div>
+
+<!-- README_SYNC: Keep README.md and README.zh-CN.md structurally aligned; visual assets must work in both light and dark themes. -->
+
+<a id="overview"></a>
+
+## Overview ✈️
+
+NavPlanner is an iOS planning desk for flight simulation. It brings **route planning**, **airport and procedure inspection**, **FR24 track download, comparison, and matching**, **offline maps**, and **local navigation databases** into one app—connecting an end-to-end workflow from route idea to map review while keeping core features available offline.
+
+A SwiftUI shell surrounds a WKWebView map workspace and an in-app Swift service layer. Imported databases, map packages, caches, preferences, and track history remain inside the app sandbox.
+
 <p align="center">
-  <img alt="iPhone route planning in NavPlanner" src="Media/iphone-us.png" width="260" />
+  <strong>Route idea</strong> → <strong>Automatic planning</strong> → <strong>Procedure selection</strong> → <strong>Flight profile calculation</strong> → <strong>Map replay</strong>
+</p>
+
+> [!CAUTION]
+> **For flight simulation only.** NavPlanner is not certified aviation software and must not be used for real-world flight planning, navigation, dispatch, operational decisions, or any safety-critical aviation activity.
+
+<a id="highlights"></a>
+
+## Highlights ✨
+
+|  | Capability | What it brings |
+|:--:|---|---|
+| 🧭 | **Local route planning** | Build and draw a route from departure to arrival, leave Route blank for full auto-planning, or insert `***` between fixes to auto-plan one segment. |
+| 🛬 | **Airport & procedure inspection** | Browse runways, frequencies, `SID`, `STAR`, and `APPROACH` paths, including RF / AF arcs, missed approaches, and holding geometry. |
+| 🗺️ | **Layered map workspace** | Toggle basemaps, route types, procedures, FR24 tracks, waypoints, navaids, runways, ILS, and airway labels; undo, redo, or clear drawn tracks. |
+| 📐 | **Flight calculation desk** | Configure aircraft, weight, fuel, cruise, descent, weather, and QNH; review wind / terrain and ground-speed / vertical-speed profiles plus a SimBrief-style fuel estimate. |
+| 📡 | **FR24 track comparison** | Query recent flights or a flightId after syncing an in-app browser session, import GPX, inspect profiles, and match recorded tracks to local route data. |
+| 💾 | **Offline map library** | Import or download PMTiles, MBTiles, SQLite tile stores, and legacy Web `tiles/` layouts while managing online cache separately. |
+| 🗄️ | **Local navigation databases** | Import `.s3db`, `.sqlite`, `.sqlite3`, or `.db`, switch databases, remove unused copies, and restore the bundled database. |
+
+<a id="showcase"></a>
+
+## Interface Showcase 🖥️
+
+<p align="center">
+  <img alt="NavPlanner iPad map workspace" src="Media/ipad-us.png" width="60%" />
   &nbsp;&nbsp;
-  <img alt="iPad map workspace in NavPlanner" src="Media/ipad-us.png" width="520" />
+  <img alt="NavPlanner iPhone route planning workspace" src="Media/iphone-us.png" width="28%" />
 </p>
+<p align="center"><sub>Adaptive iPad workspace and compact iPhone planning flow.</sub></p>
 
-NavPlanner is a native iOS planning desk for flight simulation. It brings **route planning**, **airport and procedure inspection**, **offline maps**, **local navigation databases**, and optional **FR24 online track download, comparison, and matching** into one app, emphasizing **an integrated workflow from route idea to map review** and **offline availability**.
+<a id="workflows"></a>
 
-NavPlanner is built around a SwiftUI shell, a WKWebView map workspace, and a Swift service layer packaged inside the app. It is designed for simulator flying, study, and personal planning practice.
+## Core Workflows 🧭
 
-**Important safety notice:** NavPlanner is not certified aviation software. It is strictly prohibited to use NavPlanner for real-world flight planning, navigation, dispatch, operational decision-making, or any safety-critical aviation activity.
-
-## Highlights
-
-- **Local route planning**: enter departure and arrival airports, build and draw a route, leave Route blank for full auto-planning, or insert `***` between fixes to auto-plan one segment.
-- **Procedure preview**: browse and draw `SID`, `STAR`, and `APPROACH` procedures by runway, including RF / AF arcs, missed approach segments, and holding geometry.
-- **Map overlays and drawing control**: toggle base maps, planned routes, manual routes, procedure paths, FR24 tracks, terminal waypoints, other fixes, navaids, runways, ILS, and airway labels; undo, redo, or clear drawn tracks from the map.
-- **Airport workspace**: inspect runways, frequencies, procedures, and map popovers; quickly assign airports from the map to departure, arrival, or manual slots.
-- **Flight calculation workspace**: choose aircraft type, ZFW, fuel on board, cruise altitude, cruise Mach, descent rate, weather source, weight unit, and QNH unit; review route wind / terrain and ground speed / vertical-speed profiles; estimate fuel in a SimBrief-style format.
-- **FR24 track comparison**: after syncing an in-app browser session, query recent flights or a specific flightId, view history, download or manually import GPX tracks, inspect altitude / speed profiles, and match tracks back to local route data.
-- **Offline maps**: import or download PMTiles, MBTiles, SQLite tile stores, and legacy Web `tiles/` layouts; manage storage, active resources, download progress, and online tile cache separately.
-- **Local navigation databases**: import `.s3db`, `.sqlite`, `.sqlite3`, or `.db` files from Files, switch between local databases, remove unused copies, and restore the bundled database.
-
-## Using NavPlanner
-
-### Plan and draw a route
+<details open>
+<summary><strong>1 · Plan and draw a route</strong></summary>
 
 1. Open the **Plan** tab.
 2. Enter departure and arrival airports, for example `KLAX` and `KJFK`.
-3. Pick runways or keep them on automatic selection.
-4. Enter a route string, leave it blank for auto-planning, or use `***` between fixes to auto-plan a segment.
+3. Pick runways or keep automatic selection.
+4. Enter a route string, leave it blank for full auto-planning, or use `***` between fixes to auto-plan a segment.
 5. Tap **Generate & Draw Route**.
 
-`DCT`, `SID`, `STAR`, `APPROACH`, airway names, fix identifiers, `AIRAC`, `PMTiles`, `MBTiles`, and `SQLite` remain in English regardless of the selected UI language.
+</details>
 
-### Inspect airports and procedures
+<details>
+<summary><strong>2 · Inspect airports and procedures</strong></summary>
 
 1. Enter a manual airport in Plan, or tap an airport on the map.
-2. Open the **Airport** tab.
-3. Switch between departure, arrival, and manual slots.
-4. Review runways, communication frequencies, and procedure lists.
-5. Tap a procedure to preview it on the map.
+2. Open the **Airport** tab and switch between departure, arrival, and manual slots.
+3. Review runways, communication frequencies, and procedure lists.
+4. Tap a procedure to preview its path on the map.
 
-### Calculate profiles and fuel
+</details>
+
+<details>
+<summary><strong>3 · Calculate profiles and fuel</strong></summary>
 
 1. Build a route in **Plan** and select any required `SID`, `STAR`, or `APPROACH`.
-2. Open the **Calc** tab.
-3. Select manufacturer and aircraft type, then adjust ZFW, fuel on board, cruise altitude, cruise Mach, descent rate, weather source, weight unit, and QNH display unit.
-4. Review the SimBrief-style route profile with relative wind, cloud, precipitation, terrain, procedure altitude limits, QNH, zoom and pan controls, then check the ground speed / vertical-speed profile.
-5. Review the SimBrief-style fuel estimate.
+2. Open **Calc**, select manufacturer and aircraft type, then adjust ZFW, fuel on board, cruise altitude, cruise Mach, descent rate, weather source, weight unit, and QNH unit.
+3. Review the SimBrief-style route profile with relative wind, cloud, precipitation, terrain, procedure altitude limits, QNH, zoom, and pan controls.
+4. Check the ground-speed / vertical-speed profile and fuel estimate.
 
-The calculation model is local-first and works offline. Online weather is an enhancement and falls back to local estimates when unavailable; Terrarium DEM tiles are sampled when available and degrade to a conservative local terrain estimate when unavailable. Direct weather-source licensing, offline DEM packages, and fuller aircraft performance libraries remain planned enhancements.
+The calculation model is local-first and works offline. Online weather is an enhancement and falls back to local estimates when unavailable; Terrarium DEM tiles are sampled when available and degrade to a conservative local terrain estimate when unavailable. Direct weather-source licensing, offline DEM packages, and fuller aircraft-performance libraries remain planned enhancements.
 
-### Query and draw FR24 tracks
+</details>
 
-1. Fill departure and arrival airports in Plan.
-2. Open the **Query** tab.
-3. For the first query, open the verification page in the in-app browser, complete the FR24 / Cloudflare check, then sync the browser session.
-4. Tap **Query** to list up to 10 recent flights for the route, or search a flight number / flightId manually.
-5. Download and draw a flight track, manually import a GPX file, review the altitude / speed profile, or match the track against the local route engine. When a loaded flight reports different actual airports, Query synchronizes them back to Plan before matching. For dense tracks with reliable terminal samples, matching identifies the full SID / STAR / Approach first, then fits the enroute airway between the Procedure boundaries.
+<details>
+<summary><strong>4 · FR24 tracks: query, download, replay, and match</strong></summary>
 
-Downloaded FR24 tracks are cached locally with GPX, playback JSON, and metadata. The Query tab can search the cache, draw or match cached tracks, share GPX files, favorite important tracks, open the cache folder, and clear non-favorited downloads.
+1. Fill departure and arrival airports in Plan, then open **Query**.
+2. For the first query, open the verification page in the in-app browser, complete the FR24 / Cloudflare check, and sync the browser session.
+3. List up to 10 recent flights for the route, or search a flight number / flightId manually.
+4. Download and draw a track, import GPX, inspect altitude / speed profiles, or match the track against the local route engine.
 
-FR24 is an online enhancement. When the network is unavailable, the browser session expires, or FR24 returns a verification page, local planning, airport lookup, procedures, nav overlays, and offline maps remain available. NavPlanner reuses only the browser session that the user completes inside the app; it does not bypass Cloudflare or automate CAPTCHA challenges.
+When a loaded flight reports different actual airports, Query synchronizes them back to Plan before matching. For dense tracks with reliable terminal samples, matching identifies the complete SID / STAR / Approach first, then fits the enroute airway between procedure boundaries.
 
-### Manage offline maps
+Downloaded tracks are cached locally as GPX, playback JSON, and metadata. Query can search the cache, draw or match cached tracks, share GPX, favorite important tracks, open the cache folder, and clear non-favorited downloads.
 
-1. Open **Settings**.
-2. Choose **Manage Offline Maps**.
-3. Import or download PMTiles, MBTiles, or SQLite tile resources.
-4. Select an active resource to make the map prefer local tiles.
+> **Online enhancement.** FR24 is optional. If the network is unavailable, the session expires, or FR24 returns a verification page, local planning, airport lookup, procedures, nav overlays, and offline maps remain available. NavPlanner reuses only the session completed by the user inside the app; it does not bypass Cloudflare or automate CAPTCHA challenges.
 
-Online map cache and offline map packages are managed separately. Clearing the online cache does not remove imported offline maps or navigation databases.
+</details>
 
-### Import navigation databases
+<details>
+<summary><strong>5 · Manage offline maps and navigation databases</strong></summary>
 
-1. Open **Settings**.
-2. In **Navigation Database**, tap **Choose s3db**.
-3. Pick a `.s3db`, `.sqlite`, `.sqlite3`, or `.db` file from Files.
-4. NavPlanner switches to the imported database and refreshes route, procedure, and nav-overlay caches.
+**Offline maps**
 
-## Architecture
+1. Open **Settings** → **Manage Offline Maps**.
+2. Import or download PMTiles, MBTiles, or SQLite tile resources.
+3. Select an active resource to make the map prefer local tiles.
+
+Online map cache and offline packages are managed separately. Clearing the online cache does not remove imported maps or navigation databases.
+
+**Navigation databases**
+
+1. In **Settings** → **Navigation Database**, tap **Choose s3db**.
+2. Pick a `.s3db`, `.sqlite`, `.sqlite3`, or `.db` file from Files.
+3. NavPlanner switches to the imported database and refreshes route, procedure, and nav-overlay caches.
+
+</details>
+
+<a id="architecture"></a>
+
+## Architecture 🏗️
 
 ```mermaid
 flowchart LR
-  SwiftUI["SwiftUI shell"] --> WK["WKWebView map workspace"]
-  WK --> Scheme["navplanner:// local API"]
-  Scheme --> Planner["Swift PlannerService"]
-  Scheme --> Maps["Swift MapStore / OnlineTileCache"]
-  Planner --> DB["SQLite navigation database"]
-  Maps --> Files["PMTiles / MBTiles / SQLite tiles"]
-  WK --> FR24["FR24 online enhancement"]
+  UI["SwiftUI shell"] --> WK["WKWebView map workspace"]
+  WK --> API["navplanner:// local API"]
+  API --> Planner["Swift PlannerService"]
+  API --> Maps["Swift MapStore / OnlineTileCache"]
+  Planner --> DB[("SQLite navigation database")]
+  Maps --> Files[("PMTiles / MBTiles / SQLite tiles")]
+  WK -. "optional online enhancement" .-> FR24["FR24"]
 ```
 
-User data stays in the app sandbox: imported navigation databases, offline map packages, FR24 track cache, online tile cache, appearance settings, and browser-session configuration are stored locally.
+The local service layer is the source of truth for planning, procedure geometry, map storage, and imported data. FR24 and online weather enrich the workflow without replacing offline route planning and inspection.
 
-## Build From Source
+<a id="build-from-source"></a>
+
+## Build From Source 🛠️
 
 ### Requirements
 
-- macOS with Xcode.
-- iOS 17.0 or later deployment target.
-- iPhone / iPad Simulator or a physical device.
-- Optional: a local navigation database. Public repositories should not include copyrighted navigation data; for private builds, place a database at `NavPlanner/Resources/Database/navdata.sqlite`, or import one in Settings after launch.
+- macOS with Xcode
+- iOS 17.0 or later deployment target
+- iPhone / iPad Simulator or a physical device
+- Optional local navigation database for private builds
 
-### Xcode
+### Quick start
 
-1. Open `NavPlanner.xcodeproj`.
-2. Select the `NavPlanner` scheme.
-3. Choose an iPhone or iPad simulator, such as iPhone 17 Pro Max.
-4. Configure signing team and Bundle Identifier for your account.
-5. Run the app.
+```bash
+git clone https://github.com/MDX-Tom/NavPlanner-App.git
+cd NavPlanner-App
+open NavPlanner.xcodeproj
+```
 
-### Command Line
+In Xcode, select the **NavPlanner** scheme, choose an iPhone or iPad destination, configure the signing team and Bundle Identifier for your account, and run the app.
+
+For private builds, place a local database at `NavPlanner/Resources/Database/navdata.sqlite`, or import one from Settings after launch. Public distributions should not include navigation data without confirmed redistribution rights.
+
+<details>
+<summary><strong>Command-line build</strong></summary>
 
 ```bash
 xcodebuild -project NavPlanner.xcodeproj \
@@ -134,7 +203,7 @@ xcodebuild -project NavPlanner.xcodeproj \
   build
 ```
 
-If `xcode-select` points to Command Line Tools, set the Xcode developer directory explicitly:
+If `xcode-select` points to Command Line Tools, set the full Xcode developer directory explicitly:
 
 ```bash
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
@@ -146,17 +215,14 @@ xcodebuild -project NavPlanner.xcodeproj \
   build
 ```
 
-## Release Checklist
+</details>
 
-- Review `PrivacyInfo.xcprivacy` against actual network, file, cache, and optional FR24 behavior.
-- Confirm licensing and distribution rights for navigation databases, offline map packages, and basemap sources.
-- Update version, build number, display name, signing, app icon, and alternate icon metadata.
-- Test iPhone compact width, iPhone landscape, iPad portrait, and iPad landscape.
-- Verify airplane-mode behavior: launch, airport search, airport detail, route planning, procedure drawing, nav-overlay rendering, and offline maps.
-- Verify FR24 missing session, Cloudflare verification, flightId lookup, manual GPX import, altitude profile scrubbing, failed downloads, track drawing, track matching, sharing, and cache management.
-- Filter Xcode logs by the `NavPlanner` process when diagnosing simulator output; iOS beta simulators may print unrelated system-service errors.
+<a id="validation"></a>
 
-Useful local checks:
+## Validation & Release Checks ✅
+
+<details>
+<summary><strong>Useful local checks</strong></summary>
 
 ```bash
 node --check NavPlanner/Resources/Web/app.js
@@ -165,9 +231,26 @@ plutil -lint NavPlanner.xcodeproj/project.pbxproj NavPlanner/Support/PrivacyInfo
 python3 Tools/Parity/run_all_parity.py
 ```
 
-`Tools/Parity` compares the Swift local service layer against the read-only Web reference implementation and is useful after changing route planning, track matching, or procedure geometry.
+`Tools/Parity` compares the Swift local service layer against the read-only Web reference implementation after route-planning, track-matching, or procedure-geometry changes.
 
-## Project Layout
+</details>
+
+<details>
+<summary><strong>Release checklist</strong></summary>
+
+- Review `PrivacyInfo.xcprivacy` against actual network, file, cache, and optional FR24 behavior.
+- Confirm licensing and distribution rights for navigation databases, offline map packages, and basemap sources.
+- Update version, build number, display name, signing, app icon, and alternate-icon metadata.
+- Test iPhone compact width, iPhone landscape, iPad portrait, and iPad landscape.
+- Verify airplane-mode launch, airport search, airport detail, route planning, procedure drawing, nav-overlay rendering, and offline maps.
+- Verify FR24 missing-session, Cloudflare-verification, flightId, GPX import, profile scrubbing, failed-download, drawing, matching, sharing, and cache-management paths.
+- Filter Xcode logs by the `NavPlanner` process; beta simulators may print unrelated system-service errors.
+
+</details>
+
+<a id="project-layout"></a>
+
+## Project Layout 🗂️
 
 ```text
 NavPlanner.xcodeproj/          Xcode project
@@ -178,13 +261,15 @@ NavPlanner/
   Resources/Web/               WKWebView map workspace resources
   Support/                     Asset catalog and privacy manifest
 Tools/                         Icon generation and parity tools
-Media/                         README screenshots and public images
+Media/                         README screenshots and visual assets
 ```
 
-## Data Notice
+<a id="data-notice"></a>
 
-NavPlanner is a simulator-planning, inspection, and personal learning aid only. It must never be used for real-world flight planning, navigation, dispatch, operational decision-making, or any safety-critical aviation activity. For real-world aviation, always rely on official aeronautical publications, ATC instructions, certified avionics, and current operational procedures.
+## Data & Safety Notice ⚠️
 
-NavPlanner may use third-party or user-supplied data and resources, including basemaps, airport and procedure data, AIRAC / navigation databases, PMTiles / MBTiles / SQLite map packages, and flight data from FR24. These materials may be protected by copyright, database rights, trademarks, platform terms, or redistribution restrictions.
-This app does not provide data packages protected by copyright or database rights, and it makes no guarantee regarding the accuracy, completeness, availability, or legality of third-party data.
-You are responsible for confirming that you have the right to use, import, cache, and distribute the relevant data. Please make sure you have permission to use and distribute such data locally.
+NavPlanner is a simulator-planning, inspection, and personal-learning aid only. For real-world aviation, always rely on official aeronautical publications, ATC instructions, certified avionics, and current operational procedures.
+
+NavPlanner may use third-party or user-supplied materials, including basemaps, airport and procedure data, AIRAC / navigation databases, PMTiles / MBTiles / SQLite packages, and FR24 flight data. These materials may be subject to copyright, database rights, trademarks, platform terms, or redistribution restrictions.
+
+This app does not guarantee the accuracy, completeness, availability, or legal status of third-party data. You are responsible for confirming your right to use, import, cache, and distribute each data source.
