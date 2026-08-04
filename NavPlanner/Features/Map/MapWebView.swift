@@ -204,6 +204,7 @@ struct MapWebView: UIViewRepresentable {
         private weak var environment: AppEnvironment?
         private var documentInteractionController: UIDocumentInteractionController?
         private var documentPickerPurpose: DocumentPickerPurpose = .database
+        private weak var fr24VerificationController: FR24VerificationViewController?
         var locksOuterScroll = false
         private var macFormControlIsActive = false
 
@@ -427,6 +428,14 @@ struct MapWebView: UIViewRepresentable {
         }
 
         private func presentFR24VerificationBrowser() {
+            if let controller = fr24VerificationController,
+               (controller.viewIfLoaded?.window != nil
+                || controller.navigationController?.presentingViewController != nil
+                || controller.presentingViewController != nil) {
+                controller.navigationController?.popToViewController(controller, animated: false)
+                NSLog("NavPlanner FR24 verification controller reused")
+                return
+            }
             let controller = FR24VerificationViewController { [weak self] browserCookie, browserFRPl, browserDiagnostics, completion in
                 self?.syncFR24SessionFromBrowser(
                     browserCookie: browserCookie,
@@ -435,13 +444,20 @@ struct MapWebView: UIViewRepresentable {
                     completion: completion
                 )
             }
+            fr24VerificationController = controller
             let navigation = UINavigationController(rootViewController: controller)
             if UIDevice.current.userInterfaceIdiom == .pad {
                 navigation.modalPresentationStyle = .formSheet
             } else {
                 navigation.modalPresentationStyle = .fullScreen
             }
-            topViewController()?.present(navigation, animated: true)
+            guard let presenter = topViewController() else { return }
+            NSLog("NavPlanner FR24 verification controller created")
+            presenter.present(navigation, animated: true) {
+#if DEBUG
+                controller.scheduleSimulatorAutoDismissIfConfigured()
+#endif
+            }
         }
 
         private func openFR24CacheDirectory() {
@@ -536,9 +552,10 @@ struct MapWebView: UIViewRepresentable {
         }
 
         private func blurFormControl() {
-            guard ProcessInfo.processInfo.isiOSAppOnMac,
-                  let webView else { return }
-            macFormControlIsActive = false
+            guard let webView else { return }
+            if ProcessInfo.processInfo.isiOSAppOnMac {
+                macFormControlIsActive = false
+            }
             webView.endEditing(true)
         }
 
@@ -612,10 +629,12 @@ struct MapWebView: UIViewRepresentable {
                     payload["error"] = true
                     payload["message"] = "内置浏览器还没有可同步的 FR24 会话。请先完成 FR24 / Cloudflare 验证。"
                 } else {
-                    payload = FR24SessionStore.updateAccessPayload(
+                    _ = FR24SessionStore.updateAccessPayload(
                         webCookie: cookieHeader,
                         frPl: frPl
                     )
+                    FR24SessionStore.markBrowserSync()
+                    payload = FR24SessionStore.accessStatusPayload()
                     payload["local_status"] = "synced_from_browser"
                     payload["cookie_count"] = fr24Cookies.count
                     payload["browser_cookie_count"] = browserCookieNames.count
@@ -821,17 +840,17 @@ private final class GPXTrackPointParser: NSObject, XMLParserDelegate {
 
 private final class FR24VerificationViewController: UIViewController, WKNavigationDelegate {
     private let syncHandler: (String, String, [String: Any], @escaping ([String: Any]) -> Void) -> Void
-    private lazy var webView: WKWebView = {
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .default()
-        let webView = WKWebView(frame: .zero, configuration: configuration)
-        webView.navigationDelegate = self
-        if #available(iOS 16.4, *) {
-            webView.isInspectable = true
-        }
-        return webView
-    }()
+    private var webView: WKWebView!
     private let statusLabel = UILabel()
+    private let progressView = UIProgressView(progressViewStyle: .bar)
+    private let loadingOverlay = UIView()
+    private let loadingSpinner = UIActivityIndicatorView(style: .large)
+    private let loadingLabel = UILabel()
+    private let retryButton = UIButton(type: .system)
+    private var progressObservation: NSKeyValueObservation?
+    private var loadingTimeoutWorkItem: DispatchWorkItem?
+    private var isDismissingAfterSync = false
+    private var didTearDownWebView = false
 
     init(syncHandler: @escaping (String, String, [String: Any], @escaping ([String: Any]) -> Void) -> Void) {
         self.syncHandler = syncHandler
@@ -847,6 +866,13 @@ private final class FR24VerificationViewController: UIViewController, WKNavigati
         super.viewDidLoad()
         title = "FR24 验证"
         view.backgroundColor = .systemBackground
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .default()
+        webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.navigationDelegate = self
+        if #available(iOS 16.4, *) {
+            webView.isInspectable = true
+        }
         navigationItem.leftBarButtonItem = UIBarButtonItem(
             title: "关闭",
             style: .plain,
@@ -874,30 +900,105 @@ private final class FR24VerificationViewController: UIViewController, WKNavigati
         statusLabel.textAlignment = .center
         statusLabel.backgroundColor = .secondarySystemBackground
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
+        progressView.progress = 0
+        progressView.translatesAutoresizingMaskIntoConstraints = false
         webView.translatesAutoresizingMaskIntoConstraints = false
+
+        loadingOverlay.backgroundColor = UIColor.systemBackground.withAlphaComponent(0.94)
+        loadingOverlay.translatesAutoresizingMaskIntoConstraints = false
+        loadingSpinner.translatesAutoresizingMaskIntoConstraints = false
+        loadingLabel.text = "正在连接 flightradar24.com..."
+        loadingLabel.font = .preferredFont(forTextStyle: .body)
+        loadingLabel.textColor = .secondaryLabel
+        loadingLabel.textAlignment = .center
+        loadingLabel.numberOfLines = 0
+        loadingLabel.translatesAutoresizingMaskIntoConstraints = false
+        retryButton.setTitle("重新加载", for: .normal)
+        retryButton.isHidden = true
+        retryButton.addTarget(self, action: #selector(reload), for: .touchUpInside)
+        retryButton.translatesAutoresizingMaskIntoConstraints = false
+
         view.addSubview(statusLabel)
+        view.addSubview(progressView)
         view.addSubview(webView)
+        view.addSubview(loadingOverlay)
+        loadingOverlay.addSubview(loadingSpinner)
+        loadingOverlay.addSubview(loadingLabel)
+        loadingOverlay.addSubview(retryButton)
 
         NSLayoutConstraint.activate([
             statusLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             statusLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),
             statusLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
-            webView.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 8),
+            progressView.topAnchor.constraint(equalTo: statusLabel.bottomAnchor),
+            progressView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            progressView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            progressView.heightAnchor.constraint(equalToConstant: 2),
+            webView.topAnchor.constraint(equalTo: progressView.bottomAnchor),
             webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            loadingOverlay.topAnchor.constraint(equalTo: webView.topAnchor),
+            loadingOverlay.leadingAnchor.constraint(equalTo: webView.leadingAnchor),
+            loadingOverlay.trailingAnchor.constraint(equalTo: webView.trailingAnchor),
+            loadingOverlay.bottomAnchor.constraint(equalTo: webView.bottomAnchor),
+            loadingSpinner.centerXAnchor.constraint(equalTo: loadingOverlay.centerXAnchor),
+            loadingSpinner.centerYAnchor.constraint(equalTo: loadingOverlay.centerYAnchor, constant: -30),
+            loadingLabel.topAnchor.constraint(equalTo: loadingSpinner.bottomAnchor, constant: 16),
+            loadingLabel.leadingAnchor.constraint(greaterThanOrEqualTo: loadingOverlay.leadingAnchor, constant: 24),
+            loadingLabel.trailingAnchor.constraint(lessThanOrEqualTo: loadingOverlay.trailingAnchor, constant: -24),
+            loadingLabel.centerXAnchor.constraint(equalTo: loadingOverlay.centerXAnchor),
+            retryButton.topAnchor.constraint(equalTo: loadingLabel.bottomAnchor, constant: 12),
+            retryButton.centerXAnchor.constraint(equalTo: loadingOverlay.centerXAnchor)
         ])
 
+        progressObservation = webView.observe(\.estimatedProgress, options: [.initial, .new]) { [weak self] webView, _ in
+            DispatchQueue.main.async {
+                self?.progressView.setProgress(Float(webView.estimatedProgress), animated: true)
+            }
+        }
+
         if let url = URL(string: "https://www.flightradar24.com/") {
+            beginLoadingFeedback()
             webView.load(URLRequest(url: url))
         }
     }
 
-    @objc private func close() {
-        dismiss(animated: true)
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        if isBeingDismissed || navigationController?.isBeingDismissed == true {
+            tearDownWebView()
+        }
     }
 
+    deinit {
+        loadingTimeoutWorkItem?.cancel()
+        progressObservation?.invalidate()
+    }
+
+    @objc private func close() {
+        view.endEditing(true)
+        dismiss(animated: true) { [weak self] in
+            self?.tearDownWebView()
+        }
+    }
+
+#if DEBUG
+    func scheduleSimulatorAutoDismissIfConfigured() {
+        let key = "NAVPLANNER_SIM_VERIFICATION_AUTO_DISMISS_MS"
+        guard let raw = ProcessInfo.processInfo.environment[key],
+              let milliseconds = Double(raw),
+              milliseconds > 0
+        else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + milliseconds / 1_000) { [weak self] in
+            self?.close()
+        }
+    }
+#endif
+
     @objc private func reload() {
+        guard webView != nil else { return }
+        beginLoadingFeedback()
         webView.reload()
     }
 
@@ -908,21 +1009,113 @@ private final class FR24VerificationViewController: UIViewController, WKNavigati
             guard let self else { return }
             self.syncHandler(browserCookie, browserFRPl, diagnostics) { [weak self] payload in
                 guard let self else { return }
-                self.navigationItem.rightBarButtonItems?.forEach { $0.isEnabled = true }
                 let message = navString(payload["message"]).isEmpty
                     ? "FR24 会话同步完成。"
                     : navString(payload["message"])
                 self.statusLabel.text = message
                 let hasError = (payload["error"] as? Bool) ?? false
                 guard hasError else {
-                    self.dismiss(animated: true)
+                    self.dismissAfterSuccessfulSync()
                     return
                 }
+                self.navigationItem.rightBarButtonItems?.forEach { $0.isEnabled = true }
                 let alert = UIAlertController(title: "FR24", message: message, preferredStyle: .alert)
                 alert.addAction(UIAlertAction(title: "继续", style: .default))
-                self.present(alert, animated: true)
+                DispatchQueue.main.async { [weak self] in
+                    self?.present(alert, animated: true)
+                }
             }
         }
+    }
+
+    private func beginLoadingFeedback() {
+        loadingTimeoutWorkItem?.cancel()
+        loadingOverlay.alpha = 1
+        loadingOverlay.isHidden = false
+        loadingLabel.text = "正在连接 flightradar24.com..."
+        retryButton.isHidden = true
+        loadingSpinner.startAnimating()
+        progressView.isHidden = false
+        progressView.setProgress(0.05, animated: false)
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, self.webView?.isLoading == true else { return }
+            self.loadingLabel.text = "页面加载时间较长，可继续等待或重新加载。"
+            self.retryButton.isHidden = false
+        }
+        loadingTimeoutWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 12, execute: workItem)
+    }
+
+    private func finishLoadingFeedback() {
+        loadingTimeoutWorkItem?.cancel()
+        loadingTimeoutWorkItem = nil
+        progressView.setProgress(1, animated: true)
+        UIView.animate(withDuration: 0.2, animations: { [weak self] in
+            self?.loadingOverlay.alpha = 0
+        }, completion: { [weak self] _ in
+            self?.loadingSpinner.stopAnimating()
+            self?.loadingOverlay.isHidden = true
+            self?.loadingOverlay.alpha = 1
+            self?.progressView.isHidden = true
+        })
+    }
+
+    private func showMainFrameLoadError(_ error: Error) {
+        if (error as NSError).code == NSURLErrorCancelled {
+            return
+        }
+        loadingTimeoutWorkItem?.cancel()
+        loadingTimeoutWorkItem = nil
+        loadingSpinner.stopAnimating()
+        loadingOverlay.alpha = 1
+        loadingOverlay.isHidden = false
+        loadingLabel.text = "FR24 主页面加载失败：\(error.localizedDescription)"
+        retryButton.isHidden = false
+        progressView.isHidden = true
+    }
+
+    private func dismissAfterSuccessfulSync() {
+        guard !isDismissingAfterSync else { return }
+        isDismissingAfterSync = true
+        view.endEditing(true)
+        // Separate bar/status updates and the full-screen dismissal across run-loop
+        // turns to avoid multiple iOS 27 Liquid Glass mutations in one frame.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            guard let self else { return }
+            self.dismiss(animated: true) { [weak self] in
+                self?.tearDownWebView()
+            }
+        }
+    }
+
+    private func tearDownWebView() {
+        guard !didTearDownWebView else { return }
+        didTearDownWebView = true
+        loadingTimeoutWorkItem?.cancel()
+        loadingTimeoutWorkItem = nil
+        progressObservation?.invalidate()
+        progressObservation = nil
+        webView?.stopLoading()
+        webView?.navigationDelegate = nil
+        webView?.removeFromSuperview()
+        webView = nil
+        NSLog("NavPlanner FR24 verification controller web view released")
+    }
+
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        beginLoadingFeedback()
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        finishLoadingFeedback()
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        showMainFrameLoadError(error)
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        showMainFrameLoadError(error)
     }
 
     private func extractBrowserSession(completion: @escaping (String, String, [String: Any]) -> Void) {

@@ -91,6 +91,7 @@ const TRANSLATIONS = {
   "plan.autoRouteHint": { "zh-Hans": "留空航路以自动规划整条航路，或在航点间输入'***'以自动规划航路片段", en: "Leave Route blank to auto-plan the whole route, or enter '***' between waypoints to auto-plan that segment." },
   "status.waitingRoute": { "zh-Hans": "等待输入航路。", en: "Waiting for route input." },
   "status.noDetails": { "zh-Hans": "状态已更新，但没有可显示的详情。", en: "Status updated without displayable details." },
+  "search.noResults": { "zh-Hans": "未找到“{query}”。可尝试 ICAO / IATA，例如 ZSPD、ZSSS、VHHH。", en: "No results for “{query}”. Try an ICAO / IATA code such as ZSPD, ZSSS, or VHHH." },
   "section.legs": { "zh-Hans": "航段", en: "Legs" },
   "section.selectedProcedures": { "zh-Hans": "已选程序", en: "Selected Procedures" },
   "section.selection": { "zh-Hans": "选中内容", en: "Selection" },
@@ -483,6 +484,12 @@ const TRANSLATIONS = {
   "query.downloadDraw": { "zh-Hans": "下载并绘制轨迹", en: "Download & Draw Track" },
   "query.matchTrack": { "zh-Hans": "匹配轨迹", en: "Match Track" },
   "query.downloading": { "zh-Hans": "正在下载 FR24 GPX 轨迹...", en: "Downloading FR24 GPX track..." },
+  "query.phaseDownloading": { "zh-Hans": "正在下载与解析轨迹", en: "Downloading and parsing track" },
+  "query.phaseMatching": { "zh-Hans": "正在拟合本地航路", en: "Matching local airway route" },
+  "query.phaseCancelling": { "zh-Hans": "正在停止任务", en: "Stopping task" },
+  "query.phaseElapsed": { "zh-Hans": "{phase} · {seconds}s", en: "{phase} · {seconds}s" },
+  "query.cancelAction": { "zh-Hans": "停止", en: "Stop" },
+  "query.cancelled": { "zh-Hans": "FR24 操作已停止。", en: "FR24 operation stopped." },
   "query.drawn": { "zh-Hans": "已绘制 FR24 GPX 轨迹，共 {count} 个点。", en: "FR24 GPX track drawn with {count} points." },
   "query.airportsSynced": { "zh-Hans": "已按航班实际航线同步计划机场：{departure} → {arrival}。", en: "Plan airports synced to the flight's actual route: {departure} → {arrival}." },
   "query.matching": { "zh-Hans": "正在使用本地 airway 图匹配 FR24 轨迹...", en: "Matching FR24 track with the local airway graph..." },
@@ -572,10 +579,16 @@ const TRANSLATIONS = {
   "query.cacheDirectoryOpened": { "zh-Hans": "已打开 FR24 缓存目录。", en: "FR24 cache folder opened." },
   "query.cacheDirectoryFailed": { "zh-Hans": "无法打开 FR24 缓存目录。", en: "Could not open the FR24 cache folder." },
   "query.access": { "zh-Hans": "FR24 网络访问", en: "FR24 Network Access" },
-  "query.accessInitial": { "zh-Hans": "浏览器会话未同步。", en: "Browser session not synced." },
-  "query.accessSummary": { "zh-Hans": "浏览器会话{state}。", en: "Browser session {state}." },
+  "query.accessInitial": { "zh-Hans": "FR24 尚未探测，可直接查询。", en: "FR24 has not been probed yet; you can query directly." },
+  "query.accessSummary": { "zh-Hans": "FR24 访问状态：{state}。", en: "FR24 access: {state}." },
   "query.accessSyncedState": { "zh-Hans": "已同步", en: "synced" },
   "query.accessUnsyncedState": { "zh-Hans": "未同步", en: "not synced" },
+  "query.accessStateAvailable": { "zh-Hans": "最近访问成功", en: "recently available" },
+  "query.accessStateChallenge": { "zh-Hans": "需要验证，查询会自动重试", en: "verification required; queries retry automatically" },
+  "query.accessStateExpired": { "zh-Hans": "成功记录已过期，等待重新探测", en: "success record expired; awaiting a new probe" },
+  "query.accessStateConfigured": { "zh-Hans": "会话已配置，等待验证", en: "session configured; awaiting verification" },
+  "query.accessStateUnknown": { "zh-Hans": "尚未探测，可直接查询", en: "not yet probed; direct query available" },
+  "query.accessWarmup": { "zh-Hans": "会话正在生效，{seconds}s 后自动查询...", en: "Session is warming up; querying automatically in {seconds}s..." },
   "query.accessConfigured": { "zh-Hans": "已配置", en: "configured" },
   "query.accessMissing": { "zh-Hans": "未配置", en: "missing" },
   "query.accessOpenBrowser": { "zh-Hans": "打开 FR24 验证页", en: "Open FR24 Verification" },
@@ -650,6 +663,8 @@ const TRANSLATIONS = {
   "error.trackNoPoints": { "zh-Hans": "无法从导入轨迹构建可绘制航路点。", en: "No drawable route points could be built from the imported trajectory." },
   "error.fr24Session": { "zh-Hans": "FR24 Web 会话不可用。请在查询页打开 FR24 验证页，完成验证后同步会话。", en: "FR24 Web session is unavailable. Open FR24 verification in Query, complete verification, then sync the session." },
   "error.fr24Cloudflare": { "zh-Hans": "FR24 返回 Cloudflare 验证页。请在查询页打开 FR24 验证页，完成验证后同步会话。", en: "FR24 returned a Cloudflare verification page. Open FR24 verification in Query, complete verification, then sync the session." },
+  "error.fr24BadRequest": { "zh-Hans": "FR24 拒绝了本次查询参数（HTTP 400），请检查机场或航班条件。", en: "FR24 rejected the query parameters (HTTP 400). Check the airport or flight criteria." },
+  "error.fr24RateLimited": { "zh-Hans": "FR24 请求频率受限（HTTP 429），系统将在下一次查询时继续退避。", en: "FR24 rate-limited the request (HTTP 429). The next query will continue with backoff." },
   "error.fr24NotEnough": { "zh-Hans": "FR24 Web 未返回足够轨迹点，可选择其他历史航班或稍后重试。", en: "FR24 web did not return enough track points. Try another history entry or retry later." },
   "error.fr24MissingId": { "zh-Hans": "FR24 flightId 缺失。", en: "FR24 flightId missing." },
 };
@@ -801,6 +816,8 @@ const state = {
   fr24CacheStatus: null,
   fr24AccessStatus: null,
   fr24QueryBusy: false,
+  fr24QueryRequestVersion: 0,
+  fr24BusyByKey: new Map(),
   fr24TrackPayload: null,
   fr24ProfilePoints: [],
   fr24ProfileCursorIndex: 0,
@@ -870,6 +887,15 @@ const state = {
   currentRouteLayerKind: "route",
   activeDetailTab: "airport",
   activeMobileTab: "plan",
+  detailTabInitialized: false,
+  mobileTabInitialized: false,
+  detailRefreshRecords: new Map(),
+  detailResourceExecutionCounts: new Map(),
+  detailScrollPositions: new Map(),
+  detailLayoutTimer: 0,
+  detailLayoutFrame: 0,
+  detailLayoutExecutionCount: 0,
+  detailScrollIdleTimer: 0,
   themeMode: THEME_MODES.has(savedThemeMode) ? savedThemeMode : "system",
   languageMode: normalizeLanguageMode(savedLanguageMode),
   effectiveLanguage: resolveLanguageMode(savedLanguageMode),
@@ -939,6 +965,7 @@ const PROCEDURE_OVERVIEW_COLORS = Object.freeze([
   "#4f9ce5",
 ]);
 const DRAWING_HISTORY_LIMIT = 30;
+const DETAIL_REFRESH_TTL_MS = 15_000;
 const EMPTY_LIST = Object.freeze([]);
 const versionPathSegment = (value) => `_v${encodeURIComponent(String(value || 0))}`;
 
@@ -981,8 +1008,14 @@ function mapSourceModeForBaseMap(type) {
   return type === "offline" ? "offline" : "online";
 }
 
+function syncMapThemeAttributes() {
+  document.documentElement.dataset.mapSource = currentMapSourceMode();
+  document.documentElement.dataset.onlineMapProvider = normalizeOnlineMapProvider(state.onlineMapProvider);
+}
+
 function setMapSourceMode(mode, { persist = true } = {}) {
   state.mapSourceMode = normalizeMapSourceMode(mode);
+  syncMapThemeAttributes();
   if (persist) {
     writeLocalStorageValue("navplannerMapSourceMode", state.mapSourceMode);
   }
@@ -2011,6 +2044,7 @@ installMobileViewportLock();
 installMobilePanelDragHandle();
 installMobileInputTouchFocus();
 installPhoneLandscapeSafeAreaTuning();
+installDetailPanelScrollPerformance();
 
 const autoRouteLayerGroup = L.layerGroup().addTo(map);
 const manualRouteLayerGroup = L.layerGroup().addTo(map);
@@ -4173,6 +4207,7 @@ function applyOnlineMapProvider(provider) {
     return;
   }
   state.onlineMapProvider = normalized;
+  syncMapThemeAttributes();
   writeLocalStorageValue("navplannerOnlineMapProvider", normalized);
   refreshOnlineBaseLayer({ bumpVersion: true });
   setBaseMap("terrain");
@@ -7121,6 +7156,20 @@ function installMobileInputTouchFocus() {
       postNativeEvent("focusFormControl");
     }
   };
+  document.addEventListener(
+    "pointerdown",
+    (event) => {
+      if (formControlFromEvent(event)) {
+        return;
+      }
+      const active = document.activeElement;
+      if (active && isKeyboardTextControl(active)) {
+        active.blur();
+        postNativeEvent("blurFormControl");
+      }
+    },
+    { capture: true, passive: true },
+  );
   const focusControl = (control) => {
     if (!control) {
       return;
@@ -7641,6 +7690,7 @@ function applyThemeMode(mode, { persist = true } = {}) {
     : normalized;
   document.documentElement.dataset.themeMode = normalized;
   document.documentElement.dataset.theme = effectiveTheme;
+  syncMapThemeAttributes();
   elements.themeChoiceButtons.forEach((button) => {
     const active = button.dataset.themeChoice === normalized;
     button.classList.toggle("active", active);
@@ -7716,6 +7766,117 @@ function handleNativeAppIconChanged(payload = {}) {
   }
 }
 
+function detailScrollHost(tab) {
+  const usesOuterMobileScroller = isPhoneWorkbench()
+    && window.innerWidth <= 1024
+    && window.innerHeight >= window.innerWidth;
+  if (usesOuterMobileScroller) {
+    return elements.detailPanel;
+  }
+  return Array.from(elements.detailTabPanels).find((panel) => panel.dataset.detailPanel === tab) || null;
+}
+
+function rememberDetailScrollPosition(tab) {
+  const host = detailScrollHost(tab);
+  if (host) {
+    state.detailScrollPositions.set(tab, host.scrollTop);
+  }
+}
+
+function restoreDetailScrollPosition(tab) {
+  const host = detailScrollHost(tab);
+  if (!host) {
+    return;
+  }
+  const scrollTop = state.detailScrollPositions.get(tab) || 0;
+  window.requestAnimationFrame(() => {
+    host.scrollTop = scrollTop;
+  });
+}
+
+function refreshDetailResource(key, task, ttl = DETAIL_REFRESH_TTL_MS) {
+  const existing = state.detailRefreshRecords.get(key);
+  if (existing?.promise) {
+    return existing.promise;
+  }
+  if (existing?.completedAt && Date.now() - existing.completedAt < ttl) {
+    return Promise.resolve(existing.value);
+  }
+  const record = existing || { completedAt: 0, promise: null, value: null };
+  record.promise = Promise.resolve()
+    .then(() => {
+      state.detailResourceExecutionCounts.set(
+        key,
+        (state.detailResourceExecutionCounts.get(key) || 0) + 1,
+      );
+      return task();
+    })
+    .then((value) => {
+      record.value = value;
+      record.completedAt = Date.now();
+      return value;
+    })
+    .finally(() => {
+      record.promise = null;
+    });
+  state.detailRefreshRecords.set(key, record);
+  return record.promise;
+}
+
+function refreshDetailTabData(tab) {
+  if (tab === "settings") {
+    updateMapTileZoomOffsetControl();
+    refreshDetailResource("database-list", () => refreshDatabaseList())
+      .catch((error) => console.warn("本地数据库列表刷新失败", error));
+    refreshDetailResource("offline-map-status", () => refreshOfflineMapStatus())
+      .catch((error) => console.warn("离线地图状态刷新失败", error));
+    refreshDetailResource("map-cache-status", () => refreshMapCacheStatus())
+      .catch((error) => console.warn("在线地图缓存状态刷新失败", error));
+  } else if (tab === "query") {
+    refreshDetailResource("fr24-cache-status", () => refreshFR24CacheStatus())
+      .catch((error) => console.warn("FR24 缓存状态刷新失败", error));
+    refreshDetailResource("fr24-access-status", () => refreshFR24AccessStatus(), 5_000)
+      .catch((error) => console.warn("FR24 访问状态刷新失败", error));
+  }
+}
+
+function scheduleDetailLayoutSync(tab, delay = 0) {
+  if (state.detailLayoutTimer) {
+    window.clearTimeout(state.detailLayoutTimer);
+  }
+  if (state.detailLayoutFrame) {
+    window.cancelAnimationFrame(state.detailLayoutFrame);
+  }
+  state.detailLayoutTimer = window.setTimeout(() => {
+    state.detailLayoutTimer = 0;
+    state.detailLayoutFrame = window.requestAnimationFrame(() => {
+      state.detailLayoutFrame = 0;
+      state.detailLayoutExecutionCount += 1;
+      map.invalidateSize({ animate: false, pan: false });
+      scheduleVectorMapResizeSync();
+      if (tab === "query") {
+        scheduleFR24ProfileChartResize();
+      } else if (tab === "calculate") {
+        scheduleCalculateRender();
+      }
+    });
+  }, delay);
+}
+
+function installDetailPanelScrollPerformance() {
+  const panel = elements.detailPanel;
+  if (!panel) {
+    return;
+  }
+  panel.addEventListener("scroll", () => {
+    panel.classList.add("is-scrolling");
+    window.clearTimeout(state.detailScrollIdleTimer);
+    state.detailScrollIdleTimer = window.setTimeout(() => {
+      panel.classList.remove("is-scrolling");
+    }, 160);
+  }, { passive: true });
+}
+
 /**
  * 功能：切换 iPad 详情栏中的 Airport / Query / Calculate / Settings 页面。
  * 输入：tab 为 airport、query、calculate 或 settings。
@@ -7723,7 +7884,14 @@ function handleNativeAppIconChanged(payload = {}) {
  */
 function setDetailTab(tab) {
   const normalized = ["airport", "query", "calculate", "settings"].includes(tab) ? tab : "airport";
+  if (state.detailTabInitialized && normalized === state.activeDetailTab) {
+    return;
+  }
+  if (state.detailTabInitialized) {
+    rememberDetailScrollPosition(state.activeDetailTab);
+  }
   state.activeDetailTab = normalized;
+  state.detailTabInitialized = true;
   document.body.dataset.detailTab = normalized;
   elements.detailModeTabButtons.forEach((button) => {
     const active = button.dataset.detailTab === normalized;
@@ -7733,22 +7901,9 @@ function setDetailTab(tab) {
   elements.detailTabPanels.forEach((panel) => {
     panel.classList.toggle("hidden", panel.dataset.detailPanel !== normalized);
   });
-  if (normalized === "settings") {
-    updateMapTileZoomOffsetControl();
-    refreshDatabaseList().catch((error) => console.warn("本地数据库列表刷新失败", error));
-    refreshOfflineMapStatus().catch((error) => console.warn("离线地图状态刷新失败", error));
-    refreshMapCacheStatus().catch((error) => console.warn("在线地图缓存状态刷新失败", error));
-  }
-  if (normalized === "query") {
-    refreshFR24CacheStatus().catch((error) => console.warn("FR24 缓存状态刷新失败", error));
-    refreshFR24AccessStatus().catch((error) => console.warn("FR24 访问状态刷新失败", error));
-    scheduleFR24ProfileChartResize();
-    scheduleFR24ProfileChartResize(180);
-  }
-  if (normalized === "calculate") {
-    scheduleCalculateRender();
-    scheduleCalculateRender(180);
-  }
+  refreshDetailTabData(normalized);
+  restoreDetailScrollPosition(normalized);
+  scheduleDetailLayoutSync(normalized);
 }
 
 /**
@@ -7759,10 +7914,14 @@ function setDetailTab(tab) {
 function setMobileBottomTab(tab) {
   const normalized = ["plan", "airport", "query", "calculate", "settings"].includes(tab) ? tab : "plan";
   const changed = normalized !== state.activeMobileTab;
+  if (state.mobileTabInitialized && !changed) {
+    return;
+  }
   if (changed && document.activeElement instanceof HTMLElement) {
     document.activeElement.blur();
   }
   state.activeMobileTab = normalized;
+  state.mobileTabInitialized = true;
   document.body.dataset.mobileTab = normalized;
   elements.mobileBottomTabButtons.forEach((button) => {
     const active = button.dataset.mobileTab === normalized;
@@ -7772,19 +7931,7 @@ function setMobileBottomTab(tab) {
   if (normalized === "airport" || normalized === "query" || normalized === "calculate" || normalized === "settings") {
     setDetailTab(normalized);
   }
-  window.setTimeout(() => {
-    map.invalidateSize({ pan: false });
-    scheduleVectorMapResizeSync();
-    if (normalized === "settings") {
-      updateMapTileZoomOffsetControl();
-    }
-    if (normalized === "query") {
-      scheduleFR24ProfileChartResize();
-    }
-    if (normalized === "calculate") {
-      scheduleCalculateRender();
-    }
-  }, 90);
+  scheduleDetailLayoutSync(normalized, 90);
 }
 
 /**
@@ -7925,6 +8072,8 @@ function localizedErrorMessage(message) {
     [/^FR24 web access was blocked\. Open FR24 verification in Query, complete verification, then sync the session\.?$/i, () => t("error.fr24Session")],
     [/^FR24 web access was blocked by Cloudflare verification\.?$/i, () => t("error.fr24Cloudflare")],
     [/^FR24 web returned an HTML response\.?$/i, () => t("error.fr24Cloudflare")],
+    [/^FR24 web returned HTTP 400(?::.*)?\.?$/i, () => t("error.fr24BadRequest")],
+    [/^FR24 web returned HTTP 429(?::.*)?\.?$/i, () => t("error.fr24RateLimited")],
     [/^FR24 web playback did not return enough trajectory points\.?$/i, () => t("error.fr24NotEnough")],
     [/^FR24 flightId missing\.?$/i, () => t("error.fr24MissingId")],
   ];
@@ -7964,10 +8113,14 @@ function formatCoord(value, suffixes) {
  * 输入：container、items、onSelect。
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
-function renderSearchResults(container, items, onSelect) {
+function renderSearchResults(container, items, onSelect, query = "") {
   container.innerHTML = "";
+  [elements.departureResults, elements.arrivalResults, elements.manualResults]
+    .filter((item) => item && item !== container)
+    .forEach((item) => item.classList.add("hidden"));
   if (!items.length) {
-    container.classList.add("hidden");
+    container.innerHTML = `<div class="search-empty" role="status">${escapeHtml(t("search.noResults", { query }))}</div>`;
+    container.classList.remove("hidden");
     return;
   }
   items.forEach((item) => {
@@ -7984,9 +8137,6 @@ function renderSearchResults(container, items, onSelect) {
     row.addEventListener("click", () => onSelect(item));
     container.appendChild(row);
   });
-  [elements.departureResults, elements.arrivalResults, elements.manualResults]
-    .filter((item) => item && item !== container)
-    .forEach((item) => item.classList.add("hidden"));
   container.classList.remove("hidden");
 }
 
@@ -8025,24 +8175,29 @@ function airportSlotForInput(target) {
 async function searchEntities(target, container) {
   if (performance.now() < state.searchSuppressedUntil) {
     container.classList.add("hidden");
-    return;
+    return [];
   }
   if (document.activeElement !== target) {
     container.classList.add("hidden");
-    return;
+    return [];
   }
   const query = target.value.trim();
   if (query.length < 2) {
     container.classList.add("hidden");
     container.innerHTML = "";
-    return;
+    return [];
   }
   const payload = await fetchJson(`/api/search?q=${encodeURIComponent(query)}`);
-  if (performance.now() < state.searchSuppressedUntil || document.activeElement !== target) {
+  if (
+    performance.now() < state.searchSuppressedUntil
+    || document.activeElement !== target
+    || target.value.trim() !== query
+  ) {
     container.classList.add("hidden");
-    return;
+    return [];
   }
-  renderSearchResults(container, payload.results, (item) => {
+  const items = payload.results || [];
+  renderSearchResults(container, items, (item) => {
     target.value = item.ident;
     container.classList.add("hidden");
     if (item.kind === "airport") {
@@ -8053,7 +8208,8 @@ async function searchEntities(target, container) {
       return;
     }
     flyToPoint(item);
-  });
+  }, query);
+  return items;
 }
 
 /**
@@ -12214,12 +12370,84 @@ function cloneJSON(value) {
   return value === null || value === undefined ? value : JSON.parse(JSON.stringify(value));
 }
 
-function setFR24QueryStatus(message, isError = false) {
+function setFR24QueryStatus(message, isError = false, requestVersion = null) {
+  if (requestVersion !== null && requestVersion !== state.fr24QueryRequestVersion) {
+    return;
+  }
   if (!elements.fr24QueryStatus) {
     return;
   }
   elements.fr24QueryStatus.textContent = message;
   elements.fr24QueryStatus.classList.toggle("settings-status-error", Boolean(isError));
+}
+
+function setFR24ErrorStatus(error) {
+  setFR24QueryStatus(localizedErrorMessage(error?.message ?? error), true);
+}
+
+function updateFR24CardProgress(key) {
+  const entry = state.fr24BusyByKey.get(key);
+  document.querySelectorAll("[data-fr24-progress-for]").forEach((container) => {
+    if (container.dataset.fr24ProgressFor !== key) {
+      return;
+    }
+    container.classList.toggle("hidden", !entry);
+    const text = container.querySelector("[data-fr24-progress-text]");
+    if (text && entry) {
+      const seconds = Math.max(0, Math.floor((performance.now() - entry.startedAt) / 1000));
+      text.textContent = t("query.phaseElapsed", { phase: entry.phase, seconds });
+    }
+    const cancelButton = container.querySelector('[data-fr24-action="cancel"]');
+    if (cancelButton) {
+      cancelButton.disabled = !entry || entry.cancelling;
+    }
+  });
+}
+
+function beginFR24CardProgress(key, phase, controller) {
+  const previous = state.fr24BusyByKey.get(key);
+  if (previous?.timer) {
+    window.clearInterval(previous.timer);
+  }
+  const entry = {
+    phase,
+    controller,
+    cancelling: false,
+    startedAt: performance.now(),
+    timer: 0,
+  };
+  entry.timer = window.setInterval(() => updateFR24CardProgress(key), 1000);
+  state.fr24BusyByKey.set(key, entry);
+  updateFR24CardProgress(key);
+}
+
+function setFR24CardProgressPhase(key, phase) {
+  const entry = state.fr24BusyByKey.get(key);
+  if (!entry) {
+    return;
+  }
+  entry.phase = phase;
+  updateFR24CardProgress(key);
+}
+
+function finishFR24CardProgress(key) {
+  const entry = state.fr24BusyByKey.get(key);
+  if (entry?.timer) {
+    window.clearInterval(entry.timer);
+  }
+  state.fr24BusyByKey.delete(key);
+  updateFR24CardProgress(key);
+}
+
+function cancelFR24CardProgress(key) {
+  const entry = state.fr24BusyByKey.get(key);
+  if (!entry || entry.cancelling) {
+    return;
+  }
+  entry.cancelling = true;
+  entry.phase = t("query.phaseCancelling");
+  entry.controller?.abort?.();
+  updateFR24CardProgress(key);
 }
 
 function setFR24QueryBusy(isBusy) {
@@ -12233,7 +12461,10 @@ function setFR24QueryBusy(isBusy) {
     ...Array.from(elements.fr24FlightList?.querySelectorAll("[data-fr24-action]") || []),
     ...Array.from(elements.fr24CacheList?.querySelectorAll("[data-fr24-action]") || []),
   ].forEach((button) => {
-    button.disabled = Boolean(isBusy);
+    const isCancel = button.dataset.fr24Action === "cancel";
+    button.disabled = isCancel
+      ? !state.fr24BusyByKey.has(button.dataset.fr24Key)
+      : Boolean(isBusy);
   });
   if (elements.fr24ManualHistoryInput) {
     elements.fr24ManualHistoryInput.disabled = Boolean(isBusy);
@@ -12247,7 +12478,6 @@ function currentQueryRouteInputs() {
   const departure = elements.departureInput.value.trim().toUpperCase();
   const arrival = elements.arrivalInput.value.trim().toUpperCase();
   if (!departure || !arrival) {
-    setStatus(t("route.needAirports"), true);
     setFR24QueryStatus(t("route.needAirports"), true);
     return null;
   }
@@ -12430,6 +12660,19 @@ function renderFR24FlightActions(key) {
   `;
 }
 
+function renderFR24CardProgress(key) {
+  const entry = state.fr24BusyByKey.get(key);
+  const seconds = entry ? Math.max(0, Math.floor((performance.now() - entry.startedAt) / 1000)) : 0;
+  const text = entry ? t("query.phaseElapsed", { phase: entry.phase, seconds }) : "";
+  return `
+    <div class="query-flight-progress ${entry ? "" : "hidden"}" data-fr24-progress-for="${escapeHtml(key)}" role="status" aria-live="polite">
+      <span class="query-flight-progress-spinner" aria-hidden="true"></span>
+      <span data-fr24-progress-text>${escapeHtml(text)}</span>
+      <button class="ghost-button compact-button" type="button" data-fr24-action="cancel" data-fr24-key="${escapeHtml(key)}" ${entry && !entry.cancelling ? "" : "disabled"}>${escapeHtml(t("query.cancelAction"))}</button>
+    </div>
+  `;
+}
+
 function renderFR24CacheActions(flight, key) {
   const isFavorite = flight.favorite === true;
   const favoriteLabel = isFavorite ? t("query.cacheUnfavorite") : t("query.cacheFavorite");
@@ -12464,7 +12707,7 @@ function renderFR24FlightCard(flight, key, { history = false, cacheItem = false 
     ? `<span class="query-flight-badge query-flight-badge-favorite">${escapeHtml(t("query.cacheFavoriteBadge"))}</span>`
     : "";
   return `
-    <article class="query-flight-card ${history ? "is-history" : ""} ${cacheItem ? "is-cache" : ""}">
+    <article class="query-flight-card ${history ? "is-history" : ""} ${cacheItem ? "is-cache" : ""}" data-fr24-card-key="${escapeHtml(key)}">
       <div class="query-flight-head">
         <div>
           <div class="query-flight-number">${escapeHtml(flightPrimaryLabel(flight))}</div>
@@ -12482,6 +12725,7 @@ function renderFR24FlightCard(flight, key, { history = false, cacheItem = false 
         ${downloadedLine}
       </div>
       ${cacheItem ? renderFR24CacheActions(flight, key) : renderFR24FlightActions(key)}
+      ${renderFR24CardProgress(key)}
       ${history || cacheItem ? "" : `
         <details class="query-history">
           <summary>${escapeHtml(t("query.history"))}</summary>
@@ -12565,10 +12809,27 @@ function updateFR24AccessSummary(payload) {
   if (!elements.fr24AccessSummary) {
     return;
   }
-  const synced = Boolean(payload?.cookie_configured || payload?.frpl_configured);
+  const accessState = String(payload?.access_state || "unknown");
+  const labelKey = {
+    available: "query.accessStateAvailable",
+    challenge: "query.accessStateChallenge",
+    expired: "query.accessStateExpired",
+    configured: "query.accessStateConfigured",
+    unknown: "query.accessStateUnknown",
+  }[accessState] || "query.accessStateUnknown";
   elements.fr24AccessSummary.textContent = t("query.accessSummary", {
-    state: synced ? t("query.accessSyncedState") : t("query.accessUnsyncedState"),
+    state: t(labelKey),
   });
+}
+
+async function waitForFR24SessionWarmup(requestVersion) {
+  const warmupUntil = Number(state.fr24AccessStatus?.warmup_until || 0) * 1000;
+  while (warmupUntil > Date.now() && requestVersion === state.fr24QueryRequestVersion) {
+    const seconds = Math.max(1, Math.ceil((warmupUntil - Date.now()) / 1000));
+    setFR24QueryStatus(t("query.accessWarmup", { seconds }), false, requestVersion);
+    await new Promise((resolve) => window.setTimeout(resolve, Math.min(1000, warmupUntil - Date.now())));
+  }
+  return requestVersion === state.fr24QueryRequestVersion;
 }
 
 function fr24NativeSessionMessage(payload = {}) {
@@ -12588,52 +12849,43 @@ function fr24NativeSessionMessage(payload = {}) {
 function openFR24VerificationBrowser() {
   if (!window.webkit?.messageHandlers?.navplanner) {
     setFR24QueryStatus(t("database.iosOnly"), true);
-    setStatus(t("database.iosOnly"), true);
     return;
   }
   postNativeEvent("openFR24Verification");
   setFR24QueryStatus(t("query.accessOpening"));
-  setStatus(t("query.accessOpening"));
 }
 
 function syncFR24BrowserSession() {
   if (!window.webkit?.messageHandlers?.navplanner) {
     setFR24QueryStatus(t("database.iosOnly"), true);
-    setStatus(t("database.iosOnly"), true);
     return;
   }
   postNativeEvent("syncFR24Session");
   setFR24QueryStatus(t("query.accessSyncing"));
-  setStatus(t("query.accessSyncing"));
 }
 
 function openFR24CacheDirectory() {
   if (!window.webkit?.messageHandlers?.navplanner) {
     setFR24QueryStatus(t("database.iosOnly"), true);
-    setStatus(t("database.iosOnly"), true);
     return;
   }
   postNativeEvent("openFR24CacheDirectory");
   setFR24QueryStatus(t("query.cacheDirectoryOpening"));
-  setStatus(t("query.cacheDirectoryOpening"));
 }
 
 function importFR24GPX() {
   if (!window.webkit?.messageHandlers?.navplanner) {
     setFR24QueryStatus(t("database.iosOnly"), true);
-    setStatus(t("database.iosOnly"), true);
     return;
   }
   postNativeEvent("importFR24GPX");
   setFR24QueryStatus(t("query.importGPXOpening"));
-  setStatus(t("query.importGPXOpening"));
 }
 
 function handleNativeFR24SessionUpdated(payload = {}) {
   updateFR24AccessSummary(payload);
   const message = fr24NativeSessionMessage(payload);
   setFR24QueryStatus(message, Boolean(payload.error));
-  setStatus(message, Boolean(payload.error));
 }
 
 function handleNativeFR24CacheDirectoryOpened(payload = {}) {
@@ -12642,7 +12894,6 @@ function handleNativeFR24CacheDirectoryOpened(payload = {}) {
     ? (currentLanguage() === "zh-Hans" && rawMessage ? rawMessage : t("query.cacheDirectoryFailed"))
     : (currentLanguage() === "zh-Hans" && rawMessage ? rawMessage : t("query.cacheDirectoryOpened"));
   setFR24QueryStatus(message, Boolean(payload.error));
-  setStatus(message, Boolean(payload.error));
 }
 
 function handleNativeFR24GPXImported(payload = {}) {
@@ -12650,7 +12901,6 @@ function handleNativeFR24GPXImported(payload = {}) {
     const rawMessage = cleanErrorMessage(payload.message || "");
     const message = currentLanguage() === "zh-Hans" && rawMessage ? rawMessage : localizedErrorMessage(rawMessage);
     setFR24QueryStatus(message, true);
-    setStatus(message, true);
     return;
   }
   const count = drawFR24TrackPoints(payload.track_points || [], { fitBounds: true });
@@ -12659,7 +12909,6 @@ function handleNativeFR24GPXImported(payload = {}) {
     count: formatCount(count),
   });
   setFR24QueryStatus(message);
-  setStatus(message);
 }
 
 async function refreshFR24CacheStatus() {
@@ -12687,7 +12936,6 @@ async function searchFR24Cache() {
     renderFR24CacheFlights([]);
     const message = localizedErrorMessage(error.message);
     setFR24QueryStatus(message, true);
-    setStatus(message, true);
   } finally {
     setFR24QueryBusy(false);
   }
@@ -12720,7 +12968,6 @@ async function saveFR24Access() {
   clearFR24AccessInputs();
   updateFR24AccessSummary(payload);
   setFR24QueryStatus(t("query.accessSaved"));
-  setStatus(t("query.accessSaved"));
 }
 
 async function clearFR24Access() {
@@ -12728,19 +12975,25 @@ async function clearFR24Access() {
   clearFR24AccessInputs();
   updateFR24AccessSummary(payload);
   setFR24QueryStatus(t("query.accessCleared"));
-  setStatus(t("query.accessCleared"));
 }
 
 async function searchFR24Flights() {
   hideSearchResults();
+  const requestVersion = ++state.fr24QueryRequestVersion;
   const route = currentQueryRouteInputs();
   if (!route) {
     renderFR24Flights([]);
     return;
   }
   setFR24QueryBusy(true);
-  setFR24QueryStatus(t("query.loading"));
   try {
+    if (!state.fr24AccessStatus) {
+      await refreshFR24AccessStatus();
+    }
+    if (!await waitForFR24SessionWarmup(requestVersion)) {
+      return;
+    }
+    setFR24QueryStatus(t("query.loading"), false, requestVersion);
     const payload = await fetchJson(
       `/api/fr24/search?departure=${encodeURIComponent(route.departure)}&arrival=${encodeURIComponent(route.arrival)}&limit=10`,
     );
@@ -12749,12 +13002,21 @@ async function searchFR24Flights() {
     renderFR24Flights(flights);
     updateFR24CacheSummary(payload.cache || state.fr24CacheStatus || {});
     updateFR24AccessSummary(payload.access || state.fr24AccessStatus || {});
-    setFR24QueryStatus(flights.length ? t("query.loaded", { count: flights.length }) : t("query.noFlights"), !flights.length);
+    setFR24QueryStatus(
+      flights.length ? t("query.loaded", { count: flights.length }) : t("query.noFlights"),
+      !flights.length,
+      requestVersion,
+    );
   } catch (error) {
+    if (requestVersion !== state.fr24QueryRequestVersion) {
+      return;
+    }
     renderFR24Flights([]);
     const message = localizedErrorMessage(error.message);
-    setFR24QueryStatus(message, true);
-    setStatus(message, true);
+    setFR24QueryStatus(message, true, requestVersion);
+    refreshFR24AccessStatus().catch((statusError) => {
+      console.warn("FR24 访问状态刷新失败", statusError);
+    });
   } finally {
     setFR24QueryBusy(false);
   }
@@ -12765,7 +13027,6 @@ async function searchFR24ManualHistory() {
   const query = elements.fr24ManualHistoryInput?.value.trim() || "";
   if (!query) {
     setFR24QueryStatus(t("query.manualHistoryMissing"), true);
-    setStatus(t("query.manualHistoryMissing"), true);
     return;
   }
   const route = optionalQueryRouteInputs();
@@ -12791,7 +13052,6 @@ async function searchFR24ManualHistory() {
     renderFR24Flights([], { history: true, prefix: "manual" });
     const message = localizedErrorMessage(error.message);
     setFR24QueryStatus(message, true);
-    setStatus(message, true);
   } finally {
     setFR24QueryBusy(false);
   }
@@ -12817,7 +13077,6 @@ async function loadFR24History(key) {
   } catch (error) {
     const message = localizedErrorMessage(error.message);
     setFR24QueryStatus(message, true);
-    setStatus(message, true);
   } finally {
     setFR24QueryBusy(false);
   }
@@ -13356,21 +13615,27 @@ async function downloadAndDrawFR24Track(key) {
   if (!flight) {
     return;
   }
+  const controller = new AbortController();
+  beginFR24CardProgress(key, t("query.phaseDownloading"), controller);
   setFR24QueryBusy(true);
   setFR24QueryStatus(t("query.downloading"));
   try {
-    const payload = await fetchFR24TrackPayload(flight);
-    await syncPlanAirportsFromFR24Flight(payload.flight || flight);
+    const payload = await fetchFR24TrackPayload(flight, { signal: controller.signal });
+    await syncPlanAirportsFromFR24Flight(payload.flight || flight, { signal: controller.signal });
+    throwIfAborted(controller.signal);
     const count = drawFR24TrackPoints(payload.track_points || []);
     updateFR24CacheSummary(payload.cache || state.fr24CacheStatus || {});
     updateFR24AccessSummary(payload.access || state.fr24AccessStatus || {});
     setFR24QueryStatus(t("query.drawn", { count }));
-    setStatus(t("query.drawn", { count }));
   } catch (error) {
-    const message = localizedErrorMessage(error.message);
-    setFR24QueryStatus(message, true);
-    setStatus(message, true);
+    if (isAbortError(error)) {
+      setFR24QueryStatus(t("query.cancelled"));
+    } else {
+      const message = localizedErrorMessage(error.message);
+      setFR24QueryStatus(message, true);
+    }
   } finally {
+    finishFR24CardProgress(key);
     setFR24QueryBusy(false);
   }
 }
@@ -13381,12 +13646,13 @@ async function matchFR24FlightTrack(key) {
     return;
   }
   const controller = beginRouteOperation(t("track.operation"));
+  beginFR24CardProgress(key, t("query.phaseDownloading"), controller);
   setFR24QueryBusy(true);
   setFR24QueryStatus(t("query.matching"));
-  setStatus(t("query.matching"), false, "progress");
   try {
     const download = await fetchFR24TrackPayload(flight, { signal: controller.signal });
     throwIfAborted(controller.signal);
+    setFR24CardProgressPhase(key, t("query.phaseMatching"));
     const route = await syncPlanAirportsFromFR24Flight(download.flight || flight, {
       signal: controller.signal,
     }) || currentQueryRouteInputs();
@@ -13425,13 +13691,14 @@ async function matchFR24FlightTrack(key) {
     setStatus(message, false, "success");
   } catch (error) {
     if (isAbortError(error)) {
+      setFR24QueryStatus(t("query.cancelled"));
       setStatus(t("track.stopped"));
     } else {
       const message = localizedErrorMessage(error.message);
       setFR24QueryStatus(message, true);
-      setStatus(message, true);
     }
   } finally {
+    finishFR24CardProgress(key);
     setFR24QueryBusy(false);
     endRouteOperation(controller);
   }
@@ -13442,7 +13709,6 @@ function clearFR24TrackDrawing(options = {}) {
   const recordHistory = eventLike ? true : options.recordHistory !== false;
   if (!state.fr24TrackPayload) {
     setFR24QueryStatus(t("query.noFR24Track"), true);
-    setStatus(t("query.noFR24Track"), true);
     updateTrackHistoryControlState();
     return;
   }
@@ -13456,7 +13722,6 @@ function clearFR24TrackDrawing(options = {}) {
   applyMapOverlayVisibility();
   updateTrackHistoryControlState();
   setFR24QueryStatus(t("query.fr24TrackCleared"));
-  setStatus(t("query.fr24TrackCleared"));
 }
 
 async function restoreFR24MatchedRoute() {
@@ -13509,11 +13774,9 @@ async function deleteFR24CachedFlight(key) {
     updateFR24CacheSummary(payload.cache || state.fr24CacheStatus || {});
     await searchFR24Cache();
     setFR24QueryStatus(t("query.cacheDeleted"));
-    setStatus(t("query.cacheDeleted"));
   } catch (error) {
     const message = localizedErrorMessage(error.message);
     setFR24QueryStatus(message, true);
-    setStatus(message, true);
   } finally {
     setFR24QueryBusy(false);
   }
@@ -13537,11 +13800,9 @@ async function setFR24CacheFavorite(key, favorite) {
     await searchFR24Cache();
     const message = favorite ? t("query.cacheFavorited") : t("query.cacheUnfavorited");
     setFR24QueryStatus(message);
-    setStatus(message);
   } catch (error) {
     const message = localizedErrorMessage(error.message);
     setFR24QueryStatus(message, true);
-    setStatus(message, true);
   } finally {
     setFR24QueryBusy(false);
   }
@@ -13555,7 +13816,6 @@ async function shareFR24CachedFlight(key) {
   }
   if (!window.webkit?.messageHandlers?.navplanner) {
     setFR24QueryStatus(t("database.iosOnly"), true);
-    setStatus(t("database.iosOnly"), true);
     return;
   }
   setFR24QueryBusy(true);
@@ -13576,11 +13836,9 @@ async function shareFR24CachedFlight(key) {
     });
     await searchFR24Cache();
     setFR24QueryStatus(t("query.cacheShareReady"));
-    setStatus(t("query.cacheShareReady"));
   } catch (error) {
     const message = localizedErrorMessage(error.message);
     setFR24QueryStatus(message, true);
-    setStatus(message, true);
   } finally {
     setFR24QueryBusy(false);
   }
@@ -13601,7 +13859,6 @@ async function clearFR24Cache() {
     ? t("query.cacheClearedWithFavorites", { count: formatCount(favoriteCount) })
     : t("query.cacheCleared");
   setFR24QueryStatus(message);
-  setStatus(message);
 }
 
 function handleFR24FlightAction(event) {
@@ -13612,18 +13869,20 @@ function handleFR24FlightAction(event) {
   event.preventDefault();
   const key = button.dataset.fr24Key;
   const action = button.dataset.fr24Action;
-  if (action === "history") {
-    loadFR24History(key).catch(setErrorStatus);
+  if (action === "cancel") {
+    cancelFR24CardProgress(key);
+  } else if (action === "history") {
+    loadFR24History(key).catch(setFR24ErrorStatus);
   } else if (action === "draw") {
-    downloadAndDrawFR24Track(key).catch(setErrorStatus);
+    downloadAndDrawFR24Track(key).catch(setFR24ErrorStatus);
   } else if (action === "match") {
-    matchFR24FlightTrack(key).catch(setErrorStatus);
+    matchFR24FlightTrack(key).catch(setFR24ErrorStatus);
   } else if (action === "delete-cache") {
-    deleteFR24CachedFlight(key).catch(setErrorStatus);
+    deleteFR24CachedFlight(key).catch(setFR24ErrorStatus);
   } else if (action === "favorite-cache") {
-    setFR24CacheFavorite(key, button.dataset.fr24Favorite === "true").catch(setErrorStatus);
+    setFR24CacheFavorite(key, button.dataset.fr24Favorite === "true").catch(setFR24ErrorStatus);
   } else if (action === "share-cache") {
-    shareFR24CachedFlight(key).catch(setErrorStatus);
+    shareFR24CachedFlight(key).catch(setFR24ErrorStatus);
   }
 }
 
@@ -13708,7 +13967,7 @@ registerQueryPage({
   updateFR24ProfileCursor,
   handleFR24ProfilePointer,
   ensureFR24ProfileResizeObserver,
-  setErrorStatus,
+  setErrorStatus: setFR24ErrorStatus,
 });
 
 calculatePage.registerEvents();
@@ -13890,6 +14149,39 @@ async function applySimulatorDebugLaunch() {
   if (typeof config.arrival === "string") {
     elements.arrivalInput.value = config.arrival.trim().toUpperCase();
   }
+  if (typeof config.searchAirportQuery === "string") {
+    const slot = AIRPORT_SLOTS.includes(config.searchAirportSlot) ? config.searchAirportSlot : "departure";
+    const target = elements[`${slot}Input`];
+    const results = elements[`${slot}Results`];
+    setMobileBottomTab("plan");
+    target.value = config.searchAirportQuery.trim();
+    target.focus({ preventScroll: true });
+    const debugSearchResults = await searchEntities(target, results);
+    if (Number.isFinite(Number(config.searchProbeDelayMs))) {
+      await new Promise((resolve) => window.setTimeout(resolve, Math.max(0, Number(config.searchProbeDelayMs))));
+    }
+    const resultsRect = results.getBoundingClientRect();
+    const resultsStyle = window.getComputedStyle(results);
+    writeLocalStorageValue("navplannerDebugSearchResult", JSON.stringify({
+      query: config.searchAirportQuery,
+      ids: debugSearchResults.map((item) => item.ident),
+      renderedIds: Array.from(results.querySelectorAll(".search-item-title")).map((item) => item.textContent),
+      emptyMessage: results.querySelector(".search-empty")?.textContent || "",
+      hidden: results.classList.contains("hidden"),
+      display: resultsStyle.display,
+      visibility: resultsStyle.visibility,
+      opacity: resultsStyle.opacity,
+      rect: {
+        top: Math.round(resultsRect.top),
+        bottom: Math.round(resultsRect.bottom),
+        left: Math.round(resultsRect.left),
+        right: Math.round(resultsRect.right),
+        width: Math.round(resultsRect.width),
+        height: Math.round(resultsRect.height),
+      },
+      activeElement: document.activeElement?.id || document.activeElement?.tagName || "",
+    }));
+  }
   if (typeof config.route === "string") {
     elements.routeInput.value = config.route.trim().toUpperCase();
   }
@@ -13956,10 +14248,37 @@ async function applySimulatorDebugLaunch() {
   if (config.buildRoute) {
     await buildRoute({ forceAuto: config.forceAuto !== false });
   }
+  if (typeof config.fr24DepartureOverride === "string") {
+    elements.departureInput.value = config.fr24DepartureOverride.trim().toUpperCase();
+  }
+  if (typeof config.fr24ArrivalOverride === "string") {
+    elements.arrivalInput.value = config.fr24ArrivalOverride.trim().toUpperCase();
+  }
 
   const mobileTab = typeof config.mobileTab === "string" ? config.mobileTab : config.tab;
   if (typeof mobileTab === "string") {
     setMobileBottomTab(mobileTab);
+  }
+  if (Array.isArray(config.tabStressSequence)) {
+    const stressStartedAt = performance.now();
+    state.detailRefreshRecords.clear();
+    state.detailResourceExecutionCounts.clear();
+    state.detailLayoutExecutionCount = 0;
+    config.tabStressSequence.forEach((tab) => setMobileBottomTab(tab));
+    await Promise.allSettled(
+      Array.from(state.detailRefreshRecords.values())
+        .map((record) => record.promise)
+        .filter(Boolean),
+    );
+    await new Promise((resolve) => window.setTimeout(resolve, 180));
+    writeLocalStorageValue("navplannerDebugTabStressResult", JSON.stringify({
+      activeMobileTab: state.activeMobileTab,
+      activeDetailTab: state.activeDetailTab,
+      requestedTransitions: config.tabStressSequence.length,
+      elapsedMs: Math.round(performance.now() - stressStartedAt),
+      layoutExecutions: state.detailLayoutExecutionCount,
+      resourceExecutions: Object.fromEntries(state.detailResourceExecutionCounts),
+    }));
   }
   if (Number.isFinite(Number(config.mobilePanelMapRatio))) {
     applyMobilePanelMapRatio(Number(config.mobilePanelMapRatio));
@@ -13970,15 +14289,120 @@ async function applySimulatorDebugLaunch() {
   if (detailTab) {
     setDetailTab(detailTab);
   }
+  if (config.runFR24Search === true) {
+    setMobileBottomTab("query");
+    await searchFR24Flights();
+    const firstFlightKey = state.fr24Flights.keys().next().value;
+    if (firstFlightKey && config.downloadFirstFR24Flight === true) {
+      downloadAndDrawFR24Track(firstFlightKey).catch(setFR24ErrorStatus);
+    } else if (firstFlightKey && config.matchFirstFR24Flight === true) {
+      matchFR24FlightTrack(firstFlightKey).catch(setFR24ErrorStatus);
+    }
+    if (typeof config.postFR24Tab === "string") {
+      setMobileBottomTab(config.postFR24Tab);
+    }
+    writeLocalStorageValue("navplannerDebugFR24Result", JSON.stringify({
+      flightCount: state.fr24Flights.size,
+      queryStatus: elements.fr24QueryStatus?.textContent || "",
+      planStatus: elements.statusText?.textContent || "",
+      accessSummary: elements.fr24AccessSummary?.textContent || "",
+      activeMobileTab: state.activeMobileTab,
+    }));
+  }
+  if (config.loadFR24Cache === true || config.matchFirstFR24CachedFlight === true) {
+    setMobileBottomTab("query");
+    if (elements.fr24CacheSearchInput && typeof config.cachedFlightQuery === "string") {
+      elements.fr24CacheSearchInput.value = config.cachedFlightQuery;
+    }
+    await searchFR24Cache();
+    const firstCachedFlightKey = state.fr24CacheFlights.keys().next().value;
+    if (firstCachedFlightKey && config.matchFirstFR24CachedFlight === true) {
+      matchFR24FlightTrack(firstCachedFlightKey).catch(setFR24ErrorStatus);
+      window.setTimeout(() => {
+        document.querySelector(`[data-fr24-card-key="${CSS.escape(firstCachedFlightKey)}"]`)
+          ?.scrollIntoView({ block: "center" });
+      }, 120);
+    }
+  }
+  if (Array.isArray(config.detailScrollStressSequence)) {
+    const tab = ["airport", "query", "calculate", "settings"].includes(config.detailScrollStressTab)
+      ? config.detailScrollStressTab
+      : state.activeDetailTab;
+    setMobileBottomTab(tab);
+    await new Promise((resolve) => window.requestAnimationFrame(resolve));
+    const host = detailScrollHost(tab);
+    const panel = Array.from(elements.detailTabPanels)
+      .find((item) => item.dataset.detailPanel === tab);
+    const samples = [];
+    let minVisibleCards = Number.POSITIVE_INFINITY;
+    if (host && panel) {
+      for (const rawRatio of config.detailScrollStressSequence) {
+        const ratio = clampNumber(Number(rawRatio), 0, 1);
+        host.scrollTop = (host.scrollHeight - host.clientHeight) * ratio;
+        host.dispatchEvent(new Event("scroll"));
+        await new Promise((resolve) => window.requestAnimationFrame(resolve));
+        const hostRect = host.getBoundingClientRect();
+        const visibleCards = Array.from(panel.querySelectorAll(".query-card, .query-flight-card, .calculate-card, .settings-card"))
+          .filter((item) => {
+            const rect = item.getBoundingClientRect();
+            return rect.bottom > hostRect.top && rect.top < hostRect.bottom;
+          }).length;
+        minVisibleCards = Math.min(minVisibleCards, visibleCards);
+        samples.push({ ratio, scrollTop: host.scrollTop, visibleCards });
+      }
+    }
+    const nestedScrollableOwners = panel
+      ? Array.from(panel.querySelectorAll("*"))
+        .filter((item) => {
+          const overflowY = window.getComputedStyle(item).overflowY;
+          return /(auto|scroll)/.test(overflowY) && item.scrollHeight > item.clientHeight + 1;
+        })
+        .map((item) => item.id || item.className || item.tagName)
+      : [];
+    writeLocalStorageValue("navplannerDebugScrollStressResult", JSON.stringify({
+      tab,
+      hostIsDetailPanel: host === elements.detailPanel,
+      hostOverflowY: host ? window.getComputedStyle(host).overflowY : "",
+      minVisibleCards: Number.isFinite(minVisibleCards) ? minVisibleCards : 0,
+      nestedScrollableOwners,
+      samples,
+    }));
+  }
+  if (config.inputBlurProbe === true) {
+    setMobileBottomTab("plan");
+    elements.departureInput.focus({ preventScroll: true });
+    const activeBefore = document.activeElement?.id || document.activeElement?.tagName || "";
+    elements.planButton.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    await new Promise((resolve) => window.setTimeout(resolve, 80));
+    document.body.dataset.mobileKeyboard = "open";
+    const actionRow = elements.planButton.closest(".button-row");
+    const actionStyle = actionRow ? window.getComputedStyle(actionRow) : null;
+    writeLocalStorageValue("navplannerDebugInputBlurResult", JSON.stringify({
+      activeBefore,
+      activeAfter: document.activeElement?.id || document.activeElement?.tagName || "",
+      blurred: document.activeElement !== elements.departureInput,
+      actionPosition: actionStyle?.position || "",
+      actionBottom: actionStyle?.bottom || "",
+    }));
+  }
   if (mobileTab === "calculate" || detailTab === "calculate") {
     scheduleCalculateRender();
     scheduleCalculateRender(220);
   }
   if (Number.isFinite(Number(config.calculateScrollTop)) && elements.calculateSection) {
     window.setTimeout(() => {
-      elements.calculateSection.scrollTop = Math.max(0, Number(config.calculateScrollTop));
+      const scrollHost = detailScrollHost("calculate") || elements.calculateSection;
+      scrollHost.scrollTop = Math.max(0, Number(config.calculateScrollTop));
       scheduleCalculateRender();
     }, 320);
+  }
+  if (Array.isArray(config.openFR24VerificationDelaysMs)) {
+    config.openFR24VerificationDelaysMs.forEach((rawDelay) => {
+      const delay = Math.max(0, Number(rawDelay) || 0);
+      window.setTimeout(openFR24VerificationBrowser, delay);
+    });
+  } else if (config.openFR24Verification === true) {
+    window.setTimeout(openFR24VerificationBrowser, 120);
   }
   console.info("NavPlanner simulator debug launch applied", config.name || "");
 }
