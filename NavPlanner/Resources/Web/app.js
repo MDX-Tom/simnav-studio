@@ -85,6 +85,8 @@ const TRANSLATIONS = {
   "plan.routePlaceholder": { "zh-Hans": "", en: "" },
   "plan.buildRoute": { "zh-Hans": "生成并绘制航路", en: "Build & Draw" },
   "plan.recalculate": { "zh-Hans": "重新计算", en: "Recalculate" },
+  "plan.resetAndReplan": { "zh-Hans": "重置并重新规划", en: "Reset & Replan" },
+  "plan.resettingForReplan": { "zh-Hans": "正在清理旧航路、剖面与 FR24 结果并重新规划...", en: "Clearing the previous route, profiles, and FR24 results, then replanning..." },
   "plan.matchTrack": { "zh-Hans": "匹配轨迹", en: "Match Track" },
   "plan.stopTask": { "zh-Hans": "停止当前任务", en: "Stop Current Task" },
   "plan.stopTaskShort": { "zh-Hans": "停止", en: "Stop" },
@@ -735,7 +737,24 @@ const state = {
     arrival: null,
     manual: null,
   },
+  airportFocusVersions: {
+    departure: 0,
+    arrival: 0,
+    manual: 0,
+    point: 0,
+  },
+  airportFocusTimers: {
+    departure: 0,
+    arrival: 0,
+    manual: 0,
+    point: 0,
+  },
   labelMarkers: [],
+  routeLabelCandidates: [],
+  routeLabelRenderFrame: 0,
+  routeLabelRenderVersion: 0,
+  selectedRouteLabelKey: "",
+  routeLabelStats: null,
   departureAirport: null,
   arrivalAirport: null,
   manualAirport: null,
@@ -948,6 +967,14 @@ const NAV_OVERLAY_DRAW_PADDING_RATIO = 0.12;
 const NAV_AIRWAY_INTERACTIVE_MIN_ZOOM = 6;
 const NAV_TERMINAL_DETAIL_MIN_ZOOM = 9;
 const NAV_RUNWAY_LABEL_MIN_ZOOM = 11;
+const ROUTE_LABEL_COLLISION_CELL = Object.freeze({ width: 48, height: 24 });
+const ROUTE_LABEL_VIEWPORT_PADDING_PX = 34;
+const ROUTE_LABEL_MAX_WAYPOINTS_BY_ZOOM = Object.freeze([
+  { maxZoom: 4.99, count: 4 },
+  { maxZoom: 6.99, count: 8 },
+  { maxZoom: 8.99, count: 16 },
+  { maxZoom: 10.99, count: 28 },
+]);
 const PROCEDURE_CACHE_LIMIT = 180;
 const PROCEDURE_OVERVIEW_CACHE_LIMIT = 24;
 const PROCEDURE_OVERVIEW_COLORS = Object.freeze([
@@ -1242,6 +1269,7 @@ const elements = {
   planArrivalRunway: document.querySelector("#planArrivalRunway"),
   planButton: document.querySelector("#planButton"),
   recalculateButton: document.querySelector("#recalculateButton"),
+  resetAndReplanButton: document.querySelector("#resetAndReplanButton"),
   planClearTrackButton: document.querySelector("#planClearTrackButton"),
   stopRequestButton: document.querySelector("#stopRequestButton"),
   planStatus: document.querySelector("#planStatus"),
@@ -4396,7 +4424,10 @@ function applyMapOverlayVisibility() {
   setLayerGroupVisible(navLayerGroup, true);
   setLayerGroupVisible(navLabelLayerGroup, true);
   setLayerGroupVisible(markerLayerGroup, true);
-  setLayerGroupVisible(labelLayerGroup, true);
+  setLayerGroupVisible(
+    labelLayerGroup,
+    isMapOverlayVisible(normalizeRouteLayerKind(state.currentRouteLayerKind)),
+  );
   setLayerGroupVisible(selectionHighlightLayerGroup, true);
   updateMapOverlayControlState();
   scheduleNavLabelSnapshot();
@@ -4604,6 +4635,7 @@ function pushDrawingRedoState(snapshot) {
 }
 
 function clearRouteDrawingState() {
+  cancelAllPendingPointFocus();
   autoRouteLayerGroup.clearLayers();
   manualRouteLayerGroup.clearLayers();
   markerLayerGroup.clearLayers();
@@ -7940,7 +7972,12 @@ function setMobileBottomTab(tab) {
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
 function setRouteControlsBusy(isBusy) {
-  [elements.planButton, elements.recalculateButton, elements.fr24SearchButton].forEach((button) => {
+  [
+    elements.planButton,
+    elements.recalculateButton,
+    elements.resetAndReplanButton,
+    elements.fr24SearchButton,
+  ].forEach((button) => {
     if (button) {
       button.disabled = isBusy;
     }
@@ -8251,6 +8288,21 @@ function clearAirportSlotMarker(slot) {
   state.airportSlotMarkerKeys[slot] = null;
 }
 
+function cancelPendingPointFocus(key) {
+  if (!Object.prototype.hasOwnProperty.call(state.airportFocusVersions, key)) {
+    return;
+  }
+  state.airportFocusVersions[key] += 1;
+  if (state.airportFocusTimers[key]) {
+    window.clearTimeout(state.airportFocusTimers[key]);
+    state.airportFocusTimers[key] = 0;
+  }
+}
+
+function cancelAllPendingPointFocus() {
+  Object.keys(state.airportFocusVersions).forEach(cancelPendingPointFocus);
+}
+
 /**
  * 功能：执行 `resetAirportSlotMarkerKeys` 对应的业务逻辑。
  * 输入：无。
@@ -8270,9 +8322,83 @@ function resetAirportSlotMarkerKeys() {
 function drawAirportSlotMarker(slot, point) {
   const keySuffix = `airport-slot:${slot}`;
   clearAirportSlotMarker(slot);
-  const marker = drawPointMarker(point, true, { keySuffix });
-  state.airportSlotMarkerKeys[slot] = markerKeyForPoint(point, { keySuffix });
+  const key = markerKeyForPoint(point, { keySuffix });
+  const radius = compactPhoneValue(7, 0.72, 4.5);
+  const diameter = radius * 2;
+  const marker = L.marker([point.lat, point.lon], {
+    pane: "pointPane",
+    interactive: true,
+    bubblingMouseEvents: false,
+    icon: L.divIcon({
+      className: `airport-slot-marker airport-slot-marker-${slot}`,
+      html: "<span></span>",
+      iconSize: [diameter, diameter],
+      iconAnchor: [radius, radius],
+    }),
+  }).addTo(markerLayerGroup);
+  marker._plannerStableRadius = radius;
+  marker.on("click", (event) => {
+    scheduleMapPopupAction(event, () => {
+      showNavPointPopup(normalizePopupPoint(point), event.latlng);
+    });
+  });
+  state.airportMarkers.set(key, marker);
+  state.airportSlotMarkerKeys[slot] = key;
   return marker;
+}
+
+/**
+ * 功能：先完成地图飞行动画，再一次性绘制选择点，避免 SVG CircleMarker 被中间缩放矩阵放大。
+ * 输入：point、目标 zoom，以及可选机场 slot。
+ * 输出：Promise，解析为最终绘制的 marker；被更新选择取代时解析为 null。
+ */
+function flyToStablePointMarker(point, zoom = 8, options = {}) {
+  const slot = AIRPORT_SLOTS.includes(options.slot) ? options.slot : null;
+  const focusKey = slot || "point";
+  cancelPendingPointFocus(focusKey);
+  const version = state.airportFocusVersions[focusKey];
+  const duration = clampNumber(Number(options.duration) || 0.75, 0, 2);
+  const markerKey = slot
+    ? state.airportSlotMarkerKeys[slot]
+    : markerKeyForPoint(point, options.markerOptions);
+  if (slot) {
+    clearAirportSlotMarker(slot);
+  } else {
+    removeAirportMarkerByKey(markerKey);
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      map.off("moveend", finish);
+      if (state.airportFocusTimers[focusKey]) {
+        window.clearTimeout(state.airportFocusTimers[focusKey]);
+        state.airportFocusTimers[focusKey] = 0;
+      }
+      if (state.airportFocusVersions[focusKey] !== version) {
+        resolve(null);
+        return;
+      }
+      if (slot) {
+        const activeAirport = state[`${slot}Airport`];
+        if (activeAirport?.airport_identifier !== point.ident) {
+          resolve(null);
+          return;
+        }
+        resolve(drawAirportSlotMarker(slot, point));
+        return;
+      }
+      resolve(drawPointMarker(point, true, options.markerOptions));
+    };
+
+    map.once("moveend", finish);
+    state.airportFocusTimers[focusKey] = window.setTimeout(finish, duration * 1000 + 420);
+    map.flyTo([point.lat, point.lon], zoom, { duration });
+  });
 }
 
 /**
@@ -8297,6 +8423,7 @@ function drawPointMarker(point, highlighted = false, options = {}) {
     bubblingMouseEvents: false,
   })
     .addTo(options.group || markerLayerGroup);
+  marker._plannerStableRadius = radius;
   marker.on("click", (event) => {
     scheduleMapPopupAction(event, () => {
       const popupPoint = options.popupPoint || normalizePopupPoint(point);
@@ -8313,8 +8440,7 @@ function drawPointMarker(point, highlighted = false, options = {}) {
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
 function flyToPoint(point) {
-  drawPointMarker(point, true);
-  map.flyTo([point.lat, point.lon], 8, { duration: 0.75 });
+  flyToStablePointMarker(point, 8);
 }
 
 /**
@@ -9090,8 +9216,241 @@ function smoothLatLngs(points, iterations = 10) {
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
 function clearLabels() {
+  state.routeLabelRenderVersion += 1;
+  if (state.routeLabelRenderFrame) {
+    window.cancelAnimationFrame(state.routeLabelRenderFrame);
+    state.routeLabelRenderFrame = 0;
+  }
   labelLayerGroup.clearLayers();
   state.labelMarkers = [];
+  state.routeLabelCandidates = [];
+  state.selectedRouteLabelKey = "";
+  state.routeLabelStats = null;
+}
+
+function routeWaypointLabelKey(point) {
+  const restored = restoreOriginalLongitude(point);
+  return `waypoint:${String(restored.ident || "POINT")}:${Number(restored.lat).toFixed(5)}:${Number(restored.lon).toFixed(5)}`;
+}
+
+function routeAirwayLabelKey(leg) {
+  return `airway:${String(leg.name || "AIRWAY")}`;
+}
+
+function selectRouteLabel(key) {
+  state.selectedRouteLabelKey = key || "";
+  scheduleRouteLabelRender();
+}
+
+function registerRouteWaypointLabelCandidate(point, index, pointCount, popupPoint, copyKey) {
+  const labelKey = routeWaypointLabelKey(point);
+  state.routeLabelCandidates.push({
+    kind: "waypoint",
+    labelKey,
+    candidateKey: `${copyKey}:${labelKey}`,
+    lat: point.lat,
+    lon: point.lon,
+    text: point.ident,
+    endpoint: index === 0 || index === pointCount - 1,
+    pointIndex: index,
+    pointCount,
+    popupPoint,
+  });
+}
+
+function registerRouteAirwayLabelCandidate(midpoint, leg, legPoints, copyKey) {
+  const labelKey = routeAirwayLabelKey(leg);
+  const candidateKey = `${copyKey}:${labelKey}`;
+  const weight = legPoints.slice(1).reduce(
+    (total, point, index) => total + greatCircleDistanceNm(legPoints[index], point),
+    0,
+  );
+  const candidate = {
+    kind: "airway",
+    labelKey,
+    candidateKey,
+    lat: midpoint.lat,
+    lon: midpoint.lon,
+    text: leg.name,
+    weight,
+    leg,
+  };
+  const existingIndex = state.routeLabelCandidates.findIndex((item) => item.candidateKey === candidateKey);
+  if (existingIndex === -1) {
+    state.routeLabelCandidates.push(candidate);
+  } else if ((state.routeLabelCandidates[existingIndex].weight || 0) < weight) {
+    // 同一航路名称沿当前世界副本只保留最长一段的中点标签。
+    state.routeLabelCandidates[existingIndex] = candidate;
+  }
+}
+
+function routeWaypointLabelLimit(zoom) {
+  return ROUTE_LABEL_MAX_WAYPOINTS_BY_ZOOM.find((item) => zoom <= item.maxZoom)?.count
+    || Number.POSITIVE_INFINITY;
+}
+
+function routeLabelTierAllows(candidate, zoom) {
+  if (candidate.labelKey === state.selectedRouteLabelKey || candidate.endpoint) {
+    return true;
+  }
+  if (candidate.kind === "airway") {
+    return zoom >= 4;
+  }
+  const intermediateCount = Math.max(0, candidate.pointCount - 2);
+  const limit = routeWaypointLabelLimit(zoom);
+  if (!Number.isFinite(limit) || intermediateCount <= limit) {
+    return true;
+  }
+  const stride = Math.max(1, Math.ceil(intermediateCount / limit));
+  return Math.max(0, candidate.pointIndex - 1) % stride === 0;
+}
+
+function routeLabelPriority(candidate) {
+  if (candidate.labelKey === state.selectedRouteLabelKey) {
+    return 4000;
+  }
+  if (candidate.endpoint) {
+    return 3000;
+  }
+  if (candidate.kind === "airway") {
+    return 2000 + Math.min(500, Number(candidate.weight) || 0);
+  }
+  return 1000;
+}
+
+function estimatedRouteLabelRect(candidate, point) {
+  const compact = isCompactPhoneMap();
+  const characterWidth = compact ? 5.1 : 6.8;
+  const width = clampNumber(String(candidate.text || "").length * characterWidth + (compact ? 10 : 14), compact ? 24 : 30, compact ? 76 : 104);
+  const height = compact ? 14 : 19;
+  const offsetY = candidate.kind === "airway" ? (compact ? 9 : 14) : (compact ? -11 : -16);
+  return {
+    left: point.x - width / 2,
+    right: point.x + width / 2,
+    top: point.y + offsetY - height / 2,
+    bottom: point.y + offsetY + height / 2,
+  };
+}
+
+function routeLabelRectCells(rect) {
+  const cells = [];
+  const minX = Math.floor(rect.left / ROUTE_LABEL_COLLISION_CELL.width);
+  const maxX = Math.floor(rect.right / ROUTE_LABEL_COLLISION_CELL.width);
+  const minY = Math.floor(rect.top / ROUTE_LABEL_COLLISION_CELL.height);
+  const maxY = Math.floor(rect.bottom / ROUTE_LABEL_COLLISION_CELL.height);
+  for (let x = minX; x <= maxX; x += 1) {
+    for (let y = minY; y <= maxY; y += 1) {
+      cells.push(`${x}:${y}`);
+    }
+  }
+  return cells;
+}
+
+function routeLabelRectsOverlap(left, right) {
+  return left.left < right.right
+    && left.right > right.left
+    && left.top < right.bottom
+    && left.bottom > right.top;
+}
+
+function renderRouteLabels() {
+  state.routeLabelRenderFrame = 0;
+  labelLayerGroup.clearLayers();
+  state.labelMarkers = [];
+  if (!state.currentRoutePayload || !state.routeLabelCandidates.length) {
+    state.routeLabelStats = {
+      candidates: state.routeLabelCandidates.length,
+      tierEligible: 0,
+      visible: 0,
+      collisionRejected: 0,
+      waypointVisible: 0,
+      airwayVisible: 0,
+      zoom: map.getZoom(),
+    };
+    return;
+  }
+
+  const zoom = map.getZoom();
+  const size = map.getSize();
+  const collisionGrid = new Map();
+  const eligible = state.routeLabelCandidates
+    .filter((candidate) => routeLabelTierAllows(candidate, zoom))
+    .map((candidate) => ({
+      candidate,
+      point: map.latLngToContainerPoint([candidate.lat, candidate.lon]),
+    }))
+    .filter(({ point }) => (
+      point.x >= -ROUTE_LABEL_VIEWPORT_PADDING_PX
+      && point.x <= size.x + ROUTE_LABEL_VIEWPORT_PADDING_PX
+      && point.y >= -ROUTE_LABEL_VIEWPORT_PADDING_PX
+      && point.y <= size.y + ROUTE_LABEL_VIEWPORT_PADDING_PX
+    ))
+    .sort((left, right) => routeLabelPriority(right.candidate) - routeLabelPriority(left.candidate));
+
+  let collisionRejected = 0;
+  let waypointVisible = 0;
+  let airwayVisible = 0;
+  eligible.forEach(({ candidate, point }) => {
+    const rect = estimatedRouteLabelRect(candidate, point);
+    const cells = routeLabelRectCells(rect);
+    const collisions = new Set();
+    cells.forEach((cell) => {
+      (collisionGrid.get(cell) || []).forEach((entry) => collisions.add(entry));
+    });
+    if (Array.from(collisions).some((entry) => routeLabelRectsOverlap(rect, entry.rect))) {
+      collisionRejected += 1;
+      return;
+    }
+    const entry = { rect, candidateKey: candidate.candidateKey };
+    cells.forEach((cell) => {
+      const entries = collisionGrid.get(cell) || [];
+      entries.push(entry);
+      collisionGrid.set(cell, entries);
+    });
+    if (candidate.kind === "airway") {
+      airwayVisible += 1;
+      addTextLabel(candidate.lat, candidate.lon, candidate.text, "airway-label route-smart-label", {
+        interactive: true,
+        onClick: (latlng) => {
+          selectRouteLabel(candidate.labelKey);
+          setAirwayHighlight(airwayKeyForLeg(candidate.leg), true);
+          showRouteLegPopup(candidate.leg, latlng);
+        },
+      });
+      return;
+    }
+    waypointVisible += 1;
+    addTextLabel(candidate.lat, candidate.lon, candidate.text, "waypoint-label route-smart-label", {
+      interactive: true,
+      onClick: (latlng) => {
+        selectRouteLabel(candidate.labelKey);
+        showNavPointPopup(candidate.popupPoint, latlng);
+      },
+    });
+  });
+  state.routeLabelStats = {
+    candidates: state.routeLabelCandidates.length,
+    tierEligible: eligible.length,
+    visible: waypointVisible + airwayVisible,
+    collisionRejected,
+    waypointVisible,
+    airwayVisible,
+    zoom,
+  };
+}
+
+function scheduleRouteLabelRender() {
+  if (state.routeLabelRenderFrame) {
+    window.cancelAnimationFrame(state.routeLabelRenderFrame);
+  }
+  const version = state.routeLabelRenderVersion;
+  state.routeLabelRenderFrame = window.requestAnimationFrame(() => {
+    if (version !== state.routeLabelRenderVersion) {
+      state.routeLabelRenderFrame = 0;
+      return;
+    }
+    renderRouteLabels();
+  });
 }
 
 /**
@@ -9155,6 +9514,8 @@ function addTextLabel(lat, lon, text, className, options = {}) {
     icon: L.divIcon({
       className: `map-label ${className} ${options.interactive ? "is-interactive" : ""}`,
       html: `<span>${escapeHtml(text)}</span>`,
+      iconSize: [0, 0],
+      iconAnchor: [0, 0],
     }),
   }).addTo(options.group || labelLayerGroup);
   if (options.onClick) {
@@ -10440,6 +10801,7 @@ map.on("resize", () => {
   scheduleNavLabelSnapshot();
 });
 map.on("moveend zoomend", refreshNavOverlayDebounced);
+map.on("moveend zoomend", scheduleRouteLabelRender);
 map.on("popupclose", () => {
   if (!state.refreshingNavPopup) {
     state.activeNavPopup = null;
@@ -10691,7 +11053,10 @@ function addRoutePointHitTarget(point, associations) {
   })
     .addTo(routeLayerGroup)
     .on("click", (event) => {
-      scheduleMapPopupAction(event, () => showNavPointPopup(popupPoint, event.latlng));
+      scheduleMapPopupAction(event, () => {
+        selectRouteLabel(routeWaypointLabelKey(point));
+        showNavPointPopup(popupPoint, event.latlng);
+      });
     });
 }
 
@@ -10803,11 +11168,7 @@ function drawRouteCopy(points, payload, routeAssociations, longitudeOffset, fitB
       keySuffix: copyKey,
       group: routeLayerGroup,
     });
-    addTextLabel(point.lat, point.lon, point.ident, "waypoint-label", {
-      interactive: true,
-      group: routeLayerGroup,
-      onClick: (latlng) => showNavPointPopup(popupPoint, latlng),
-    });
+    registerRouteWaypointLabelCandidate(point, index, visiblePoints.length, popupPoint, copyKey);
   });
 
   payload.legs
@@ -10843,6 +11204,7 @@ function drawRouteCopy(points, payload, routeAssociations, longitudeOffset, fitB
         hitLayer.on("mouseout", () => setAirwayHighlight(airwayKey, false));
         hitLayer.on("click", (event) => {
           scheduleMapPopupAction(event, () => {
+            selectRouteLabel(routeAirwayLabelKey(leg));
             setAirwayHighlight(airwayKey, true);
             showRouteLegPopup(leg, event.latlng);
           });
@@ -10851,14 +11213,7 @@ function drawRouteCopy(points, payload, routeAssociations, longitudeOffset, fitB
       }
       const midpoint = midpointForLeg(points, leg);
       if (midpoint && leg.type === "airway") {
-        addTextLabel(midpoint.lat, midpoint.lon, leg.name, "airway-label", {
-          interactive: true,
-          group: routeLayerGroup,
-          onClick: (latlng) => {
-            setAirwayHighlight(airwayKey, true);
-            showRouteLegPopup(leg, latlng);
-          },
-        });
+        registerRouteAirwayLabelCandidate(midpoint, leg, legPoints, copyKey);
       }
     });
 
@@ -10908,6 +11263,7 @@ function drawRoute(payload, options = {}) {
   }
   state.currentRouteLayerKind = normalizeRouteLayerKind(options.routeLayerKind || inferRouteLayerKind(payload));
   routeLayerGroup = routeLayerGroupForKind(state.currentRouteLayerKind);
+  cancelAllPendingPointFocus();
   autoRouteLayerGroup.clearLayers();
   manualRouteLayerGroup.clearLayers();
   markerLayerGroup.clearLayers();
@@ -10941,6 +11297,7 @@ function drawRoute(payload, options = {}) {
     map.fitBounds(boundsPolyline.getBounds(), { padding: [36, 36] });
   }
   applyMapOverlayVisibility();
+  scheduleRouteLabelRender();
 }
 
 /**
@@ -11660,9 +12017,14 @@ async function loadAirportIntoPanel(ident, slot, options = {}) {
     lon: payload.airport.airport_ref_longitude,
     label: payload.airport.airport_name,
   };
-  drawAirportSlotMarker(prefix, airportPoint);
   if (options.focusMap) {
-    map.flyTo([airportPoint.lat, airportPoint.lon], 8, { duration: 0.75 });
+    const focusPromise = flyToStablePointMarker(airportPoint, Number(options.focusZoom) || 8, { slot: prefix });
+    if (options.awaitFocus) {
+      await focusPromise;
+    }
+  } else {
+    cancelPendingPointFocus(prefix);
+    drawAirportSlotMarker(prefix, airportPoint);
   }
   return payload;
 }
@@ -12344,6 +12706,7 @@ async function buildRoute(options = {}) {
     await applyRoutePayload(payload, departure, arrival, {
       signal: controller.signal,
       routeLayerKind: route ? "manualRoute" : "route",
+      recordHistory: options.recordHistory,
     });
     setStatus(
       payload.generated
@@ -12364,6 +12727,41 @@ async function buildRoute(options = {}) {
   } finally {
     endRouteOperation(controller);
   }
+}
+
+/**
+ * 功能：仅在用户明确点击“重置并重新规划”时清理航路相关结果，并用当前机场重新自动规划。
+ * 输入：无；机场与跑道取自当前计划页。
+ * 输出：Promise，解析为重新规划操作的结果。
+ */
+async function resetAndReplan() {
+  hideSearchResults();
+  stopActiveRouteOperation();
+
+  // 让仍在返回途中的查询失效，并终止每张 FR24 卡片自己的下载/拟合任务。
+  state.fr24QueryRequestVersion += 1;
+  Array.from(state.fr24BusyByKey.entries()).forEach(([key, entry]) => {
+    entry.controller?.abort?.();
+    finishFR24CardProgress(key);
+  });
+  setFR24QueryBusy(false);
+  state.fr24HistoryByKey.clear();
+  renderFR24Flights([]);
+
+  // clearAllMapDrawings 会统一清除航路、程序、FR24 绘制和计算剖面的输入；
+  // 机场详情与当前机场输入保留，符合“换机场先保留旧结果、显式点击后才清理”的交互约定。
+  clearAllMapDrawings({ recordHistory: true });
+  state.preTrackMatchRoutePayload = null;
+  state.preTrackMatchAirports = null;
+  state.preTrackMatchRouteLayerKind = null;
+  elements.routeInput.value = "";
+  setFR24QueryStatus(t("query.empty"));
+  setStatus(t("plan.resettingForReplan"), false, "progress");
+  scheduleCalculateRender();
+
+  await new Promise((resolve) => window.requestAnimationFrame(resolve));
+  // 清理前的完整结果已经作为一个 undo 快照保存；新规划不再插入中间“空白”快照。
+  return buildRoute({ forceAuto: true, recordHistory: false });
 }
 
 function cloneJSON(value) {
@@ -12997,6 +13395,9 @@ async function searchFR24Flights() {
     const payload = await fetchJson(
       `/api/fr24/search?departure=${encodeURIComponent(route.departure)}&arrival=${encodeURIComponent(route.arrival)}&limit=10`,
     );
+    if (requestVersion !== state.fr24QueryRequestVersion) {
+      return;
+    }
     const flights = payload.flights || [];
     state.fr24HistoryByKey.clear();
     renderFR24Flights(flights);
@@ -13931,6 +14332,7 @@ registerPlanPage({
   elements,
   buildRoute,
   clearAllMapDrawings,
+  resetAndReplan,
   stopActiveRouteOperation,
 });
 
@@ -14121,6 +14523,364 @@ function simulatorDebugLaunchConfig() {
   }
 }
 
+function simulatorDebugPercentile(values, percentile) {
+  if (!values.length) {
+    return 0;
+  }
+  const sorted = [...values].sort((left, right) => left - right);
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * percentile) - 1));
+  return sorted[index];
+}
+
+function simulatorDebugFrameSummary(frameDeltas) {
+  const measured = frameDeltas.filter((value) => Number.isFinite(value) && value > 0 && value < 250);
+  const total = measured.reduce((sum, value) => sum + value, 0);
+  return {
+    samples: measured.length,
+    meanMs: measured.length ? Number((total / measured.length).toFixed(2)) : 0,
+    p50Ms: Number(simulatorDebugPercentile(measured, 0.50).toFixed(2)),
+    p95Ms: Number(simulatorDebugPercentile(measured, 0.95).toFixed(2)),
+    p99Ms: Number(simulatorDebugPercentile(measured, 0.99).toFixed(2)),
+    maxMs: Number(Math.max(0, ...measured).toFixed(2)),
+    over33ms: measured.filter((value) => value > 33.4).length,
+    over50ms: measured.filter((value) => value > 50).length,
+    effectiveFps: total > 0 ? Number(((measured.length * 1000) / total).toFixed(1)) : 0,
+  };
+}
+
+function simulatorDebugWaitForMapAction(action, timeoutMs = 2400) {
+  return new Promise((resolve) => {
+    let finished = false;
+    let timer = 0;
+    const finish = () => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      map.off("moveend", finish);
+      if (timer) {
+        window.clearTimeout(timer);
+      }
+      resolve();
+    };
+    map.once("moveend", finish);
+    timer = window.setTimeout(finish, timeoutMs);
+    action();
+  });
+}
+
+async function simulatorDebugNextPaint(count = 2) {
+  for (let index = 0; index < count; index += 1) {
+    await new Promise((resolve) => window.requestAnimationFrame(resolve));
+  }
+}
+
+async function simulatorDebugWaitFor(predicate, timeoutMs = 30000, intervalMs = 80) {
+  const startedAt = performance.now();
+  while (performance.now() - startedAt < timeoutMs) {
+    if (predicate()) {
+      return true;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, intervalMs));
+  }
+  return Boolean(predicate());
+}
+
+function simulatorDebugRouteLabelSnapshot(label = "") {
+  const markers = Array.from(document.querySelectorAll(".route-smart-label span"))
+    .map((element) => {
+      const markerElement = element.closest(".route-smart-label");
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(markerElement || element);
+      return {
+        element,
+        text: element.textContent?.trim() || "",
+        airway: markerElement?.classList.contains("airway-label") || false,
+        rect: {
+          left: rect.left,
+          top: rect.top,
+          right: rect.right,
+          bottom: rect.bottom,
+          width: rect.width,
+          height: rect.height,
+        },
+        visible: rect.width > 0
+          && rect.height > 0
+          && style.display !== "none"
+          && style.visibility !== "hidden"
+          && Number(style.opacity || 1) > 0,
+      };
+    })
+    .filter((item) => item.visible);
+  const overlaps = [];
+  for (let leftIndex = 0; leftIndex < markers.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < markers.length; rightIndex += 1) {
+      if (routeLabelRectsOverlap(markers[leftIndex].rect, markers[rightIndex].rect)) {
+        overlaps.push([markers[leftIndex].text, markers[rightIndex].text]);
+      }
+    }
+  }
+  const airwayTexts = markers.filter((item) => item.airway).map((item) => item.text);
+  return {
+    label,
+    center: map.getCenter(),
+    zoom: map.getZoom(),
+    stats: cloneJSON(state.routeLabelStats),
+    visibleCount: markers.length,
+    waypointCount: markers.filter((item) => !item.airway).length,
+    airwayCount: airwayTexts.length,
+    uniqueAirwayCount: new Set(airwayTexts).size,
+    duplicateAirwayLabels: airwayTexts.length - new Set(airwayTexts).size,
+    overlapCount: overlaps.length,
+    overlaps,
+    labels: markers.map((item) => item.text),
+  };
+}
+
+async function runSimulatorRouteLabelStress(sequence) {
+  const views = [];
+  const routePoints = withDisplayLongitudes(state.currentRoutePayload?.points || []);
+  for (const [index, rawView] of sequence.entries()) {
+    const view = rawView && typeof rawView === "object" ? rawView : {};
+    if (view.fitRoute && routePoints.length >= 2) {
+      const bounds = L.latLngBounds(routePoints.map(latLngForPoint));
+      await simulatorDebugWaitForMapAction(() => {
+        map.fitBounds(bounds, { padding: [36, 36], animate: true, duration: 0.34 });
+      });
+    } else {
+      const ratio = clampNumber(Number(view.pointRatio) || 0, 0, 1);
+      const pointIndex = Math.round(Math.max(0, routePoints.length - 1) * ratio);
+      const routePoint = routePoints[pointIndex];
+      const center = Array.isArray(view.center)
+        ? view.center
+        : routePoint
+          ? [routePoint.lat, routePoint.lon]
+          : [map.getCenter().lat, map.getCenter().lng];
+      const zoom = Number.isFinite(Number(view.zoom)) ? Number(view.zoom) : map.getZoom();
+      await simulatorDebugWaitForMapAction(() => {
+        map.flyTo(center, zoom, { duration: clampNumber(Number(view.duration) || 0.34, 0.1, 1) });
+      });
+    }
+    if (Array.isArray(view.panBy)) {
+      await simulatorDebugWaitForMapAction(() => {
+        map.panBy(view.panBy, { animate: true, duration: 0.22 });
+      });
+    }
+    if (Number.isFinite(Number(view.selectPointRatio)) && routePoints.length) {
+      const selectedRatio = clampNumber(Number(view.selectPointRatio), 0, 1);
+      const selectedPoint = routePoints[Math.round((routePoints.length - 1) * selectedRatio)];
+      selectRouteLabel(routeWaypointLabelKey(selectedPoint));
+    }
+    scheduleRouteLabelRender();
+    await simulatorDebugNextPaint(3);
+    // zoomend 的平滑缩放类会在 140ms debounce 后移除；等其结束再量 DOM 可见矩形。
+    await new Promise((resolve) => window.setTimeout(resolve, MAP_ZOOM.wheelIdleDelay + 40));
+    views.push(simulatorDebugRouteLabelSnapshot(view.label || `view-${index + 1}`));
+  }
+  return {
+    routePointCount: routePoints.length,
+    candidateCount: state.routeLabelCandidates.length,
+    views,
+  };
+}
+
+async function runSimulatorAirportMapStress(sequence) {
+  const frameDeltas = [];
+  const markerSamples = [];
+  const regions = [];
+  let previousFrame = 0;
+  let samplingFrame = 0;
+  let active = true;
+  const sampleFrame = (timestamp) => {
+    if (previousFrame) {
+      frameDeltas.push(timestamp - previousFrame);
+    }
+    previousFrame = timestamp;
+    AIRPORT_SLOTS.forEach((slot) => {
+      const key = state.airportSlotMarkerKeys[slot];
+      const marker = key ? state.airportMarkers.get(key) : null;
+      const element = marker?.getElement?.();
+      if (!element) {
+        return;
+      }
+      const rect = element.getBoundingClientRect();
+      const expected = Number(marker._plannerStableRadius || 0) * 2;
+      if (rect.width > 0 && rect.height > 0) {
+        markerSamples.push({
+          slot,
+          width: rect.width,
+          height: rect.height,
+          expected,
+          zoom: map.getZoom(),
+        });
+      }
+    });
+    if (active) {
+      samplingFrame = window.requestAnimationFrame(sampleFrame);
+    }
+  };
+  samplingFrame = window.requestAnimationFrame(sampleFrame);
+
+  for (const [index, rawItem] of sequence.entries()) {
+    const item = typeof rawItem === "string" ? { ident: rawItem } : (rawItem || {});
+    const ident = String(item.ident || "").trim().toUpperCase();
+    const slot = AIRPORT_SLOTS.includes(item.slot) ? item.slot : "departure";
+    if (!ident) {
+      continue;
+    }
+    const startedAt = performance.now();
+    const payload = await loadAirportIntoPanel(ident, slot, {
+      activate: false,
+      focusMap: true,
+      focusZoom: Number(item.zoom) || 8,
+      awaitFocus: true,
+    });
+    if (Array.isArray(item.panBy)) {
+      await simulatorDebugWaitForMapAction(() => {
+        map.panBy(item.panBy, { animate: true, duration: clampNumber(Number(item.panDuration) || 0.22, 0.1, 0.8) });
+      });
+    }
+    if (Number.isFinite(Number(item.afterZoom))) {
+      await simulatorDebugWaitForMapAction(() => {
+        map.flyTo(map.getCenter(), Number(item.afterZoom), { duration: 0.32 });
+      });
+    }
+    await simulatorDebugNextPaint(2);
+    const key = state.airportSlotMarkerKeys[slot];
+    const marker = key ? state.airportMarkers.get(key) : null;
+    const rect = marker?.getElement?.()?.getBoundingClientRect();
+    regions.push({
+      index,
+      ident: payload?.airport?.airport_identifier || ident,
+      slot,
+      zoom: map.getZoom(),
+      elapsedMs: Math.round(performance.now() - startedAt),
+      markerWidth: rect ? Number(rect.width.toFixed(2)) : 0,
+      markerHeight: rect ? Number(rect.height.toFixed(2)) : 0,
+      expectedDiameter: Number(((marker?._plannerStableRadius || 0) * 2).toFixed(2)),
+    });
+  }
+
+  active = false;
+  if (samplingFrame) {
+    window.cancelAnimationFrame(samplingFrame);
+  }
+  const oversizeSamples = markerSamples.filter((sample) => (
+    sample.width > sample.expected + 2 || sample.height > sample.expected + 2
+  ));
+  return {
+    transitions: regions.length,
+    regions,
+    frames: simulatorDebugFrameSummary(frameDeltas),
+    markerSampleCount: markerSamples.length,
+    markerMaxWidth: Number(Math.max(0, ...markerSamples.map((sample) => sample.width)).toFixed(2)),
+    markerMaxHeight: Number(Math.max(0, ...markerSamples.map((sample) => sample.height)).toFixed(2)),
+    markerOversizeSamples: oversizeSamples.length,
+  };
+}
+
+async function runSimulatorResetReplanProbe(options = {}) {
+  const routePoints = state.currentRoutePayload?.points || [];
+  if (routePoints.length < 2) {
+    return { passed: false, reason: "initial route missing" };
+  }
+  const oldRouteSignature = JSON.stringify(routePoints.map((point) => [point.ident, point.lat, point.lon]));
+  const oldRouteAirports = cloneJSON(state.currentRouteAirports);
+  const syntheticTrack = routePoints.map((point, index) => ({
+    lat: point.lat,
+    lon: point.lon,
+    altitude_ft: Math.round(Math.sin((index / Math.max(1, routePoints.length - 1)) * Math.PI) * 32000),
+    timestamp: 1_760_000_000 + index * 90,
+  }));
+  drawFR24TrackPoints(syntheticTrack, { fitBounds: false });
+  renderFR24Flights([{
+    fr24_id: "SIM-RESET-PROBE",
+    flight: "NP001",
+    callsign: "NP001",
+    origin_icao: oldRouteAirports?.departure,
+    dest_icao: oldRouteAirports?.arrival,
+    airline: "Simulator Probe",
+    aircraft: "A320",
+    status: "landed",
+  }]);
+  scheduleCalculateRender();
+  await simulatorDebugNextPaint(3);
+  const oldProfileSignature = state.calculateRouteSignature;
+  const oldProfileSampleCount = state.calculateProfileData?.samples?.length || 0;
+  const changeSlot = AIRPORT_SLOTS.includes(options.slot) ? options.slot : "departure";
+  const changedIdent = String(options.ident || "ZSSS").trim().toUpperCase();
+  const input = elements[`${changeSlot}Input`];
+  input.value = changedIdent;
+  await loadAirportIntoPanel(changedIdent, changeSlot, { activate: false, focusMap: false });
+  await simulatorDebugNextPaint(2);
+
+  const routeSignatureAfterAirportChange = JSON.stringify(
+    (state.currentRoutePayload?.points || []).map((point) => [point.ident, point.lat, point.lon]),
+  );
+  const buttonStyle = window.getComputedStyle(elements.resetAndReplanButton);
+  const beforeReset = {
+    changedAirport: state[`${changeSlot}Airport`]?.airport_identifier || "",
+    inputValue: input.value,
+    oldRouteAirports,
+    currentRouteAirports: cloneJSON(state.currentRouteAirports),
+    oldRouteRetained: routeSignatureAfterAirportChange === oldRouteSignature,
+    oldProfileRetained: state.calculateRouteSignature === oldProfileSignature
+      && (state.calculateProfileData?.samples?.length || 0) === oldProfileSampleCount,
+    oldFR24TrackRetained: Boolean(state.fr24TrackPayload),
+    oldFR24ResultRetained: state.fr24Flights.size === 1,
+    resetButton: {
+      text: elements.resetAndReplanButton?.textContent?.trim() || "",
+      visible: Boolean(elements.resetAndReplanButton?.offsetParent),
+      className: elements.resetAndReplanButton?.className || "",
+      color: buttonStyle.color,
+      backgroundColor: buttonStyle.backgroundColor,
+      borderColor: buttonStyle.borderColor,
+    },
+  };
+  writeLocalStorageValue("navplannerDebugResetReplanBefore", JSON.stringify(beforeReset));
+  const pauseBeforeClickMs = Math.max(0, Number(options.pauseBeforeClickMs) || 0);
+  if (pauseBeforeClickMs) {
+    await new Promise((resolve) => window.setTimeout(resolve, pauseBeforeClickMs));
+  }
+
+  elements.resetAndReplanButton.click();
+  const replanned = await simulatorDebugWaitFor(() => (
+    !state.activeRouteAbortController
+    && state.currentRouteAirports?.[changeSlot] === changedIdent
+    && Boolean(state.currentRoutePayload)
+  ));
+  await simulatorDebugNextPaint(4);
+  const newRouteSignature = JSON.stringify(
+    (state.currentRoutePayload?.points || []).map((point) => [point.ident, point.lat, point.lon]),
+  );
+  const afterReset = {
+    replanned,
+    currentRouteAirports: cloneJSON(state.currentRouteAirports),
+    routeChanged: newRouteSignature !== oldRouteSignature,
+    routePointCount: state.currentRoutePayload?.points?.length || 0,
+    fr24TrackCleared: !state.fr24TrackPayload,
+    fr24ResultsCleared: state.fr24Flights.size === 0,
+    profileRecomputed: Boolean(state.calculateProfileData)
+      && state.calculateRouteSignature !== oldProfileSignature,
+    planStatus: elements.statusText?.textContent || "",
+    queryStatus: elements.fr24QueryStatus?.textContent || "",
+    resetButtonEnabled: !elements.resetAndReplanButton.disabled,
+  };
+  return {
+    beforeReset,
+    afterReset,
+    passed: beforeReset.oldRouteRetained
+      && beforeReset.oldProfileRetained
+      && beforeReset.oldFR24TrackRetained
+      && beforeReset.oldFR24ResultRetained
+      && afterReset.replanned
+      && afterReset.routeChanged
+      && afterReset.fr24TrackCleared
+      && afterReset.fr24ResultsCleared
+      && afterReset.profileRecomputed,
+  };
+}
+
 async function applySimulatorDebugLaunch() {
   if (window.__NAVPLANNER_SIM_DEBUG_APPLIED) {
     return;
@@ -14288,6 +15048,18 @@ async function applySimulatorDebugLaunch() {
     : (mobileTab === "calculate" ? "calculate" : "");
   if (detailTab) {
     setDetailTab(detailTab);
+  }
+  if (config.resetReplanProbe && typeof config.resetReplanProbe === "object") {
+    const result = await runSimulatorResetReplanProbe(config.resetReplanProbe);
+    writeLocalStorageValue("navplannerDebugResetReplanResult", JSON.stringify(result));
+  }
+  if (Array.isArray(config.routeLabelStressSequence)) {
+    const result = await runSimulatorRouteLabelStress(config.routeLabelStressSequence);
+    writeLocalStorageValue("navplannerDebugRouteLabelStressResult", JSON.stringify(result));
+  }
+  if (Array.isArray(config.airportMapStressSequence)) {
+    const result = await runSimulatorAirportMapStress(config.airportMapStressSequence);
+    writeLocalStorageValue("navplannerDebugAirportMapStressResult", JSON.stringify(result));
   }
   if (config.runFR24Search === true) {
     setMobileBottomTab("query");
