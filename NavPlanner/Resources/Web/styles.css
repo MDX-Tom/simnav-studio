@@ -44,6 +44,12 @@
     linear-gradient(180deg, #101726 0%, var(--bg) 100%);
 }
 
+/* Keep raster providers comfortable beside the night chrome without replacing
+   their source or altering route/airport overlays. */
+html[data-theme="night"][data-map-source="online"] .terrain-pane {
+  filter: brightness(0.58) saturate(0.72) contrast(1.08);
+}
+
 html[data-theme="day"],
 html[data-theme-mode="day"] {
   color-scheme: light;
@@ -1073,6 +1079,14 @@ textarea:focus-visible {
   backdrop-filter: blur(12px);
 }
 
+.search-empty {
+  padding: 10px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
+}
+
 .search-item {
   appearance: none;
   -webkit-appearance: none;
@@ -1995,9 +2009,56 @@ body.left-panel-expanded .selection-table {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.query-flight-progress {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 5px 7px;
+  border: 1px solid rgba(84, 189, 255, 0.24);
+  border-radius: 9px;
+  background: rgba(84, 189, 255, 0.07);
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 760;
+}
+
+.query-flight-progress-spinner {
+  width: 13px;
+  height: 13px;
+  border: 2px solid rgba(84, 189, 255, 0.24);
+  border-top-color: rgba(110, 208, 255, 0.95);
+  border-radius: 999px;
+  animation: query-progress-spin 0.75s linear infinite;
+}
+
+@keyframes query-progress-spin {
+  to { transform: rotate(360deg); }
+}
+
 .danger-button {
   border-color: rgba(255, 123, 123, 0.38);
   color: rgba(255, 204, 204, 0.96);
+}
+
+.reset-replan-row {
+  display: flex;
+  margin-top: 8px;
+}
+
+.reset-replan-button {
+  width: 100%;
+  border-color: color-mix(in srgb, var(--danger) 72%, transparent);
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
+  color: color-mix(in srgb, var(--danger) 82%, white);
+  font-weight: 800;
+}
+
+.reset-replan-button:hover:not(:disabled),
+.reset-replan-button:focus-visible {
+  border-color: color-mix(in srgb, var(--danger) 92%, transparent);
+  background: color-mix(in srgb, var(--danger) 23%, transparent);
 }
 
 .query-history {
@@ -3295,6 +3356,12 @@ html[data-theme="day"] .danger-button {
   color: #8b3030;
 }
 
+html[data-theme="day"] .reset-replan-button {
+  border-color: rgba(189, 52, 72, 0.62);
+  background: rgba(189, 52, 72, 0.10);
+  color: #a51f36;
+}
+
 html[data-theme="day"] .manual-airport-hint {
   color: rgba(127, 91, 18, 0.86);
 }
@@ -4520,6 +4587,35 @@ html[data-theme="day"] .offline-progress {
   pointer-events: none;
 }
 
+.airport-slot-marker {
+  background: transparent;
+  border: 0;
+  pointer-events: auto;
+}
+
+.airport-slot-marker span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border: max(1px, 0.12em) solid #d9fff9;
+  border-radius: 50%;
+  background: #2ee6c7;
+  box-shadow:
+    0 0 0 2px rgba(3, 45, 60, 0.52),
+    0 2px 7px rgba(0, 0, 0, 0.34);
+}
+
+.airport-slot-marker-arrival span {
+  border-color: #ffe8ec;
+  background: var(--danger);
+}
+
+.airport-slot-marker-manual span {
+  border-color: #fff5d4;
+  background: var(--accent-2);
+}
+
 .map-label.is-interactive {
   cursor: pointer;
   pointer-events: auto;
@@ -4527,7 +4623,7 @@ html[data-theme="day"] .offline-progress {
 
 .waypoint-label.is-interactive:hover span {
   filter: brightness(1.14);
-  transform: translateY(-16px) scale(1.04);
+  transform: translate(-50%, -16px) scale(1.04);
 }
 
 .map-label span {
@@ -4550,7 +4646,7 @@ html[data-theme="day"] .offline-progress {
   color: #ffffff;
   background: rgba(7, 14, 25, 0.86);
   border: 1px solid rgba(255, 255, 255, 0.24);
-  transform: translateY(-16px);
+  transform: translate(-50%, -16px);
 }
 
 .airway-label span {
@@ -4559,11 +4655,16 @@ html[data-theme="day"] .offline-progress {
   border: 1px solid rgba(255, 209, 102, 0.94);
   font-weight: 820;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.42);
-  transform: translateY(14px);
+  transform: translate(-50%, 14px);
 }
 
 .airway-label.is-interactive:hover span {
-  transform: translateY(14px) scale(1.04);
+  transform: translate(-50%, 14px) scale(1.04);
+}
+
+#map.is-smooth-zooming .route-smart-label {
+  opacity: 0;
+  pointer-events: none !important;
 }
 
 .nav-label span {
@@ -6472,11 +6573,11 @@ html[data-theme="day"] .offline-progress {
     text-shadow:
       0 1px 2px rgba(0, 0, 0, 0.96),
       0 0 4px rgba(0, 0, 0, 0.72);
-    transform: translateY(-11px);
+    transform: translate(-50%, -11px);
   }
 
   html:not([data-device="pad"]) .waypoint-label.is-interactive:hover span {
-    transform: translateY(-11px) scale(1.04);
+    transform: translate(-50%, -11px) scale(1.04);
   }
 
   html:not([data-device="pad"]) .airway-label span {
@@ -6485,11 +6586,11 @@ html[data-theme="day"] .offline-progress {
     border-color: rgba(193, 137, 24, 0.38);
     font-weight: 820;
     text-shadow: 0 1px 0 rgba(255, 255, 255, 0.46);
-    transform: translateY(9px);
+    transform: translate(-50%, 9px);
   }
 
   html:not([data-device="pad"]) .airway-label.is-interactive:hover span {
-    transform: translateY(9px) scale(1.04);
+    transform: translate(-50%, 9px) scale(1.04);
   }
 
   html:not([data-device="pad"]) .nav-label span {
@@ -7089,5 +7190,47 @@ html[data-theme="day"] .offline-progress {
 
   html[data-device="phone"] .search-results {
     max-height: min(118px, 42vh);
+  }
+}
+
+@media (max-width: 1024px) and (orientation: portrait) {
+  /* One vertical momentum owner avoids WebKit handing a reverse swipe between
+     the detail panel and its active tab midway through deceleration. */
+  html:not([data-device="pad"]) .detail-panel {
+    overflow-y: auto;
+    contain: layout style;
+  }
+
+  html:not([data-device="pad"]) .detail-panel > section,
+  html:not([data-device="pad"]) .detail-panel .airport-panels,
+  html:not([data-device="pad"]) .detail-panel .query-section,
+  html:not([data-device="pad"]) .detail-panel .calculate-section,
+  html:not([data-device="pad"]) .detail-panel .settings-section {
+    flex: 0 0 auto;
+    min-height: auto;
+    overflow-y: visible;
+    overflow-x: hidden;
+    contain: none;
+  }
+
+  html:not([data-device="pad"]) .detail-panel.is-scrolling {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    contain: layout style;
+  }
+
+  html:not([data-device="pad"]) body[data-mobile-keyboard="open"] .planner-panel > section:first-child .button-row {
+    position: sticky;
+    bottom: max(4px, env(safe-area-inset-bottom));
+    z-index: 1100;
+    padding: 5px;
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    background: rgba(8, 15, 27, 0.96);
+    box-shadow: 0 -8px 18px rgba(0, 0, 0, 0.24);
+  }
+
+  html[data-theme="day"]:not([data-device="pad"]) body[data-mobile-keyboard="open"] .planner-panel > section:first-child .button-row {
+    background: rgba(245, 250, 252, 0.97);
   }
 }

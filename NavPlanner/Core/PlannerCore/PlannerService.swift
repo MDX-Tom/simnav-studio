@@ -8,6 +8,22 @@ final class PlannerService: @unchecked Sendable {
     private var routeBetweenCache: [RouteBetweenCacheKey: RoutePath] = [:]
     private var navOverlayCacheDatabaseKey: String?
     private var navOverlayCache: [String: [[String: Any]]]?
+    private static let localizedAirportAliases: [String: [String]] = [
+        "上海": ["ZSPD", "ZSSS"],
+        "上海浦东": ["ZSPD"],
+        "浦东": ["ZSPD"],
+        "上海虹桥": ["ZSSS"],
+        "虹桥": ["ZSSS"],
+        "香港": ["VHHH"],
+        "香港国际": ["VHHH"],
+        "赤鱲角": ["VHHH"],
+        "北京": ["ZBAA", "ZBAD"],
+        "北京首都": ["ZBAA"],
+        "首都": ["ZBAA"],
+        "拉萨": ["ZULS"],
+        "拉萨贡嘎": ["ZULS"],
+        "贡嘎": ["ZULS"]
+    ]
 
     init(dataStore: LocalDataStore) {
         self.dataStore = dataStore
@@ -95,11 +111,33 @@ final class PlannerService: @unchecked Sendable {
     func search(query: String, limit: Int = 8) -> [SearchResult] {
         let token = query.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard !token.isEmpty else { return [] }
+        let clampedLimit = max(1, min(limit, 50))
+        let aliasIdentifiers = Self.airportAliasIdentifiers(for: query)
         let pattern = "\(token)%"
         let contains = "%\(token)%"
 
         let rows = dataStore.read(fallback: [[String: Any]]()) { database in
-            try database.rows(
+            var combinedRows: [[String: Any]] = []
+            for identifier in aliasIdentifiers {
+                if let row = try database.first(
+                    sql: """
+                    select airport_identifier as ident,
+                           coalesce(airport_name, airport_identifier) as name,
+                           airport_ref_latitude as lat,
+                           airport_ref_longitude as lon,
+                           'airport' as kind
+                    from tbl_airports
+                    where airport_identifier = ?
+                      and airport_ref_latitude is not null
+                      and airport_ref_longitude is not null
+                    limit 1
+                    """,
+                    arguments: [.text(identifier)]
+                ) {
+                    combinedRows.append(row)
+                }
+            }
+            combinedRows.append(contentsOf: try database.rows(
                 sql: """
                 select * from (
                     select airport_identifier as ident,
@@ -146,11 +184,35 @@ final class PlannerService: @unchecked Sendable {
                     .text(pattern), .text(contains),
                     .text(pattern), .text(contains),
                     .text(pattern), .text(contains),
-                    .text(token), .int(limit)
+                    .text(token), .int(clampedLimit)
                 ]
-            )
+            ))
+            var seen = Set<String>()
+            return combinedRows.filter { row in
+                let key = "\(navString(row["kind"])):\(navString(row["ident"]))"
+                return seen.insert(key).inserted
+            }.prefix(clampedLimit).map { $0 }
         }
         return rows.compactMap(SearchResult.init(row:))
+    }
+
+    private static func airportAliasIdentifiers(for query: String) -> [String] {
+        var normalized = query
+            .folding(options: [.widthInsensitive, .caseInsensitive], locale: Locale(identifier: "zh_Hans_CN"))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: #"[\s·・\-]+"#, with: "", options: .regularExpression)
+        for suffix in ["国际机场", "机场", "市"] where normalized.hasSuffix(suffix) {
+            normalized.removeLast(suffix.count)
+            break
+        }
+        guard normalized.count >= 2 else { return [] }
+        let exact = localizedAirportAliases[normalized] ?? []
+        let prefixMatches = localizedAirportAliases
+            .filter { key, _ in key.hasPrefix(normalized) || normalized.hasPrefix(key) }
+            .sorted { lhs, rhs in lhs.key.count < rhs.key.count }
+            .flatMap { $0.value }
+        var seen = Set<String>()
+        return (exact + prefixMatches).filter { seen.insert($0).inserted }
     }
 
     func searchPayload(query: String) -> [String: Any] {

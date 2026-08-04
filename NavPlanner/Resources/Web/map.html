@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
     <base href="navplanner://app/" />
-    <meta name="navplanner-resource-version" content="20260801-iphone-map-demand-v79" />
+    <meta name="navplanner-resource-version" content="20260804-route-ux-v80" />
     <title>航空航路规划器</title>
     <script>
       (() => {
@@ -97,6 +97,9 @@
             <button id="planButton" class="primary-button" data-i18n="plan.buildRoute">生成并绘制航路</button>
             <button id="recalculateButton" class="ghost-button" data-i18n="plan.recalculate">重新计算</button>
             <button id="planClearTrackButton" class="ghost-button" type="button" data-i18n="query.clearTrack">清除轨迹绘制</button>
+          </div>
+          <div class="reset-replan-row">
+            <button id="resetAndReplanButton" class="ghost-button danger-button reset-replan-button" type="button" data-i18n="plan.resetAndReplan">重置并重新规划</button>
           </div>
           <div class="helper-text" data-i18n="plan.autoRouteHint">留空航路以自动规划整条航路，或在航点间输入'***'以自动规划航路片段</div>
           <div id="planStatus" class="status" data-status-kind="info" aria-live="polite" aria-atomic="true">

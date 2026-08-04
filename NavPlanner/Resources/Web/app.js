@@ -85,12 +85,15 @@ const TRANSLATIONS = {
   "plan.routePlaceholder": { "zh-Hans": "", en: "" },
   "plan.buildRoute": { "zh-Hans": "生成并绘制航路", en: "Build & Draw" },
   "plan.recalculate": { "zh-Hans": "重新计算", en: "Recalculate" },
+  "plan.resetAndReplan": { "zh-Hans": "重置并重新规划", en: "Reset & Replan" },
+  "plan.resettingForReplan": { "zh-Hans": "正在清理旧航路、剖面与 FR24 结果并重新规划...", en: "Clearing the previous route, profiles, and FR24 results, then replanning..." },
   "plan.matchTrack": { "zh-Hans": "匹配轨迹", en: "Match Track" },
   "plan.stopTask": { "zh-Hans": "停止当前任务", en: "Stop Current Task" },
   "plan.stopTaskShort": { "zh-Hans": "停止", en: "Stop" },
   "plan.autoRouteHint": { "zh-Hans": "留空航路以自动规划整条航路，或在航点间输入'***'以自动规划航路片段", en: "Leave Route blank to auto-plan the whole route, or enter '***' between waypoints to auto-plan that segment." },
   "status.waitingRoute": { "zh-Hans": "等待输入航路。", en: "Waiting for route input." },
   "status.noDetails": { "zh-Hans": "状态已更新，但没有可显示的详情。", en: "Status updated without displayable details." },
+  "search.noResults": { "zh-Hans": "未找到“{query}”。可尝试 ICAO / IATA，例如 ZSPD、ZSSS、VHHH。", en: "No results for “{query}”. Try an ICAO / IATA code such as ZSPD, ZSSS, or VHHH." },
   "section.legs": { "zh-Hans": "航段", en: "Legs" },
   "section.selectedProcedures": { "zh-Hans": "已选程序", en: "Selected Procedures" },
   "section.selection": { "zh-Hans": "选中内容", en: "Selection" },
@@ -483,6 +486,12 @@ const TRANSLATIONS = {
   "query.downloadDraw": { "zh-Hans": "下载并绘制轨迹", en: "Download & Draw Track" },
   "query.matchTrack": { "zh-Hans": "匹配轨迹", en: "Match Track" },
   "query.downloading": { "zh-Hans": "正在下载 FR24 GPX 轨迹...", en: "Downloading FR24 GPX track..." },
+  "query.phaseDownloading": { "zh-Hans": "正在下载与解析轨迹", en: "Downloading and parsing track" },
+  "query.phaseMatching": { "zh-Hans": "正在拟合本地航路", en: "Matching local airway route" },
+  "query.phaseCancelling": { "zh-Hans": "正在停止任务", en: "Stopping task" },
+  "query.phaseElapsed": { "zh-Hans": "{phase} · {seconds}s", en: "{phase} · {seconds}s" },
+  "query.cancelAction": { "zh-Hans": "停止", en: "Stop" },
+  "query.cancelled": { "zh-Hans": "FR24 操作已停止。", en: "FR24 operation stopped." },
   "query.drawn": { "zh-Hans": "已绘制 FR24 GPX 轨迹，共 {count} 个点。", en: "FR24 GPX track drawn with {count} points." },
   "query.airportsSynced": { "zh-Hans": "已按航班实际航线同步计划机场：{departure} → {arrival}。", en: "Plan airports synced to the flight's actual route: {departure} → {arrival}." },
   "query.matching": { "zh-Hans": "正在使用本地 airway 图匹配 FR24 轨迹...", en: "Matching FR24 track with the local airway graph..." },
@@ -572,10 +581,16 @@ const TRANSLATIONS = {
   "query.cacheDirectoryOpened": { "zh-Hans": "已打开 FR24 缓存目录。", en: "FR24 cache folder opened." },
   "query.cacheDirectoryFailed": { "zh-Hans": "无法打开 FR24 缓存目录。", en: "Could not open the FR24 cache folder." },
   "query.access": { "zh-Hans": "FR24 网络访问", en: "FR24 Network Access" },
-  "query.accessInitial": { "zh-Hans": "浏览器会话未同步。", en: "Browser session not synced." },
-  "query.accessSummary": { "zh-Hans": "浏览器会话{state}。", en: "Browser session {state}." },
+  "query.accessInitial": { "zh-Hans": "FR24 尚未探测，可直接查询。", en: "FR24 has not been probed yet; you can query directly." },
+  "query.accessSummary": { "zh-Hans": "FR24 访问状态：{state}。", en: "FR24 access: {state}." },
   "query.accessSyncedState": { "zh-Hans": "已同步", en: "synced" },
   "query.accessUnsyncedState": { "zh-Hans": "未同步", en: "not synced" },
+  "query.accessStateAvailable": { "zh-Hans": "最近访问成功", en: "recently available" },
+  "query.accessStateChallenge": { "zh-Hans": "需要验证，查询会自动重试", en: "verification required; queries retry automatically" },
+  "query.accessStateExpired": { "zh-Hans": "成功记录已过期，等待重新探测", en: "success record expired; awaiting a new probe" },
+  "query.accessStateConfigured": { "zh-Hans": "会话已配置，等待验证", en: "session configured; awaiting verification" },
+  "query.accessStateUnknown": { "zh-Hans": "尚未探测，可直接查询", en: "not yet probed; direct query available" },
+  "query.accessWarmup": { "zh-Hans": "会话正在生效，{seconds}s 后自动查询...", en: "Session is warming up; querying automatically in {seconds}s..." },
   "query.accessConfigured": { "zh-Hans": "已配置", en: "configured" },
   "query.accessMissing": { "zh-Hans": "未配置", en: "missing" },
   "query.accessOpenBrowser": { "zh-Hans": "打开 FR24 验证页", en: "Open FR24 Verification" },
@@ -650,6 +665,8 @@ const TRANSLATIONS = {
   "error.trackNoPoints": { "zh-Hans": "无法从导入轨迹构建可绘制航路点。", en: "No drawable route points could be built from the imported trajectory." },
   "error.fr24Session": { "zh-Hans": "FR24 Web 会话不可用。请在查询页打开 FR24 验证页，完成验证后同步会话。", en: "FR24 Web session is unavailable. Open FR24 verification in Query, complete verification, then sync the session." },
   "error.fr24Cloudflare": { "zh-Hans": "FR24 返回 Cloudflare 验证页。请在查询页打开 FR24 验证页，完成验证后同步会话。", en: "FR24 returned a Cloudflare verification page. Open FR24 verification in Query, complete verification, then sync the session." },
+  "error.fr24BadRequest": { "zh-Hans": "FR24 拒绝了本次查询参数（HTTP 400），请检查机场或航班条件。", en: "FR24 rejected the query parameters (HTTP 400). Check the airport or flight criteria." },
+  "error.fr24RateLimited": { "zh-Hans": "FR24 请求频率受限（HTTP 429），系统将在下一次查询时继续退避。", en: "FR24 rate-limited the request (HTTP 429). The next query will continue with backoff." },
   "error.fr24NotEnough": { "zh-Hans": "FR24 Web 未返回足够轨迹点，可选择其他历史航班或稍后重试。", en: "FR24 web did not return enough track points. Try another history entry or retry later." },
   "error.fr24MissingId": { "zh-Hans": "FR24 flightId 缺失。", en: "FR24 flightId missing." },
 };
@@ -720,7 +737,24 @@ const state = {
     arrival: null,
     manual: null,
   },
+  airportFocusVersions: {
+    departure: 0,
+    arrival: 0,
+    manual: 0,
+    point: 0,
+  },
+  airportFocusTimers: {
+    departure: 0,
+    arrival: 0,
+    manual: 0,
+    point: 0,
+  },
   labelMarkers: [],
+  routeLabelCandidates: [],
+  routeLabelRenderFrame: 0,
+  routeLabelRenderVersion: 0,
+  selectedRouteLabelKey: "",
+  routeLabelStats: null,
   departureAirport: null,
   arrivalAirport: null,
   manualAirport: null,
@@ -801,6 +835,8 @@ const state = {
   fr24CacheStatus: null,
   fr24AccessStatus: null,
   fr24QueryBusy: false,
+  fr24QueryRequestVersion: 0,
+  fr24BusyByKey: new Map(),
   fr24TrackPayload: null,
   fr24ProfilePoints: [],
   fr24ProfileCursorIndex: 0,
@@ -870,6 +906,15 @@ const state = {
   currentRouteLayerKind: "route",
   activeDetailTab: "airport",
   activeMobileTab: "plan",
+  detailTabInitialized: false,
+  mobileTabInitialized: false,
+  detailRefreshRecords: new Map(),
+  detailResourceExecutionCounts: new Map(),
+  detailScrollPositions: new Map(),
+  detailLayoutTimer: 0,
+  detailLayoutFrame: 0,
+  detailLayoutExecutionCount: 0,
+  detailScrollIdleTimer: 0,
   themeMode: THEME_MODES.has(savedThemeMode) ? savedThemeMode : "system",
   languageMode: normalizeLanguageMode(savedLanguageMode),
   effectiveLanguage: resolveLanguageMode(savedLanguageMode),
@@ -922,6 +967,14 @@ const NAV_OVERLAY_DRAW_PADDING_RATIO = 0.12;
 const NAV_AIRWAY_INTERACTIVE_MIN_ZOOM = 6;
 const NAV_TERMINAL_DETAIL_MIN_ZOOM = 9;
 const NAV_RUNWAY_LABEL_MIN_ZOOM = 11;
+const ROUTE_LABEL_COLLISION_CELL = Object.freeze({ width: 48, height: 24 });
+const ROUTE_LABEL_VIEWPORT_PADDING_PX = 34;
+const ROUTE_LABEL_MAX_WAYPOINTS_BY_ZOOM = Object.freeze([
+  { maxZoom: 4.99, count: 4 },
+  { maxZoom: 6.99, count: 8 },
+  { maxZoom: 8.99, count: 16 },
+  { maxZoom: 10.99, count: 28 },
+]);
 const PROCEDURE_CACHE_LIMIT = 180;
 const PROCEDURE_OVERVIEW_CACHE_LIMIT = 24;
 const PROCEDURE_OVERVIEW_COLORS = Object.freeze([
@@ -939,6 +992,7 @@ const PROCEDURE_OVERVIEW_COLORS = Object.freeze([
   "#4f9ce5",
 ]);
 const DRAWING_HISTORY_LIMIT = 30;
+const DETAIL_REFRESH_TTL_MS = 15_000;
 const EMPTY_LIST = Object.freeze([]);
 const versionPathSegment = (value) => `_v${encodeURIComponent(String(value || 0))}`;
 
@@ -981,8 +1035,14 @@ function mapSourceModeForBaseMap(type) {
   return type === "offline" ? "offline" : "online";
 }
 
+function syncMapThemeAttributes() {
+  document.documentElement.dataset.mapSource = currentMapSourceMode();
+  document.documentElement.dataset.onlineMapProvider = normalizeOnlineMapProvider(state.onlineMapProvider);
+}
+
 function setMapSourceMode(mode, { persist = true } = {}) {
   state.mapSourceMode = normalizeMapSourceMode(mode);
+  syncMapThemeAttributes();
   if (persist) {
     writeLocalStorageValue("navplannerMapSourceMode", state.mapSourceMode);
   }
@@ -1209,6 +1269,7 @@ const elements = {
   planArrivalRunway: document.querySelector("#planArrivalRunway"),
   planButton: document.querySelector("#planButton"),
   recalculateButton: document.querySelector("#recalculateButton"),
+  resetAndReplanButton: document.querySelector("#resetAndReplanButton"),
   planClearTrackButton: document.querySelector("#planClearTrackButton"),
   stopRequestButton: document.querySelector("#stopRequestButton"),
   planStatus: document.querySelector("#planStatus"),
@@ -2011,6 +2072,7 @@ installMobileViewportLock();
 installMobilePanelDragHandle();
 installMobileInputTouchFocus();
 installPhoneLandscapeSafeAreaTuning();
+installDetailPanelScrollPerformance();
 
 const autoRouteLayerGroup = L.layerGroup().addTo(map);
 const manualRouteLayerGroup = L.layerGroup().addTo(map);
@@ -4173,6 +4235,7 @@ function applyOnlineMapProvider(provider) {
     return;
   }
   state.onlineMapProvider = normalized;
+  syncMapThemeAttributes();
   writeLocalStorageValue("navplannerOnlineMapProvider", normalized);
   refreshOnlineBaseLayer({ bumpVersion: true });
   setBaseMap("terrain");
@@ -4361,7 +4424,10 @@ function applyMapOverlayVisibility() {
   setLayerGroupVisible(navLayerGroup, true);
   setLayerGroupVisible(navLabelLayerGroup, true);
   setLayerGroupVisible(markerLayerGroup, true);
-  setLayerGroupVisible(labelLayerGroup, true);
+  setLayerGroupVisible(
+    labelLayerGroup,
+    isMapOverlayVisible(normalizeRouteLayerKind(state.currentRouteLayerKind)),
+  );
   setLayerGroupVisible(selectionHighlightLayerGroup, true);
   updateMapOverlayControlState();
   scheduleNavLabelSnapshot();
@@ -4569,6 +4635,7 @@ function pushDrawingRedoState(snapshot) {
 }
 
 function clearRouteDrawingState() {
+  cancelAllPendingPointFocus();
   autoRouteLayerGroup.clearLayers();
   manualRouteLayerGroup.clearLayers();
   markerLayerGroup.clearLayers();
@@ -7121,6 +7188,20 @@ function installMobileInputTouchFocus() {
       postNativeEvent("focusFormControl");
     }
   };
+  document.addEventListener(
+    "pointerdown",
+    (event) => {
+      if (formControlFromEvent(event)) {
+        return;
+      }
+      const active = document.activeElement;
+      if (active && isKeyboardTextControl(active)) {
+        active.blur();
+        postNativeEvent("blurFormControl");
+      }
+    },
+    { capture: true, passive: true },
+  );
   const focusControl = (control) => {
     if (!control) {
       return;
@@ -7641,6 +7722,7 @@ function applyThemeMode(mode, { persist = true } = {}) {
     : normalized;
   document.documentElement.dataset.themeMode = normalized;
   document.documentElement.dataset.theme = effectiveTheme;
+  syncMapThemeAttributes();
   elements.themeChoiceButtons.forEach((button) => {
     const active = button.dataset.themeChoice === normalized;
     button.classList.toggle("active", active);
@@ -7716,6 +7798,117 @@ function handleNativeAppIconChanged(payload = {}) {
   }
 }
 
+function detailScrollHost(tab) {
+  const usesOuterMobileScroller = isPhoneWorkbench()
+    && window.innerWidth <= 1024
+    && window.innerHeight >= window.innerWidth;
+  if (usesOuterMobileScroller) {
+    return elements.detailPanel;
+  }
+  return Array.from(elements.detailTabPanels).find((panel) => panel.dataset.detailPanel === tab) || null;
+}
+
+function rememberDetailScrollPosition(tab) {
+  const host = detailScrollHost(tab);
+  if (host) {
+    state.detailScrollPositions.set(tab, host.scrollTop);
+  }
+}
+
+function restoreDetailScrollPosition(tab) {
+  const host = detailScrollHost(tab);
+  if (!host) {
+    return;
+  }
+  const scrollTop = state.detailScrollPositions.get(tab) || 0;
+  window.requestAnimationFrame(() => {
+    host.scrollTop = scrollTop;
+  });
+}
+
+function refreshDetailResource(key, task, ttl = DETAIL_REFRESH_TTL_MS) {
+  const existing = state.detailRefreshRecords.get(key);
+  if (existing?.promise) {
+    return existing.promise;
+  }
+  if (existing?.completedAt && Date.now() - existing.completedAt < ttl) {
+    return Promise.resolve(existing.value);
+  }
+  const record = existing || { completedAt: 0, promise: null, value: null };
+  record.promise = Promise.resolve()
+    .then(() => {
+      state.detailResourceExecutionCounts.set(
+        key,
+        (state.detailResourceExecutionCounts.get(key) || 0) + 1,
+      );
+      return task();
+    })
+    .then((value) => {
+      record.value = value;
+      record.completedAt = Date.now();
+      return value;
+    })
+    .finally(() => {
+      record.promise = null;
+    });
+  state.detailRefreshRecords.set(key, record);
+  return record.promise;
+}
+
+function refreshDetailTabData(tab) {
+  if (tab === "settings") {
+    updateMapTileZoomOffsetControl();
+    refreshDetailResource("database-list", () => refreshDatabaseList())
+      .catch((error) => console.warn("本地数据库列表刷新失败", error));
+    refreshDetailResource("offline-map-status", () => refreshOfflineMapStatus())
+      .catch((error) => console.warn("离线地图状态刷新失败", error));
+    refreshDetailResource("map-cache-status", () => refreshMapCacheStatus())
+      .catch((error) => console.warn("在线地图缓存状态刷新失败", error));
+  } else if (tab === "query") {
+    refreshDetailResource("fr24-cache-status", () => refreshFR24CacheStatus())
+      .catch((error) => console.warn("FR24 缓存状态刷新失败", error));
+    refreshDetailResource("fr24-access-status", () => refreshFR24AccessStatus(), 5_000)
+      .catch((error) => console.warn("FR24 访问状态刷新失败", error));
+  }
+}
+
+function scheduleDetailLayoutSync(tab, delay = 0) {
+  if (state.detailLayoutTimer) {
+    window.clearTimeout(state.detailLayoutTimer);
+  }
+  if (state.detailLayoutFrame) {
+    window.cancelAnimationFrame(state.detailLayoutFrame);
+  }
+  state.detailLayoutTimer = window.setTimeout(() => {
+    state.detailLayoutTimer = 0;
+    state.detailLayoutFrame = window.requestAnimationFrame(() => {
+      state.detailLayoutFrame = 0;
+      state.detailLayoutExecutionCount += 1;
+      map.invalidateSize({ animate: false, pan: false });
+      scheduleVectorMapResizeSync();
+      if (tab === "query") {
+        scheduleFR24ProfileChartResize();
+      } else if (tab === "calculate") {
+        scheduleCalculateRender();
+      }
+    });
+  }, delay);
+}
+
+function installDetailPanelScrollPerformance() {
+  const panel = elements.detailPanel;
+  if (!panel) {
+    return;
+  }
+  panel.addEventListener("scroll", () => {
+    panel.classList.add("is-scrolling");
+    window.clearTimeout(state.detailScrollIdleTimer);
+    state.detailScrollIdleTimer = window.setTimeout(() => {
+      panel.classList.remove("is-scrolling");
+    }, 160);
+  }, { passive: true });
+}
+
 /**
  * 功能：切换 iPad 详情栏中的 Airport / Query / Calculate / Settings 页面。
  * 输入：tab 为 airport、query、calculate 或 settings。
@@ -7723,7 +7916,14 @@ function handleNativeAppIconChanged(payload = {}) {
  */
 function setDetailTab(tab) {
   const normalized = ["airport", "query", "calculate", "settings"].includes(tab) ? tab : "airport";
+  if (state.detailTabInitialized && normalized === state.activeDetailTab) {
+    return;
+  }
+  if (state.detailTabInitialized) {
+    rememberDetailScrollPosition(state.activeDetailTab);
+  }
   state.activeDetailTab = normalized;
+  state.detailTabInitialized = true;
   document.body.dataset.detailTab = normalized;
   elements.detailModeTabButtons.forEach((button) => {
     const active = button.dataset.detailTab === normalized;
@@ -7733,22 +7933,9 @@ function setDetailTab(tab) {
   elements.detailTabPanels.forEach((panel) => {
     panel.classList.toggle("hidden", panel.dataset.detailPanel !== normalized);
   });
-  if (normalized === "settings") {
-    updateMapTileZoomOffsetControl();
-    refreshDatabaseList().catch((error) => console.warn("本地数据库列表刷新失败", error));
-    refreshOfflineMapStatus().catch((error) => console.warn("离线地图状态刷新失败", error));
-    refreshMapCacheStatus().catch((error) => console.warn("在线地图缓存状态刷新失败", error));
-  }
-  if (normalized === "query") {
-    refreshFR24CacheStatus().catch((error) => console.warn("FR24 缓存状态刷新失败", error));
-    refreshFR24AccessStatus().catch((error) => console.warn("FR24 访问状态刷新失败", error));
-    scheduleFR24ProfileChartResize();
-    scheduleFR24ProfileChartResize(180);
-  }
-  if (normalized === "calculate") {
-    scheduleCalculateRender();
-    scheduleCalculateRender(180);
-  }
+  refreshDetailTabData(normalized);
+  restoreDetailScrollPosition(normalized);
+  scheduleDetailLayoutSync(normalized);
 }
 
 /**
@@ -7759,10 +7946,14 @@ function setDetailTab(tab) {
 function setMobileBottomTab(tab) {
   const normalized = ["plan", "airport", "query", "calculate", "settings"].includes(tab) ? tab : "plan";
   const changed = normalized !== state.activeMobileTab;
+  if (state.mobileTabInitialized && !changed) {
+    return;
+  }
   if (changed && document.activeElement instanceof HTMLElement) {
     document.activeElement.blur();
   }
   state.activeMobileTab = normalized;
+  state.mobileTabInitialized = true;
   document.body.dataset.mobileTab = normalized;
   elements.mobileBottomTabButtons.forEach((button) => {
     const active = button.dataset.mobileTab === normalized;
@@ -7772,19 +7963,7 @@ function setMobileBottomTab(tab) {
   if (normalized === "airport" || normalized === "query" || normalized === "calculate" || normalized === "settings") {
     setDetailTab(normalized);
   }
-  window.setTimeout(() => {
-    map.invalidateSize({ pan: false });
-    scheduleVectorMapResizeSync();
-    if (normalized === "settings") {
-      updateMapTileZoomOffsetControl();
-    }
-    if (normalized === "query") {
-      scheduleFR24ProfileChartResize();
-    }
-    if (normalized === "calculate") {
-      scheduleCalculateRender();
-    }
-  }, 90);
+  scheduleDetailLayoutSync(normalized, 90);
 }
 
 /**
@@ -7793,7 +7972,12 @@ function setMobileBottomTab(tab) {
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
 function setRouteControlsBusy(isBusy) {
-  [elements.planButton, elements.recalculateButton, elements.fr24SearchButton].forEach((button) => {
+  [
+    elements.planButton,
+    elements.recalculateButton,
+    elements.resetAndReplanButton,
+    elements.fr24SearchButton,
+  ].forEach((button) => {
     if (button) {
       button.disabled = isBusy;
     }
@@ -7925,6 +8109,8 @@ function localizedErrorMessage(message) {
     [/^FR24 web access was blocked\. Open FR24 verification in Query, complete verification, then sync the session\.?$/i, () => t("error.fr24Session")],
     [/^FR24 web access was blocked by Cloudflare verification\.?$/i, () => t("error.fr24Cloudflare")],
     [/^FR24 web returned an HTML response\.?$/i, () => t("error.fr24Cloudflare")],
+    [/^FR24 web returned HTTP 400(?::.*)?\.?$/i, () => t("error.fr24BadRequest")],
+    [/^FR24 web returned HTTP 429(?::.*)?\.?$/i, () => t("error.fr24RateLimited")],
     [/^FR24 web playback did not return enough trajectory points\.?$/i, () => t("error.fr24NotEnough")],
     [/^FR24 flightId missing\.?$/i, () => t("error.fr24MissingId")],
   ];
@@ -7964,10 +8150,14 @@ function formatCoord(value, suffixes) {
  * 输入：container、items、onSelect。
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
-function renderSearchResults(container, items, onSelect) {
+function renderSearchResults(container, items, onSelect, query = "") {
   container.innerHTML = "";
+  [elements.departureResults, elements.arrivalResults, elements.manualResults]
+    .filter((item) => item && item !== container)
+    .forEach((item) => item.classList.add("hidden"));
   if (!items.length) {
-    container.classList.add("hidden");
+    container.innerHTML = `<div class="search-empty" role="status">${escapeHtml(t("search.noResults", { query }))}</div>`;
+    container.classList.remove("hidden");
     return;
   }
   items.forEach((item) => {
@@ -7984,9 +8174,6 @@ function renderSearchResults(container, items, onSelect) {
     row.addEventListener("click", () => onSelect(item));
     container.appendChild(row);
   });
-  [elements.departureResults, elements.arrivalResults, elements.manualResults]
-    .filter((item) => item && item !== container)
-    .forEach((item) => item.classList.add("hidden"));
   container.classList.remove("hidden");
 }
 
@@ -8025,24 +8212,29 @@ function airportSlotForInput(target) {
 async function searchEntities(target, container) {
   if (performance.now() < state.searchSuppressedUntil) {
     container.classList.add("hidden");
-    return;
+    return [];
   }
   if (document.activeElement !== target) {
     container.classList.add("hidden");
-    return;
+    return [];
   }
   const query = target.value.trim();
   if (query.length < 2) {
     container.classList.add("hidden");
     container.innerHTML = "";
-    return;
+    return [];
   }
   const payload = await fetchJson(`/api/search?q=${encodeURIComponent(query)}`);
-  if (performance.now() < state.searchSuppressedUntil || document.activeElement !== target) {
+  if (
+    performance.now() < state.searchSuppressedUntil
+    || document.activeElement !== target
+    || target.value.trim() !== query
+  ) {
     container.classList.add("hidden");
-    return;
+    return [];
   }
-  renderSearchResults(container, payload.results, (item) => {
+  const items = payload.results || [];
+  renderSearchResults(container, items, (item) => {
     target.value = item.ident;
     container.classList.add("hidden");
     if (item.kind === "airport") {
@@ -8053,7 +8245,8 @@ async function searchEntities(target, container) {
       return;
     }
     flyToPoint(item);
-  });
+  }, query);
+  return items;
 }
 
 /**
@@ -8095,6 +8288,21 @@ function clearAirportSlotMarker(slot) {
   state.airportSlotMarkerKeys[slot] = null;
 }
 
+function cancelPendingPointFocus(key) {
+  if (!Object.prototype.hasOwnProperty.call(state.airportFocusVersions, key)) {
+    return;
+  }
+  state.airportFocusVersions[key] += 1;
+  if (state.airportFocusTimers[key]) {
+    window.clearTimeout(state.airportFocusTimers[key]);
+    state.airportFocusTimers[key] = 0;
+  }
+}
+
+function cancelAllPendingPointFocus() {
+  Object.keys(state.airportFocusVersions).forEach(cancelPendingPointFocus);
+}
+
 /**
  * 功能：执行 `resetAirportSlotMarkerKeys` 对应的业务逻辑。
  * 输入：无。
@@ -8114,9 +8322,83 @@ function resetAirportSlotMarkerKeys() {
 function drawAirportSlotMarker(slot, point) {
   const keySuffix = `airport-slot:${slot}`;
   clearAirportSlotMarker(slot);
-  const marker = drawPointMarker(point, true, { keySuffix });
-  state.airportSlotMarkerKeys[slot] = markerKeyForPoint(point, { keySuffix });
+  const key = markerKeyForPoint(point, { keySuffix });
+  const radius = compactPhoneValue(7, 0.72, 4.5);
+  const diameter = radius * 2;
+  const marker = L.marker([point.lat, point.lon], {
+    pane: "pointPane",
+    interactive: true,
+    bubblingMouseEvents: false,
+    icon: L.divIcon({
+      className: `airport-slot-marker airport-slot-marker-${slot}`,
+      html: "<span></span>",
+      iconSize: [diameter, diameter],
+      iconAnchor: [radius, radius],
+    }),
+  }).addTo(markerLayerGroup);
+  marker._plannerStableRadius = radius;
+  marker.on("click", (event) => {
+    scheduleMapPopupAction(event, () => {
+      showNavPointPopup(normalizePopupPoint(point), event.latlng);
+    });
+  });
+  state.airportMarkers.set(key, marker);
+  state.airportSlotMarkerKeys[slot] = key;
   return marker;
+}
+
+/**
+ * 功能：先完成地图飞行动画，再一次性绘制选择点，避免 SVG CircleMarker 被中间缩放矩阵放大。
+ * 输入：point、目标 zoom，以及可选机场 slot。
+ * 输出：Promise，解析为最终绘制的 marker；被更新选择取代时解析为 null。
+ */
+function flyToStablePointMarker(point, zoom = 8, options = {}) {
+  const slot = AIRPORT_SLOTS.includes(options.slot) ? options.slot : null;
+  const focusKey = slot || "point";
+  cancelPendingPointFocus(focusKey);
+  const version = state.airportFocusVersions[focusKey];
+  const duration = clampNumber(Number(options.duration) || 0.75, 0, 2);
+  const markerKey = slot
+    ? state.airportSlotMarkerKeys[slot]
+    : markerKeyForPoint(point, options.markerOptions);
+  if (slot) {
+    clearAirportSlotMarker(slot);
+  } else {
+    removeAirportMarkerByKey(markerKey);
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      map.off("moveend", finish);
+      if (state.airportFocusTimers[focusKey]) {
+        window.clearTimeout(state.airportFocusTimers[focusKey]);
+        state.airportFocusTimers[focusKey] = 0;
+      }
+      if (state.airportFocusVersions[focusKey] !== version) {
+        resolve(null);
+        return;
+      }
+      if (slot) {
+        const activeAirport = state[`${slot}Airport`];
+        if (activeAirport?.airport_identifier !== point.ident) {
+          resolve(null);
+          return;
+        }
+        resolve(drawAirportSlotMarker(slot, point));
+        return;
+      }
+      resolve(drawPointMarker(point, true, options.markerOptions));
+    };
+
+    map.once("moveend", finish);
+    state.airportFocusTimers[focusKey] = window.setTimeout(finish, duration * 1000 + 420);
+    map.flyTo([point.lat, point.lon], zoom, { duration });
+  });
 }
 
 /**
@@ -8141,6 +8423,7 @@ function drawPointMarker(point, highlighted = false, options = {}) {
     bubblingMouseEvents: false,
   })
     .addTo(options.group || markerLayerGroup);
+  marker._plannerStableRadius = radius;
   marker.on("click", (event) => {
     scheduleMapPopupAction(event, () => {
       const popupPoint = options.popupPoint || normalizePopupPoint(point);
@@ -8157,8 +8440,7 @@ function drawPointMarker(point, highlighted = false, options = {}) {
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
 function flyToPoint(point) {
-  drawPointMarker(point, true);
-  map.flyTo([point.lat, point.lon], 8, { duration: 0.75 });
+  flyToStablePointMarker(point, 8);
 }
 
 /**
@@ -8934,8 +9216,241 @@ function smoothLatLngs(points, iterations = 10) {
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
 function clearLabels() {
+  state.routeLabelRenderVersion += 1;
+  if (state.routeLabelRenderFrame) {
+    window.cancelAnimationFrame(state.routeLabelRenderFrame);
+    state.routeLabelRenderFrame = 0;
+  }
   labelLayerGroup.clearLayers();
   state.labelMarkers = [];
+  state.routeLabelCandidates = [];
+  state.selectedRouteLabelKey = "";
+  state.routeLabelStats = null;
+}
+
+function routeWaypointLabelKey(point) {
+  const restored = restoreOriginalLongitude(point);
+  return `waypoint:${String(restored.ident || "POINT")}:${Number(restored.lat).toFixed(5)}:${Number(restored.lon).toFixed(5)}`;
+}
+
+function routeAirwayLabelKey(leg) {
+  return `airway:${String(leg.name || "AIRWAY")}`;
+}
+
+function selectRouteLabel(key) {
+  state.selectedRouteLabelKey = key || "";
+  scheduleRouteLabelRender();
+}
+
+function registerRouteWaypointLabelCandidate(point, index, pointCount, popupPoint, copyKey) {
+  const labelKey = routeWaypointLabelKey(point);
+  state.routeLabelCandidates.push({
+    kind: "waypoint",
+    labelKey,
+    candidateKey: `${copyKey}:${labelKey}`,
+    lat: point.lat,
+    lon: point.lon,
+    text: point.ident,
+    endpoint: index === 0 || index === pointCount - 1,
+    pointIndex: index,
+    pointCount,
+    popupPoint,
+  });
+}
+
+function registerRouteAirwayLabelCandidate(midpoint, leg, legPoints, copyKey) {
+  const labelKey = routeAirwayLabelKey(leg);
+  const candidateKey = `${copyKey}:${labelKey}`;
+  const weight = legPoints.slice(1).reduce(
+    (total, point, index) => total + greatCircleDistanceNm(legPoints[index], point),
+    0,
+  );
+  const candidate = {
+    kind: "airway",
+    labelKey,
+    candidateKey,
+    lat: midpoint.lat,
+    lon: midpoint.lon,
+    text: leg.name,
+    weight,
+    leg,
+  };
+  const existingIndex = state.routeLabelCandidates.findIndex((item) => item.candidateKey === candidateKey);
+  if (existingIndex === -1) {
+    state.routeLabelCandidates.push(candidate);
+  } else if ((state.routeLabelCandidates[existingIndex].weight || 0) < weight) {
+    // 同一航路名称沿当前世界副本只保留最长一段的中点标签。
+    state.routeLabelCandidates[existingIndex] = candidate;
+  }
+}
+
+function routeWaypointLabelLimit(zoom) {
+  return ROUTE_LABEL_MAX_WAYPOINTS_BY_ZOOM.find((item) => zoom <= item.maxZoom)?.count
+    || Number.POSITIVE_INFINITY;
+}
+
+function routeLabelTierAllows(candidate, zoom) {
+  if (candidate.labelKey === state.selectedRouteLabelKey || candidate.endpoint) {
+    return true;
+  }
+  if (candidate.kind === "airway") {
+    return zoom >= 4;
+  }
+  const intermediateCount = Math.max(0, candidate.pointCount - 2);
+  const limit = routeWaypointLabelLimit(zoom);
+  if (!Number.isFinite(limit) || intermediateCount <= limit) {
+    return true;
+  }
+  const stride = Math.max(1, Math.ceil(intermediateCount / limit));
+  return Math.max(0, candidate.pointIndex - 1) % stride === 0;
+}
+
+function routeLabelPriority(candidate) {
+  if (candidate.labelKey === state.selectedRouteLabelKey) {
+    return 4000;
+  }
+  if (candidate.endpoint) {
+    return 3000;
+  }
+  if (candidate.kind === "airway") {
+    return 2000 + Math.min(500, Number(candidate.weight) || 0);
+  }
+  return 1000;
+}
+
+function estimatedRouteLabelRect(candidate, point) {
+  const compact = isCompactPhoneMap();
+  const characterWidth = compact ? 5.1 : 6.8;
+  const width = clampNumber(String(candidate.text || "").length * characterWidth + (compact ? 10 : 14), compact ? 24 : 30, compact ? 76 : 104);
+  const height = compact ? 14 : 19;
+  const offsetY = candidate.kind === "airway" ? (compact ? 9 : 14) : (compact ? -11 : -16);
+  return {
+    left: point.x - width / 2,
+    right: point.x + width / 2,
+    top: point.y + offsetY - height / 2,
+    bottom: point.y + offsetY + height / 2,
+  };
+}
+
+function routeLabelRectCells(rect) {
+  const cells = [];
+  const minX = Math.floor(rect.left / ROUTE_LABEL_COLLISION_CELL.width);
+  const maxX = Math.floor(rect.right / ROUTE_LABEL_COLLISION_CELL.width);
+  const minY = Math.floor(rect.top / ROUTE_LABEL_COLLISION_CELL.height);
+  const maxY = Math.floor(rect.bottom / ROUTE_LABEL_COLLISION_CELL.height);
+  for (let x = minX; x <= maxX; x += 1) {
+    for (let y = minY; y <= maxY; y += 1) {
+      cells.push(`${x}:${y}`);
+    }
+  }
+  return cells;
+}
+
+function routeLabelRectsOverlap(left, right) {
+  return left.left < right.right
+    && left.right > right.left
+    && left.top < right.bottom
+    && left.bottom > right.top;
+}
+
+function renderRouteLabels() {
+  state.routeLabelRenderFrame = 0;
+  labelLayerGroup.clearLayers();
+  state.labelMarkers = [];
+  if (!state.currentRoutePayload || !state.routeLabelCandidates.length) {
+    state.routeLabelStats = {
+      candidates: state.routeLabelCandidates.length,
+      tierEligible: 0,
+      visible: 0,
+      collisionRejected: 0,
+      waypointVisible: 0,
+      airwayVisible: 0,
+      zoom: map.getZoom(),
+    };
+    return;
+  }
+
+  const zoom = map.getZoom();
+  const size = map.getSize();
+  const collisionGrid = new Map();
+  const eligible = state.routeLabelCandidates
+    .filter((candidate) => routeLabelTierAllows(candidate, zoom))
+    .map((candidate) => ({
+      candidate,
+      point: map.latLngToContainerPoint([candidate.lat, candidate.lon]),
+    }))
+    .filter(({ point }) => (
+      point.x >= -ROUTE_LABEL_VIEWPORT_PADDING_PX
+      && point.x <= size.x + ROUTE_LABEL_VIEWPORT_PADDING_PX
+      && point.y >= -ROUTE_LABEL_VIEWPORT_PADDING_PX
+      && point.y <= size.y + ROUTE_LABEL_VIEWPORT_PADDING_PX
+    ))
+    .sort((left, right) => routeLabelPriority(right.candidate) - routeLabelPriority(left.candidate));
+
+  let collisionRejected = 0;
+  let waypointVisible = 0;
+  let airwayVisible = 0;
+  eligible.forEach(({ candidate, point }) => {
+    const rect = estimatedRouteLabelRect(candidate, point);
+    const cells = routeLabelRectCells(rect);
+    const collisions = new Set();
+    cells.forEach((cell) => {
+      (collisionGrid.get(cell) || []).forEach((entry) => collisions.add(entry));
+    });
+    if (Array.from(collisions).some((entry) => routeLabelRectsOverlap(rect, entry.rect))) {
+      collisionRejected += 1;
+      return;
+    }
+    const entry = { rect, candidateKey: candidate.candidateKey };
+    cells.forEach((cell) => {
+      const entries = collisionGrid.get(cell) || [];
+      entries.push(entry);
+      collisionGrid.set(cell, entries);
+    });
+    if (candidate.kind === "airway") {
+      airwayVisible += 1;
+      addTextLabel(candidate.lat, candidate.lon, candidate.text, "airway-label route-smart-label", {
+        interactive: true,
+        onClick: (latlng) => {
+          selectRouteLabel(candidate.labelKey);
+          setAirwayHighlight(airwayKeyForLeg(candidate.leg), true);
+          showRouteLegPopup(candidate.leg, latlng);
+        },
+      });
+      return;
+    }
+    waypointVisible += 1;
+    addTextLabel(candidate.lat, candidate.lon, candidate.text, "waypoint-label route-smart-label", {
+      interactive: true,
+      onClick: (latlng) => {
+        selectRouteLabel(candidate.labelKey);
+        showNavPointPopup(candidate.popupPoint, latlng);
+      },
+    });
+  });
+  state.routeLabelStats = {
+    candidates: state.routeLabelCandidates.length,
+    tierEligible: eligible.length,
+    visible: waypointVisible + airwayVisible,
+    collisionRejected,
+    waypointVisible,
+    airwayVisible,
+    zoom,
+  };
+}
+
+function scheduleRouteLabelRender() {
+  if (state.routeLabelRenderFrame) {
+    window.cancelAnimationFrame(state.routeLabelRenderFrame);
+  }
+  const version = state.routeLabelRenderVersion;
+  state.routeLabelRenderFrame = window.requestAnimationFrame(() => {
+    if (version !== state.routeLabelRenderVersion) {
+      state.routeLabelRenderFrame = 0;
+      return;
+    }
+    renderRouteLabels();
+  });
 }
 
 /**
@@ -8999,6 +9514,8 @@ function addTextLabel(lat, lon, text, className, options = {}) {
     icon: L.divIcon({
       className: `map-label ${className} ${options.interactive ? "is-interactive" : ""}`,
       html: `<span>${escapeHtml(text)}</span>`,
+      iconSize: [0, 0],
+      iconAnchor: [0, 0],
     }),
   }).addTo(options.group || labelLayerGroup);
   if (options.onClick) {
@@ -10284,6 +10801,7 @@ map.on("resize", () => {
   scheduleNavLabelSnapshot();
 });
 map.on("moveend zoomend", refreshNavOverlayDebounced);
+map.on("moveend zoomend", scheduleRouteLabelRender);
 map.on("popupclose", () => {
   if (!state.refreshingNavPopup) {
     state.activeNavPopup = null;
@@ -10535,7 +11053,10 @@ function addRoutePointHitTarget(point, associations) {
   })
     .addTo(routeLayerGroup)
     .on("click", (event) => {
-      scheduleMapPopupAction(event, () => showNavPointPopup(popupPoint, event.latlng));
+      scheduleMapPopupAction(event, () => {
+        selectRouteLabel(routeWaypointLabelKey(point));
+        showNavPointPopup(popupPoint, event.latlng);
+      });
     });
 }
 
@@ -10647,11 +11168,7 @@ function drawRouteCopy(points, payload, routeAssociations, longitudeOffset, fitB
       keySuffix: copyKey,
       group: routeLayerGroup,
     });
-    addTextLabel(point.lat, point.lon, point.ident, "waypoint-label", {
-      interactive: true,
-      group: routeLayerGroup,
-      onClick: (latlng) => showNavPointPopup(popupPoint, latlng),
-    });
+    registerRouteWaypointLabelCandidate(point, index, visiblePoints.length, popupPoint, copyKey);
   });
 
   payload.legs
@@ -10687,6 +11204,7 @@ function drawRouteCopy(points, payload, routeAssociations, longitudeOffset, fitB
         hitLayer.on("mouseout", () => setAirwayHighlight(airwayKey, false));
         hitLayer.on("click", (event) => {
           scheduleMapPopupAction(event, () => {
+            selectRouteLabel(routeAirwayLabelKey(leg));
             setAirwayHighlight(airwayKey, true);
             showRouteLegPopup(leg, event.latlng);
           });
@@ -10695,14 +11213,7 @@ function drawRouteCopy(points, payload, routeAssociations, longitudeOffset, fitB
       }
       const midpoint = midpointForLeg(points, leg);
       if (midpoint && leg.type === "airway") {
-        addTextLabel(midpoint.lat, midpoint.lon, leg.name, "airway-label", {
-          interactive: true,
-          group: routeLayerGroup,
-          onClick: (latlng) => {
-            setAirwayHighlight(airwayKey, true);
-            showRouteLegPopup(leg, latlng);
-          },
-        });
+        registerRouteAirwayLabelCandidate(midpoint, leg, legPoints, copyKey);
       }
     });
 
@@ -10752,6 +11263,7 @@ function drawRoute(payload, options = {}) {
   }
   state.currentRouteLayerKind = normalizeRouteLayerKind(options.routeLayerKind || inferRouteLayerKind(payload));
   routeLayerGroup = routeLayerGroupForKind(state.currentRouteLayerKind);
+  cancelAllPendingPointFocus();
   autoRouteLayerGroup.clearLayers();
   manualRouteLayerGroup.clearLayers();
   markerLayerGroup.clearLayers();
@@ -10785,6 +11297,7 @@ function drawRoute(payload, options = {}) {
     map.fitBounds(boundsPolyline.getBounds(), { padding: [36, 36] });
   }
   applyMapOverlayVisibility();
+  scheduleRouteLabelRender();
 }
 
 /**
@@ -11504,9 +12017,14 @@ async function loadAirportIntoPanel(ident, slot, options = {}) {
     lon: payload.airport.airport_ref_longitude,
     label: payload.airport.airport_name,
   };
-  drawAirportSlotMarker(prefix, airportPoint);
   if (options.focusMap) {
-    map.flyTo([airportPoint.lat, airportPoint.lon], 8, { duration: 0.75 });
+    const focusPromise = flyToStablePointMarker(airportPoint, Number(options.focusZoom) || 8, { slot: prefix });
+    if (options.awaitFocus) {
+      await focusPromise;
+    }
+  } else {
+    cancelPendingPointFocus(prefix);
+    drawAirportSlotMarker(prefix, airportPoint);
   }
   return payload;
 }
@@ -12188,6 +12706,7 @@ async function buildRoute(options = {}) {
     await applyRoutePayload(payload, departure, arrival, {
       signal: controller.signal,
       routeLayerKind: route ? "manualRoute" : "route",
+      recordHistory: options.recordHistory,
     });
     setStatus(
       payload.generated
@@ -12210,16 +12729,123 @@ async function buildRoute(options = {}) {
   }
 }
 
+/**
+ * 功能：仅在用户明确点击“重置并重新规划”时清理航路相关结果，并用当前机场重新自动规划。
+ * 输入：无；机场与跑道取自当前计划页。
+ * 输出：Promise，解析为重新规划操作的结果。
+ */
+async function resetAndReplan() {
+  hideSearchResults();
+  stopActiveRouteOperation();
+
+  // 让仍在返回途中的查询失效，并终止每张 FR24 卡片自己的下载/拟合任务。
+  state.fr24QueryRequestVersion += 1;
+  Array.from(state.fr24BusyByKey.entries()).forEach(([key, entry]) => {
+    entry.controller?.abort?.();
+    finishFR24CardProgress(key);
+  });
+  setFR24QueryBusy(false);
+  state.fr24HistoryByKey.clear();
+  renderFR24Flights([]);
+
+  // clearAllMapDrawings 会统一清除航路、程序、FR24 绘制和计算剖面的输入；
+  // 机场详情与当前机场输入保留，符合“换机场先保留旧结果、显式点击后才清理”的交互约定。
+  clearAllMapDrawings({ recordHistory: true });
+  state.preTrackMatchRoutePayload = null;
+  state.preTrackMatchAirports = null;
+  state.preTrackMatchRouteLayerKind = null;
+  elements.routeInput.value = "";
+  setFR24QueryStatus(t("query.empty"));
+  setStatus(t("plan.resettingForReplan"), false, "progress");
+  scheduleCalculateRender();
+
+  await new Promise((resolve) => window.requestAnimationFrame(resolve));
+  // 清理前的完整结果已经作为一个 undo 快照保存；新规划不再插入中间“空白”快照。
+  return buildRoute({ forceAuto: true, recordHistory: false });
+}
+
 function cloneJSON(value) {
   return value === null || value === undefined ? value : JSON.parse(JSON.stringify(value));
 }
 
-function setFR24QueryStatus(message, isError = false) {
+function setFR24QueryStatus(message, isError = false, requestVersion = null) {
+  if (requestVersion !== null && requestVersion !== state.fr24QueryRequestVersion) {
+    return;
+  }
   if (!elements.fr24QueryStatus) {
     return;
   }
   elements.fr24QueryStatus.textContent = message;
   elements.fr24QueryStatus.classList.toggle("settings-status-error", Boolean(isError));
+}
+
+function setFR24ErrorStatus(error) {
+  setFR24QueryStatus(localizedErrorMessage(error?.message ?? error), true);
+}
+
+function updateFR24CardProgress(key) {
+  const entry = state.fr24BusyByKey.get(key);
+  document.querySelectorAll("[data-fr24-progress-for]").forEach((container) => {
+    if (container.dataset.fr24ProgressFor !== key) {
+      return;
+    }
+    container.classList.toggle("hidden", !entry);
+    const text = container.querySelector("[data-fr24-progress-text]");
+    if (text && entry) {
+      const seconds = Math.max(0, Math.floor((performance.now() - entry.startedAt) / 1000));
+      text.textContent = t("query.phaseElapsed", { phase: entry.phase, seconds });
+    }
+    const cancelButton = container.querySelector('[data-fr24-action="cancel"]');
+    if (cancelButton) {
+      cancelButton.disabled = !entry || entry.cancelling;
+    }
+  });
+}
+
+function beginFR24CardProgress(key, phase, controller) {
+  const previous = state.fr24BusyByKey.get(key);
+  if (previous?.timer) {
+    window.clearInterval(previous.timer);
+  }
+  const entry = {
+    phase,
+    controller,
+    cancelling: false,
+    startedAt: performance.now(),
+    timer: 0,
+  };
+  entry.timer = window.setInterval(() => updateFR24CardProgress(key), 1000);
+  state.fr24BusyByKey.set(key, entry);
+  updateFR24CardProgress(key);
+}
+
+function setFR24CardProgressPhase(key, phase) {
+  const entry = state.fr24BusyByKey.get(key);
+  if (!entry) {
+    return;
+  }
+  entry.phase = phase;
+  updateFR24CardProgress(key);
+}
+
+function finishFR24CardProgress(key) {
+  const entry = state.fr24BusyByKey.get(key);
+  if (entry?.timer) {
+    window.clearInterval(entry.timer);
+  }
+  state.fr24BusyByKey.delete(key);
+  updateFR24CardProgress(key);
+}
+
+function cancelFR24CardProgress(key) {
+  const entry = state.fr24BusyByKey.get(key);
+  if (!entry || entry.cancelling) {
+    return;
+  }
+  entry.cancelling = true;
+  entry.phase = t("query.phaseCancelling");
+  entry.controller?.abort?.();
+  updateFR24CardProgress(key);
 }
 
 function setFR24QueryBusy(isBusy) {
@@ -12233,7 +12859,10 @@ function setFR24QueryBusy(isBusy) {
     ...Array.from(elements.fr24FlightList?.querySelectorAll("[data-fr24-action]") || []),
     ...Array.from(elements.fr24CacheList?.querySelectorAll("[data-fr24-action]") || []),
   ].forEach((button) => {
-    button.disabled = Boolean(isBusy);
+    const isCancel = button.dataset.fr24Action === "cancel";
+    button.disabled = isCancel
+      ? !state.fr24BusyByKey.has(button.dataset.fr24Key)
+      : Boolean(isBusy);
   });
   if (elements.fr24ManualHistoryInput) {
     elements.fr24ManualHistoryInput.disabled = Boolean(isBusy);
@@ -12247,7 +12876,6 @@ function currentQueryRouteInputs() {
   const departure = elements.departureInput.value.trim().toUpperCase();
   const arrival = elements.arrivalInput.value.trim().toUpperCase();
   if (!departure || !arrival) {
-    setStatus(t("route.needAirports"), true);
     setFR24QueryStatus(t("route.needAirports"), true);
     return null;
   }
@@ -12430,6 +13058,19 @@ function renderFR24FlightActions(key) {
   `;
 }
 
+function renderFR24CardProgress(key) {
+  const entry = state.fr24BusyByKey.get(key);
+  const seconds = entry ? Math.max(0, Math.floor((performance.now() - entry.startedAt) / 1000)) : 0;
+  const text = entry ? t("query.phaseElapsed", { phase: entry.phase, seconds }) : "";
+  return `
+    <div class="query-flight-progress ${entry ? "" : "hidden"}" data-fr24-progress-for="${escapeHtml(key)}" role="status" aria-live="polite">
+      <span class="query-flight-progress-spinner" aria-hidden="true"></span>
+      <span data-fr24-progress-text>${escapeHtml(text)}</span>
+      <button class="ghost-button compact-button" type="button" data-fr24-action="cancel" data-fr24-key="${escapeHtml(key)}" ${entry && !entry.cancelling ? "" : "disabled"}>${escapeHtml(t("query.cancelAction"))}</button>
+    </div>
+  `;
+}
+
 function renderFR24CacheActions(flight, key) {
   const isFavorite = flight.favorite === true;
   const favoriteLabel = isFavorite ? t("query.cacheUnfavorite") : t("query.cacheFavorite");
@@ -12464,7 +13105,7 @@ function renderFR24FlightCard(flight, key, { history = false, cacheItem = false 
     ? `<span class="query-flight-badge query-flight-badge-favorite">${escapeHtml(t("query.cacheFavoriteBadge"))}</span>`
     : "";
   return `
-    <article class="query-flight-card ${history ? "is-history" : ""} ${cacheItem ? "is-cache" : ""}">
+    <article class="query-flight-card ${history ? "is-history" : ""} ${cacheItem ? "is-cache" : ""}" data-fr24-card-key="${escapeHtml(key)}">
       <div class="query-flight-head">
         <div>
           <div class="query-flight-number">${escapeHtml(flightPrimaryLabel(flight))}</div>
@@ -12482,6 +13123,7 @@ function renderFR24FlightCard(flight, key, { history = false, cacheItem = false 
         ${downloadedLine}
       </div>
       ${cacheItem ? renderFR24CacheActions(flight, key) : renderFR24FlightActions(key)}
+      ${renderFR24CardProgress(key)}
       ${history || cacheItem ? "" : `
         <details class="query-history">
           <summary>${escapeHtml(t("query.history"))}</summary>
@@ -12565,10 +13207,27 @@ function updateFR24AccessSummary(payload) {
   if (!elements.fr24AccessSummary) {
     return;
   }
-  const synced = Boolean(payload?.cookie_configured || payload?.frpl_configured);
+  const accessState = String(payload?.access_state || "unknown");
+  const labelKey = {
+    available: "query.accessStateAvailable",
+    challenge: "query.accessStateChallenge",
+    expired: "query.accessStateExpired",
+    configured: "query.accessStateConfigured",
+    unknown: "query.accessStateUnknown",
+  }[accessState] || "query.accessStateUnknown";
   elements.fr24AccessSummary.textContent = t("query.accessSummary", {
-    state: synced ? t("query.accessSyncedState") : t("query.accessUnsyncedState"),
+    state: t(labelKey),
   });
+}
+
+async function waitForFR24SessionWarmup(requestVersion) {
+  const warmupUntil = Number(state.fr24AccessStatus?.warmup_until || 0) * 1000;
+  while (warmupUntil > Date.now() && requestVersion === state.fr24QueryRequestVersion) {
+    const seconds = Math.max(1, Math.ceil((warmupUntil - Date.now()) / 1000));
+    setFR24QueryStatus(t("query.accessWarmup", { seconds }), false, requestVersion);
+    await new Promise((resolve) => window.setTimeout(resolve, Math.min(1000, warmupUntil - Date.now())));
+  }
+  return requestVersion === state.fr24QueryRequestVersion;
 }
 
 function fr24NativeSessionMessage(payload = {}) {
@@ -12588,52 +13247,43 @@ function fr24NativeSessionMessage(payload = {}) {
 function openFR24VerificationBrowser() {
   if (!window.webkit?.messageHandlers?.navplanner) {
     setFR24QueryStatus(t("database.iosOnly"), true);
-    setStatus(t("database.iosOnly"), true);
     return;
   }
   postNativeEvent("openFR24Verification");
   setFR24QueryStatus(t("query.accessOpening"));
-  setStatus(t("query.accessOpening"));
 }
 
 function syncFR24BrowserSession() {
   if (!window.webkit?.messageHandlers?.navplanner) {
     setFR24QueryStatus(t("database.iosOnly"), true);
-    setStatus(t("database.iosOnly"), true);
     return;
   }
   postNativeEvent("syncFR24Session");
   setFR24QueryStatus(t("query.accessSyncing"));
-  setStatus(t("query.accessSyncing"));
 }
 
 function openFR24CacheDirectory() {
   if (!window.webkit?.messageHandlers?.navplanner) {
     setFR24QueryStatus(t("database.iosOnly"), true);
-    setStatus(t("database.iosOnly"), true);
     return;
   }
   postNativeEvent("openFR24CacheDirectory");
   setFR24QueryStatus(t("query.cacheDirectoryOpening"));
-  setStatus(t("query.cacheDirectoryOpening"));
 }
 
 function importFR24GPX() {
   if (!window.webkit?.messageHandlers?.navplanner) {
     setFR24QueryStatus(t("database.iosOnly"), true);
-    setStatus(t("database.iosOnly"), true);
     return;
   }
   postNativeEvent("importFR24GPX");
   setFR24QueryStatus(t("query.importGPXOpening"));
-  setStatus(t("query.importGPXOpening"));
 }
 
 function handleNativeFR24SessionUpdated(payload = {}) {
   updateFR24AccessSummary(payload);
   const message = fr24NativeSessionMessage(payload);
   setFR24QueryStatus(message, Boolean(payload.error));
-  setStatus(message, Boolean(payload.error));
 }
 
 function handleNativeFR24CacheDirectoryOpened(payload = {}) {
@@ -12642,7 +13292,6 @@ function handleNativeFR24CacheDirectoryOpened(payload = {}) {
     ? (currentLanguage() === "zh-Hans" && rawMessage ? rawMessage : t("query.cacheDirectoryFailed"))
     : (currentLanguage() === "zh-Hans" && rawMessage ? rawMessage : t("query.cacheDirectoryOpened"));
   setFR24QueryStatus(message, Boolean(payload.error));
-  setStatus(message, Boolean(payload.error));
 }
 
 function handleNativeFR24GPXImported(payload = {}) {
@@ -12650,7 +13299,6 @@ function handleNativeFR24GPXImported(payload = {}) {
     const rawMessage = cleanErrorMessage(payload.message || "");
     const message = currentLanguage() === "zh-Hans" && rawMessage ? rawMessage : localizedErrorMessage(rawMessage);
     setFR24QueryStatus(message, true);
-    setStatus(message, true);
     return;
   }
   const count = drawFR24TrackPoints(payload.track_points || [], { fitBounds: true });
@@ -12659,7 +13307,6 @@ function handleNativeFR24GPXImported(payload = {}) {
     count: formatCount(count),
   });
   setFR24QueryStatus(message);
-  setStatus(message);
 }
 
 async function refreshFR24CacheStatus() {
@@ -12687,7 +13334,6 @@ async function searchFR24Cache() {
     renderFR24CacheFlights([]);
     const message = localizedErrorMessage(error.message);
     setFR24QueryStatus(message, true);
-    setStatus(message, true);
   } finally {
     setFR24QueryBusy(false);
   }
@@ -12720,7 +13366,6 @@ async function saveFR24Access() {
   clearFR24AccessInputs();
   updateFR24AccessSummary(payload);
   setFR24QueryStatus(t("query.accessSaved"));
-  setStatus(t("query.accessSaved"));
 }
 
 async function clearFR24Access() {
@@ -12728,33 +13373,51 @@ async function clearFR24Access() {
   clearFR24AccessInputs();
   updateFR24AccessSummary(payload);
   setFR24QueryStatus(t("query.accessCleared"));
-  setStatus(t("query.accessCleared"));
 }
 
 async function searchFR24Flights() {
   hideSearchResults();
+  const requestVersion = ++state.fr24QueryRequestVersion;
   const route = currentQueryRouteInputs();
   if (!route) {
     renderFR24Flights([]);
     return;
   }
   setFR24QueryBusy(true);
-  setFR24QueryStatus(t("query.loading"));
   try {
+    if (!state.fr24AccessStatus) {
+      await refreshFR24AccessStatus();
+    }
+    if (!await waitForFR24SessionWarmup(requestVersion)) {
+      return;
+    }
+    setFR24QueryStatus(t("query.loading"), false, requestVersion);
     const payload = await fetchJson(
       `/api/fr24/search?departure=${encodeURIComponent(route.departure)}&arrival=${encodeURIComponent(route.arrival)}&limit=10`,
     );
+    if (requestVersion !== state.fr24QueryRequestVersion) {
+      return;
+    }
     const flights = payload.flights || [];
     state.fr24HistoryByKey.clear();
     renderFR24Flights(flights);
     updateFR24CacheSummary(payload.cache || state.fr24CacheStatus || {});
     updateFR24AccessSummary(payload.access || state.fr24AccessStatus || {});
-    setFR24QueryStatus(flights.length ? t("query.loaded", { count: flights.length }) : t("query.noFlights"), !flights.length);
+    setFR24QueryStatus(
+      flights.length ? t("query.loaded", { count: flights.length }) : t("query.noFlights"),
+      !flights.length,
+      requestVersion,
+    );
   } catch (error) {
+    if (requestVersion !== state.fr24QueryRequestVersion) {
+      return;
+    }
     renderFR24Flights([]);
     const message = localizedErrorMessage(error.message);
-    setFR24QueryStatus(message, true);
-    setStatus(message, true);
+    setFR24QueryStatus(message, true, requestVersion);
+    refreshFR24AccessStatus().catch((statusError) => {
+      console.warn("FR24 访问状态刷新失败", statusError);
+    });
   } finally {
     setFR24QueryBusy(false);
   }
@@ -12765,7 +13428,6 @@ async function searchFR24ManualHistory() {
   const query = elements.fr24ManualHistoryInput?.value.trim() || "";
   if (!query) {
     setFR24QueryStatus(t("query.manualHistoryMissing"), true);
-    setStatus(t("query.manualHistoryMissing"), true);
     return;
   }
   const route = optionalQueryRouteInputs();
@@ -12791,7 +13453,6 @@ async function searchFR24ManualHistory() {
     renderFR24Flights([], { history: true, prefix: "manual" });
     const message = localizedErrorMessage(error.message);
     setFR24QueryStatus(message, true);
-    setStatus(message, true);
   } finally {
     setFR24QueryBusy(false);
   }
@@ -12817,7 +13478,6 @@ async function loadFR24History(key) {
   } catch (error) {
     const message = localizedErrorMessage(error.message);
     setFR24QueryStatus(message, true);
-    setStatus(message, true);
   } finally {
     setFR24QueryBusy(false);
   }
@@ -13356,21 +14016,27 @@ async function downloadAndDrawFR24Track(key) {
   if (!flight) {
     return;
   }
+  const controller = new AbortController();
+  beginFR24CardProgress(key, t("query.phaseDownloading"), controller);
   setFR24QueryBusy(true);
   setFR24QueryStatus(t("query.downloading"));
   try {
-    const payload = await fetchFR24TrackPayload(flight);
-    await syncPlanAirportsFromFR24Flight(payload.flight || flight);
+    const payload = await fetchFR24TrackPayload(flight, { signal: controller.signal });
+    await syncPlanAirportsFromFR24Flight(payload.flight || flight, { signal: controller.signal });
+    throwIfAborted(controller.signal);
     const count = drawFR24TrackPoints(payload.track_points || []);
     updateFR24CacheSummary(payload.cache || state.fr24CacheStatus || {});
     updateFR24AccessSummary(payload.access || state.fr24AccessStatus || {});
     setFR24QueryStatus(t("query.drawn", { count }));
-    setStatus(t("query.drawn", { count }));
   } catch (error) {
-    const message = localizedErrorMessage(error.message);
-    setFR24QueryStatus(message, true);
-    setStatus(message, true);
+    if (isAbortError(error)) {
+      setFR24QueryStatus(t("query.cancelled"));
+    } else {
+      const message = localizedErrorMessage(error.message);
+      setFR24QueryStatus(message, true);
+    }
   } finally {
+    finishFR24CardProgress(key);
     setFR24QueryBusy(false);
   }
 }
@@ -13381,12 +14047,13 @@ async function matchFR24FlightTrack(key) {
     return;
   }
   const controller = beginRouteOperation(t("track.operation"));
+  beginFR24CardProgress(key, t("query.phaseDownloading"), controller);
   setFR24QueryBusy(true);
   setFR24QueryStatus(t("query.matching"));
-  setStatus(t("query.matching"), false, "progress");
   try {
     const download = await fetchFR24TrackPayload(flight, { signal: controller.signal });
     throwIfAborted(controller.signal);
+    setFR24CardProgressPhase(key, t("query.phaseMatching"));
     const route = await syncPlanAirportsFromFR24Flight(download.flight || flight, {
       signal: controller.signal,
     }) || currentQueryRouteInputs();
@@ -13425,13 +14092,14 @@ async function matchFR24FlightTrack(key) {
     setStatus(message, false, "success");
   } catch (error) {
     if (isAbortError(error)) {
+      setFR24QueryStatus(t("query.cancelled"));
       setStatus(t("track.stopped"));
     } else {
       const message = localizedErrorMessage(error.message);
       setFR24QueryStatus(message, true);
-      setStatus(message, true);
     }
   } finally {
+    finishFR24CardProgress(key);
     setFR24QueryBusy(false);
     endRouteOperation(controller);
   }
@@ -13442,7 +14110,6 @@ function clearFR24TrackDrawing(options = {}) {
   const recordHistory = eventLike ? true : options.recordHistory !== false;
   if (!state.fr24TrackPayload) {
     setFR24QueryStatus(t("query.noFR24Track"), true);
-    setStatus(t("query.noFR24Track"), true);
     updateTrackHistoryControlState();
     return;
   }
@@ -13456,7 +14123,6 @@ function clearFR24TrackDrawing(options = {}) {
   applyMapOverlayVisibility();
   updateTrackHistoryControlState();
   setFR24QueryStatus(t("query.fr24TrackCleared"));
-  setStatus(t("query.fr24TrackCleared"));
 }
 
 async function restoreFR24MatchedRoute() {
@@ -13509,11 +14175,9 @@ async function deleteFR24CachedFlight(key) {
     updateFR24CacheSummary(payload.cache || state.fr24CacheStatus || {});
     await searchFR24Cache();
     setFR24QueryStatus(t("query.cacheDeleted"));
-    setStatus(t("query.cacheDeleted"));
   } catch (error) {
     const message = localizedErrorMessage(error.message);
     setFR24QueryStatus(message, true);
-    setStatus(message, true);
   } finally {
     setFR24QueryBusy(false);
   }
@@ -13537,11 +14201,9 @@ async function setFR24CacheFavorite(key, favorite) {
     await searchFR24Cache();
     const message = favorite ? t("query.cacheFavorited") : t("query.cacheUnfavorited");
     setFR24QueryStatus(message);
-    setStatus(message);
   } catch (error) {
     const message = localizedErrorMessage(error.message);
     setFR24QueryStatus(message, true);
-    setStatus(message, true);
   } finally {
     setFR24QueryBusy(false);
   }
@@ -13555,7 +14217,6 @@ async function shareFR24CachedFlight(key) {
   }
   if (!window.webkit?.messageHandlers?.navplanner) {
     setFR24QueryStatus(t("database.iosOnly"), true);
-    setStatus(t("database.iosOnly"), true);
     return;
   }
   setFR24QueryBusy(true);
@@ -13576,11 +14237,9 @@ async function shareFR24CachedFlight(key) {
     });
     await searchFR24Cache();
     setFR24QueryStatus(t("query.cacheShareReady"));
-    setStatus(t("query.cacheShareReady"));
   } catch (error) {
     const message = localizedErrorMessage(error.message);
     setFR24QueryStatus(message, true);
-    setStatus(message, true);
   } finally {
     setFR24QueryBusy(false);
   }
@@ -13601,7 +14260,6 @@ async function clearFR24Cache() {
     ? t("query.cacheClearedWithFavorites", { count: formatCount(favoriteCount) })
     : t("query.cacheCleared");
   setFR24QueryStatus(message);
-  setStatus(message);
 }
 
 function handleFR24FlightAction(event) {
@@ -13612,18 +14270,20 @@ function handleFR24FlightAction(event) {
   event.preventDefault();
   const key = button.dataset.fr24Key;
   const action = button.dataset.fr24Action;
-  if (action === "history") {
-    loadFR24History(key).catch(setErrorStatus);
+  if (action === "cancel") {
+    cancelFR24CardProgress(key);
+  } else if (action === "history") {
+    loadFR24History(key).catch(setFR24ErrorStatus);
   } else if (action === "draw") {
-    downloadAndDrawFR24Track(key).catch(setErrorStatus);
+    downloadAndDrawFR24Track(key).catch(setFR24ErrorStatus);
   } else if (action === "match") {
-    matchFR24FlightTrack(key).catch(setErrorStatus);
+    matchFR24FlightTrack(key).catch(setFR24ErrorStatus);
   } else if (action === "delete-cache") {
-    deleteFR24CachedFlight(key).catch(setErrorStatus);
+    deleteFR24CachedFlight(key).catch(setFR24ErrorStatus);
   } else if (action === "favorite-cache") {
-    setFR24CacheFavorite(key, button.dataset.fr24Favorite === "true").catch(setErrorStatus);
+    setFR24CacheFavorite(key, button.dataset.fr24Favorite === "true").catch(setFR24ErrorStatus);
   } else if (action === "share-cache") {
-    shareFR24CachedFlight(key).catch(setErrorStatus);
+    shareFR24CachedFlight(key).catch(setFR24ErrorStatus);
   }
 }
 
@@ -13672,6 +14332,7 @@ registerPlanPage({
   elements,
   buildRoute,
   clearAllMapDrawings,
+  resetAndReplan,
   stopActiveRouteOperation,
 });
 
@@ -13708,7 +14369,7 @@ registerQueryPage({
   updateFR24ProfileCursor,
   handleFR24ProfilePointer,
   ensureFR24ProfileResizeObserver,
-  setErrorStatus,
+  setErrorStatus: setFR24ErrorStatus,
 });
 
 calculatePage.registerEvents();
@@ -13862,6 +14523,364 @@ function simulatorDebugLaunchConfig() {
   }
 }
 
+function simulatorDebugPercentile(values, percentile) {
+  if (!values.length) {
+    return 0;
+  }
+  const sorted = [...values].sort((left, right) => left - right);
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * percentile) - 1));
+  return sorted[index];
+}
+
+function simulatorDebugFrameSummary(frameDeltas) {
+  const measured = frameDeltas.filter((value) => Number.isFinite(value) && value > 0 && value < 250);
+  const total = measured.reduce((sum, value) => sum + value, 0);
+  return {
+    samples: measured.length,
+    meanMs: measured.length ? Number((total / measured.length).toFixed(2)) : 0,
+    p50Ms: Number(simulatorDebugPercentile(measured, 0.50).toFixed(2)),
+    p95Ms: Number(simulatorDebugPercentile(measured, 0.95).toFixed(2)),
+    p99Ms: Number(simulatorDebugPercentile(measured, 0.99).toFixed(2)),
+    maxMs: Number(Math.max(0, ...measured).toFixed(2)),
+    over33ms: measured.filter((value) => value > 33.4).length,
+    over50ms: measured.filter((value) => value > 50).length,
+    effectiveFps: total > 0 ? Number(((measured.length * 1000) / total).toFixed(1)) : 0,
+  };
+}
+
+function simulatorDebugWaitForMapAction(action, timeoutMs = 2400) {
+  return new Promise((resolve) => {
+    let finished = false;
+    let timer = 0;
+    const finish = () => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      map.off("moveend", finish);
+      if (timer) {
+        window.clearTimeout(timer);
+      }
+      resolve();
+    };
+    map.once("moveend", finish);
+    timer = window.setTimeout(finish, timeoutMs);
+    action();
+  });
+}
+
+async function simulatorDebugNextPaint(count = 2) {
+  for (let index = 0; index < count; index += 1) {
+    await new Promise((resolve) => window.requestAnimationFrame(resolve));
+  }
+}
+
+async function simulatorDebugWaitFor(predicate, timeoutMs = 30000, intervalMs = 80) {
+  const startedAt = performance.now();
+  while (performance.now() - startedAt < timeoutMs) {
+    if (predicate()) {
+      return true;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, intervalMs));
+  }
+  return Boolean(predicate());
+}
+
+function simulatorDebugRouteLabelSnapshot(label = "") {
+  const markers = Array.from(document.querySelectorAll(".route-smart-label span"))
+    .map((element) => {
+      const markerElement = element.closest(".route-smart-label");
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(markerElement || element);
+      return {
+        element,
+        text: element.textContent?.trim() || "",
+        airway: markerElement?.classList.contains("airway-label") || false,
+        rect: {
+          left: rect.left,
+          top: rect.top,
+          right: rect.right,
+          bottom: rect.bottom,
+          width: rect.width,
+          height: rect.height,
+        },
+        visible: rect.width > 0
+          && rect.height > 0
+          && style.display !== "none"
+          && style.visibility !== "hidden"
+          && Number(style.opacity || 1) > 0,
+      };
+    })
+    .filter((item) => item.visible);
+  const overlaps = [];
+  for (let leftIndex = 0; leftIndex < markers.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < markers.length; rightIndex += 1) {
+      if (routeLabelRectsOverlap(markers[leftIndex].rect, markers[rightIndex].rect)) {
+        overlaps.push([markers[leftIndex].text, markers[rightIndex].text]);
+      }
+    }
+  }
+  const airwayTexts = markers.filter((item) => item.airway).map((item) => item.text);
+  return {
+    label,
+    center: map.getCenter(),
+    zoom: map.getZoom(),
+    stats: cloneJSON(state.routeLabelStats),
+    visibleCount: markers.length,
+    waypointCount: markers.filter((item) => !item.airway).length,
+    airwayCount: airwayTexts.length,
+    uniqueAirwayCount: new Set(airwayTexts).size,
+    duplicateAirwayLabels: airwayTexts.length - new Set(airwayTexts).size,
+    overlapCount: overlaps.length,
+    overlaps,
+    labels: markers.map((item) => item.text),
+  };
+}
+
+async function runSimulatorRouteLabelStress(sequence) {
+  const views = [];
+  const routePoints = withDisplayLongitudes(state.currentRoutePayload?.points || []);
+  for (const [index, rawView] of sequence.entries()) {
+    const view = rawView && typeof rawView === "object" ? rawView : {};
+    if (view.fitRoute && routePoints.length >= 2) {
+      const bounds = L.latLngBounds(routePoints.map(latLngForPoint));
+      await simulatorDebugWaitForMapAction(() => {
+        map.fitBounds(bounds, { padding: [36, 36], animate: true, duration: 0.34 });
+      });
+    } else {
+      const ratio = clampNumber(Number(view.pointRatio) || 0, 0, 1);
+      const pointIndex = Math.round(Math.max(0, routePoints.length - 1) * ratio);
+      const routePoint = routePoints[pointIndex];
+      const center = Array.isArray(view.center)
+        ? view.center
+        : routePoint
+          ? [routePoint.lat, routePoint.lon]
+          : [map.getCenter().lat, map.getCenter().lng];
+      const zoom = Number.isFinite(Number(view.zoom)) ? Number(view.zoom) : map.getZoom();
+      await simulatorDebugWaitForMapAction(() => {
+        map.flyTo(center, zoom, { duration: clampNumber(Number(view.duration) || 0.34, 0.1, 1) });
+      });
+    }
+    if (Array.isArray(view.panBy)) {
+      await simulatorDebugWaitForMapAction(() => {
+        map.panBy(view.panBy, { animate: true, duration: 0.22 });
+      });
+    }
+    if (Number.isFinite(Number(view.selectPointRatio)) && routePoints.length) {
+      const selectedRatio = clampNumber(Number(view.selectPointRatio), 0, 1);
+      const selectedPoint = routePoints[Math.round((routePoints.length - 1) * selectedRatio)];
+      selectRouteLabel(routeWaypointLabelKey(selectedPoint));
+    }
+    scheduleRouteLabelRender();
+    await simulatorDebugNextPaint(3);
+    // zoomend 的平滑缩放类会在 140ms debounce 后移除；等其结束再量 DOM 可见矩形。
+    await new Promise((resolve) => window.setTimeout(resolve, MAP_ZOOM.wheelIdleDelay + 40));
+    views.push(simulatorDebugRouteLabelSnapshot(view.label || `view-${index + 1}`));
+  }
+  return {
+    routePointCount: routePoints.length,
+    candidateCount: state.routeLabelCandidates.length,
+    views,
+  };
+}
+
+async function runSimulatorAirportMapStress(sequence) {
+  const frameDeltas = [];
+  const markerSamples = [];
+  const regions = [];
+  let previousFrame = 0;
+  let samplingFrame = 0;
+  let active = true;
+  const sampleFrame = (timestamp) => {
+    if (previousFrame) {
+      frameDeltas.push(timestamp - previousFrame);
+    }
+    previousFrame = timestamp;
+    AIRPORT_SLOTS.forEach((slot) => {
+      const key = state.airportSlotMarkerKeys[slot];
+      const marker = key ? state.airportMarkers.get(key) : null;
+      const element = marker?.getElement?.();
+      if (!element) {
+        return;
+      }
+      const rect = element.getBoundingClientRect();
+      const expected = Number(marker._plannerStableRadius || 0) * 2;
+      if (rect.width > 0 && rect.height > 0) {
+        markerSamples.push({
+          slot,
+          width: rect.width,
+          height: rect.height,
+          expected,
+          zoom: map.getZoom(),
+        });
+      }
+    });
+    if (active) {
+      samplingFrame = window.requestAnimationFrame(sampleFrame);
+    }
+  };
+  samplingFrame = window.requestAnimationFrame(sampleFrame);
+
+  for (const [index, rawItem] of sequence.entries()) {
+    const item = typeof rawItem === "string" ? { ident: rawItem } : (rawItem || {});
+    const ident = String(item.ident || "").trim().toUpperCase();
+    const slot = AIRPORT_SLOTS.includes(item.slot) ? item.slot : "departure";
+    if (!ident) {
+      continue;
+    }
+    const startedAt = performance.now();
+    const payload = await loadAirportIntoPanel(ident, slot, {
+      activate: false,
+      focusMap: true,
+      focusZoom: Number(item.zoom) || 8,
+      awaitFocus: true,
+    });
+    if (Array.isArray(item.panBy)) {
+      await simulatorDebugWaitForMapAction(() => {
+        map.panBy(item.panBy, { animate: true, duration: clampNumber(Number(item.panDuration) || 0.22, 0.1, 0.8) });
+      });
+    }
+    if (Number.isFinite(Number(item.afterZoom))) {
+      await simulatorDebugWaitForMapAction(() => {
+        map.flyTo(map.getCenter(), Number(item.afterZoom), { duration: 0.32 });
+      });
+    }
+    await simulatorDebugNextPaint(2);
+    const key = state.airportSlotMarkerKeys[slot];
+    const marker = key ? state.airportMarkers.get(key) : null;
+    const rect = marker?.getElement?.()?.getBoundingClientRect();
+    regions.push({
+      index,
+      ident: payload?.airport?.airport_identifier || ident,
+      slot,
+      zoom: map.getZoom(),
+      elapsedMs: Math.round(performance.now() - startedAt),
+      markerWidth: rect ? Number(rect.width.toFixed(2)) : 0,
+      markerHeight: rect ? Number(rect.height.toFixed(2)) : 0,
+      expectedDiameter: Number(((marker?._plannerStableRadius || 0) * 2).toFixed(2)),
+    });
+  }
+
+  active = false;
+  if (samplingFrame) {
+    window.cancelAnimationFrame(samplingFrame);
+  }
+  const oversizeSamples = markerSamples.filter((sample) => (
+    sample.width > sample.expected + 2 || sample.height > sample.expected + 2
+  ));
+  return {
+    transitions: regions.length,
+    regions,
+    frames: simulatorDebugFrameSummary(frameDeltas),
+    markerSampleCount: markerSamples.length,
+    markerMaxWidth: Number(Math.max(0, ...markerSamples.map((sample) => sample.width)).toFixed(2)),
+    markerMaxHeight: Number(Math.max(0, ...markerSamples.map((sample) => sample.height)).toFixed(2)),
+    markerOversizeSamples: oversizeSamples.length,
+  };
+}
+
+async function runSimulatorResetReplanProbe(options = {}) {
+  const routePoints = state.currentRoutePayload?.points || [];
+  if (routePoints.length < 2) {
+    return { passed: false, reason: "initial route missing" };
+  }
+  const oldRouteSignature = JSON.stringify(routePoints.map((point) => [point.ident, point.lat, point.lon]));
+  const oldRouteAirports = cloneJSON(state.currentRouteAirports);
+  const syntheticTrack = routePoints.map((point, index) => ({
+    lat: point.lat,
+    lon: point.lon,
+    altitude_ft: Math.round(Math.sin((index / Math.max(1, routePoints.length - 1)) * Math.PI) * 32000),
+    timestamp: 1_760_000_000 + index * 90,
+  }));
+  drawFR24TrackPoints(syntheticTrack, { fitBounds: false });
+  renderFR24Flights([{
+    fr24_id: "SIM-RESET-PROBE",
+    flight: "NP001",
+    callsign: "NP001",
+    origin_icao: oldRouteAirports?.departure,
+    dest_icao: oldRouteAirports?.arrival,
+    airline: "Simulator Probe",
+    aircraft: "A320",
+    status: "landed",
+  }]);
+  scheduleCalculateRender();
+  await simulatorDebugNextPaint(3);
+  const oldProfileSignature = state.calculateRouteSignature;
+  const oldProfileSampleCount = state.calculateProfileData?.samples?.length || 0;
+  const changeSlot = AIRPORT_SLOTS.includes(options.slot) ? options.slot : "departure";
+  const changedIdent = String(options.ident || "ZSSS").trim().toUpperCase();
+  const input = elements[`${changeSlot}Input`];
+  input.value = changedIdent;
+  await loadAirportIntoPanel(changedIdent, changeSlot, { activate: false, focusMap: false });
+  await simulatorDebugNextPaint(2);
+
+  const routeSignatureAfterAirportChange = JSON.stringify(
+    (state.currentRoutePayload?.points || []).map((point) => [point.ident, point.lat, point.lon]),
+  );
+  const buttonStyle = window.getComputedStyle(elements.resetAndReplanButton);
+  const beforeReset = {
+    changedAirport: state[`${changeSlot}Airport`]?.airport_identifier || "",
+    inputValue: input.value,
+    oldRouteAirports,
+    currentRouteAirports: cloneJSON(state.currentRouteAirports),
+    oldRouteRetained: routeSignatureAfterAirportChange === oldRouteSignature,
+    oldProfileRetained: state.calculateRouteSignature === oldProfileSignature
+      && (state.calculateProfileData?.samples?.length || 0) === oldProfileSampleCount,
+    oldFR24TrackRetained: Boolean(state.fr24TrackPayload),
+    oldFR24ResultRetained: state.fr24Flights.size === 1,
+    resetButton: {
+      text: elements.resetAndReplanButton?.textContent?.trim() || "",
+      visible: Boolean(elements.resetAndReplanButton?.offsetParent),
+      className: elements.resetAndReplanButton?.className || "",
+      color: buttonStyle.color,
+      backgroundColor: buttonStyle.backgroundColor,
+      borderColor: buttonStyle.borderColor,
+    },
+  };
+  writeLocalStorageValue("navplannerDebugResetReplanBefore", JSON.stringify(beforeReset));
+  const pauseBeforeClickMs = Math.max(0, Number(options.pauseBeforeClickMs) || 0);
+  if (pauseBeforeClickMs) {
+    await new Promise((resolve) => window.setTimeout(resolve, pauseBeforeClickMs));
+  }
+
+  elements.resetAndReplanButton.click();
+  const replanned = await simulatorDebugWaitFor(() => (
+    !state.activeRouteAbortController
+    && state.currentRouteAirports?.[changeSlot] === changedIdent
+    && Boolean(state.currentRoutePayload)
+  ));
+  await simulatorDebugNextPaint(4);
+  const newRouteSignature = JSON.stringify(
+    (state.currentRoutePayload?.points || []).map((point) => [point.ident, point.lat, point.lon]),
+  );
+  const afterReset = {
+    replanned,
+    currentRouteAirports: cloneJSON(state.currentRouteAirports),
+    routeChanged: newRouteSignature !== oldRouteSignature,
+    routePointCount: state.currentRoutePayload?.points?.length || 0,
+    fr24TrackCleared: !state.fr24TrackPayload,
+    fr24ResultsCleared: state.fr24Flights.size === 0,
+    profileRecomputed: Boolean(state.calculateProfileData)
+      && state.calculateRouteSignature !== oldProfileSignature,
+    planStatus: elements.statusText?.textContent || "",
+    queryStatus: elements.fr24QueryStatus?.textContent || "",
+    resetButtonEnabled: !elements.resetAndReplanButton.disabled,
+  };
+  return {
+    beforeReset,
+    afterReset,
+    passed: beforeReset.oldRouteRetained
+      && beforeReset.oldProfileRetained
+      && beforeReset.oldFR24TrackRetained
+      && beforeReset.oldFR24ResultRetained
+      && afterReset.replanned
+      && afterReset.routeChanged
+      && afterReset.fr24TrackCleared
+      && afterReset.fr24ResultsCleared
+      && afterReset.profileRecomputed,
+  };
+}
+
 async function applySimulatorDebugLaunch() {
   if (window.__NAVPLANNER_SIM_DEBUG_APPLIED) {
     return;
@@ -13889,6 +14908,39 @@ async function applySimulatorDebugLaunch() {
   }
   if (typeof config.arrival === "string") {
     elements.arrivalInput.value = config.arrival.trim().toUpperCase();
+  }
+  if (typeof config.searchAirportQuery === "string") {
+    const slot = AIRPORT_SLOTS.includes(config.searchAirportSlot) ? config.searchAirportSlot : "departure";
+    const target = elements[`${slot}Input`];
+    const results = elements[`${slot}Results`];
+    setMobileBottomTab("plan");
+    target.value = config.searchAirportQuery.trim();
+    target.focus({ preventScroll: true });
+    const debugSearchResults = await searchEntities(target, results);
+    if (Number.isFinite(Number(config.searchProbeDelayMs))) {
+      await new Promise((resolve) => window.setTimeout(resolve, Math.max(0, Number(config.searchProbeDelayMs))));
+    }
+    const resultsRect = results.getBoundingClientRect();
+    const resultsStyle = window.getComputedStyle(results);
+    writeLocalStorageValue("navplannerDebugSearchResult", JSON.stringify({
+      query: config.searchAirportQuery,
+      ids: debugSearchResults.map((item) => item.ident),
+      renderedIds: Array.from(results.querySelectorAll(".search-item-title")).map((item) => item.textContent),
+      emptyMessage: results.querySelector(".search-empty")?.textContent || "",
+      hidden: results.classList.contains("hidden"),
+      display: resultsStyle.display,
+      visibility: resultsStyle.visibility,
+      opacity: resultsStyle.opacity,
+      rect: {
+        top: Math.round(resultsRect.top),
+        bottom: Math.round(resultsRect.bottom),
+        left: Math.round(resultsRect.left),
+        right: Math.round(resultsRect.right),
+        width: Math.round(resultsRect.width),
+        height: Math.round(resultsRect.height),
+      },
+      activeElement: document.activeElement?.id || document.activeElement?.tagName || "",
+    }));
   }
   if (typeof config.route === "string") {
     elements.routeInput.value = config.route.trim().toUpperCase();
@@ -13956,10 +15008,37 @@ async function applySimulatorDebugLaunch() {
   if (config.buildRoute) {
     await buildRoute({ forceAuto: config.forceAuto !== false });
   }
+  if (typeof config.fr24DepartureOverride === "string") {
+    elements.departureInput.value = config.fr24DepartureOverride.trim().toUpperCase();
+  }
+  if (typeof config.fr24ArrivalOverride === "string") {
+    elements.arrivalInput.value = config.fr24ArrivalOverride.trim().toUpperCase();
+  }
 
   const mobileTab = typeof config.mobileTab === "string" ? config.mobileTab : config.tab;
   if (typeof mobileTab === "string") {
     setMobileBottomTab(mobileTab);
+  }
+  if (Array.isArray(config.tabStressSequence)) {
+    const stressStartedAt = performance.now();
+    state.detailRefreshRecords.clear();
+    state.detailResourceExecutionCounts.clear();
+    state.detailLayoutExecutionCount = 0;
+    config.tabStressSequence.forEach((tab) => setMobileBottomTab(tab));
+    await Promise.allSettled(
+      Array.from(state.detailRefreshRecords.values())
+        .map((record) => record.promise)
+        .filter(Boolean),
+    );
+    await new Promise((resolve) => window.setTimeout(resolve, 180));
+    writeLocalStorageValue("navplannerDebugTabStressResult", JSON.stringify({
+      activeMobileTab: state.activeMobileTab,
+      activeDetailTab: state.activeDetailTab,
+      requestedTransitions: config.tabStressSequence.length,
+      elapsedMs: Math.round(performance.now() - stressStartedAt),
+      layoutExecutions: state.detailLayoutExecutionCount,
+      resourceExecutions: Object.fromEntries(state.detailResourceExecutionCounts),
+    }));
   }
   if (Number.isFinite(Number(config.mobilePanelMapRatio))) {
     applyMobilePanelMapRatio(Number(config.mobilePanelMapRatio));
@@ -13970,15 +15049,132 @@ async function applySimulatorDebugLaunch() {
   if (detailTab) {
     setDetailTab(detailTab);
   }
+  if (config.resetReplanProbe && typeof config.resetReplanProbe === "object") {
+    const result = await runSimulatorResetReplanProbe(config.resetReplanProbe);
+    writeLocalStorageValue("navplannerDebugResetReplanResult", JSON.stringify(result));
+  }
+  if (Array.isArray(config.routeLabelStressSequence)) {
+    const result = await runSimulatorRouteLabelStress(config.routeLabelStressSequence);
+    writeLocalStorageValue("navplannerDebugRouteLabelStressResult", JSON.stringify(result));
+  }
+  if (Array.isArray(config.airportMapStressSequence)) {
+    const result = await runSimulatorAirportMapStress(config.airportMapStressSequence);
+    writeLocalStorageValue("navplannerDebugAirportMapStressResult", JSON.stringify(result));
+  }
+  if (config.runFR24Search === true) {
+    setMobileBottomTab("query");
+    await searchFR24Flights();
+    const firstFlightKey = state.fr24Flights.keys().next().value;
+    if (firstFlightKey && config.downloadFirstFR24Flight === true) {
+      downloadAndDrawFR24Track(firstFlightKey).catch(setFR24ErrorStatus);
+    } else if (firstFlightKey && config.matchFirstFR24Flight === true) {
+      matchFR24FlightTrack(firstFlightKey).catch(setFR24ErrorStatus);
+    }
+    if (typeof config.postFR24Tab === "string") {
+      setMobileBottomTab(config.postFR24Tab);
+    }
+    writeLocalStorageValue("navplannerDebugFR24Result", JSON.stringify({
+      flightCount: state.fr24Flights.size,
+      queryStatus: elements.fr24QueryStatus?.textContent || "",
+      planStatus: elements.statusText?.textContent || "",
+      accessSummary: elements.fr24AccessSummary?.textContent || "",
+      activeMobileTab: state.activeMobileTab,
+    }));
+  }
+  if (config.loadFR24Cache === true || config.matchFirstFR24CachedFlight === true) {
+    setMobileBottomTab("query");
+    if (elements.fr24CacheSearchInput && typeof config.cachedFlightQuery === "string") {
+      elements.fr24CacheSearchInput.value = config.cachedFlightQuery;
+    }
+    await searchFR24Cache();
+    const firstCachedFlightKey = state.fr24CacheFlights.keys().next().value;
+    if (firstCachedFlightKey && config.matchFirstFR24CachedFlight === true) {
+      matchFR24FlightTrack(firstCachedFlightKey).catch(setFR24ErrorStatus);
+      window.setTimeout(() => {
+        document.querySelector(`[data-fr24-card-key="${CSS.escape(firstCachedFlightKey)}"]`)
+          ?.scrollIntoView({ block: "center" });
+      }, 120);
+    }
+  }
+  if (Array.isArray(config.detailScrollStressSequence)) {
+    const tab = ["airport", "query", "calculate", "settings"].includes(config.detailScrollStressTab)
+      ? config.detailScrollStressTab
+      : state.activeDetailTab;
+    setMobileBottomTab(tab);
+    await new Promise((resolve) => window.requestAnimationFrame(resolve));
+    const host = detailScrollHost(tab);
+    const panel = Array.from(elements.detailTabPanels)
+      .find((item) => item.dataset.detailPanel === tab);
+    const samples = [];
+    let minVisibleCards = Number.POSITIVE_INFINITY;
+    if (host && panel) {
+      for (const rawRatio of config.detailScrollStressSequence) {
+        const ratio = clampNumber(Number(rawRatio), 0, 1);
+        host.scrollTop = (host.scrollHeight - host.clientHeight) * ratio;
+        host.dispatchEvent(new Event("scroll"));
+        await new Promise((resolve) => window.requestAnimationFrame(resolve));
+        const hostRect = host.getBoundingClientRect();
+        const visibleCards = Array.from(panel.querySelectorAll(".query-card, .query-flight-card, .calculate-card, .settings-card"))
+          .filter((item) => {
+            const rect = item.getBoundingClientRect();
+            return rect.bottom > hostRect.top && rect.top < hostRect.bottom;
+          }).length;
+        minVisibleCards = Math.min(minVisibleCards, visibleCards);
+        samples.push({ ratio, scrollTop: host.scrollTop, visibleCards });
+      }
+    }
+    const nestedScrollableOwners = panel
+      ? Array.from(panel.querySelectorAll("*"))
+        .filter((item) => {
+          const overflowY = window.getComputedStyle(item).overflowY;
+          return /(auto|scroll)/.test(overflowY) && item.scrollHeight > item.clientHeight + 1;
+        })
+        .map((item) => item.id || item.className || item.tagName)
+      : [];
+    writeLocalStorageValue("navplannerDebugScrollStressResult", JSON.stringify({
+      tab,
+      hostIsDetailPanel: host === elements.detailPanel,
+      hostOverflowY: host ? window.getComputedStyle(host).overflowY : "",
+      minVisibleCards: Number.isFinite(minVisibleCards) ? minVisibleCards : 0,
+      nestedScrollableOwners,
+      samples,
+    }));
+  }
+  if (config.inputBlurProbe === true) {
+    setMobileBottomTab("plan");
+    elements.departureInput.focus({ preventScroll: true });
+    const activeBefore = document.activeElement?.id || document.activeElement?.tagName || "";
+    elements.planButton.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    await new Promise((resolve) => window.setTimeout(resolve, 80));
+    document.body.dataset.mobileKeyboard = "open";
+    const actionRow = elements.planButton.closest(".button-row");
+    const actionStyle = actionRow ? window.getComputedStyle(actionRow) : null;
+    writeLocalStorageValue("navplannerDebugInputBlurResult", JSON.stringify({
+      activeBefore,
+      activeAfter: document.activeElement?.id || document.activeElement?.tagName || "",
+      blurred: document.activeElement !== elements.departureInput,
+      actionPosition: actionStyle?.position || "",
+      actionBottom: actionStyle?.bottom || "",
+    }));
+  }
   if (mobileTab === "calculate" || detailTab === "calculate") {
     scheduleCalculateRender();
     scheduleCalculateRender(220);
   }
   if (Number.isFinite(Number(config.calculateScrollTop)) && elements.calculateSection) {
     window.setTimeout(() => {
-      elements.calculateSection.scrollTop = Math.max(0, Number(config.calculateScrollTop));
+      const scrollHost = detailScrollHost("calculate") || elements.calculateSection;
+      scrollHost.scrollTop = Math.max(0, Number(config.calculateScrollTop));
       scheduleCalculateRender();
     }, 320);
+  }
+  if (Array.isArray(config.openFR24VerificationDelaysMs)) {
+    config.openFR24VerificationDelaysMs.forEach((rawDelay) => {
+      const delay = Math.max(0, Number(rawDelay) || 0);
+      window.setTimeout(openFR24VerificationBrowser, delay);
+    });
+  } else if (config.openFR24Verification === true) {
+    window.setTimeout(openFR24VerificationBrowser, 120);
   }
   console.info("NavPlanner simulator debug launch applied", config.name || "");
 }

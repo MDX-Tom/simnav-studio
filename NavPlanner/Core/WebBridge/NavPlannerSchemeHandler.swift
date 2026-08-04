@@ -4,13 +4,80 @@ import WebKit
 enum FR24SessionStore {
     static let webCookieKey = "navplanner.fr24.webCookie"
     static let frPlKey = "navplanner.fr24.frPl"
+    static let lastSuccessKey = "navplanner.fr24.lastSuccessAt"
+    static let lastChallengeKey = "navplanner.fr24.lastChallengeAt"
+    static let browserSyncKey = "navplanner.fr24.browserSyncAt"
+    private static let availableWindow: TimeInterval = 12 * 60 * 60
+    private static let challengeWindow: TimeInterval = 30 * 60
+    private static let browserWarmupWindow: TimeInterval = 6
 
-    static func accessStatusPayload(userDefaults: UserDefaults = .standard) -> [String: Any] {
-        [
-            "cookie_configured": !storedWebCookie(userDefaults: userDefaults).isEmpty,
-            "frpl_configured": !storedFRPl(userDefaults: userDefaults).isEmpty,
-            "message": "FR24 网络访问状态已读取。"
+    static func accessStatusPayload(
+        userDefaults: UserDefaults = .standard,
+        now: Date = Date()
+    ) -> [String: Any] {
+        let cookieConfigured = !storedWebCookie(userDefaults: userDefaults).isEmpty
+        let frPlConfigured = !storedFRPl(userDefaults: userDefaults).isEmpty
+        let nowTimestamp = now.timeIntervalSince1970
+        let lastSuccess = userDefaults.double(forKey: lastSuccessKey)
+        let lastChallenge = userDefaults.double(forKey: lastChallengeKey)
+        let browserSync = userDefaults.double(forKey: browserSyncKey)
+        let successAge = lastSuccess > 0 ? max(0, nowTimestamp - lastSuccess) : .infinity
+        let challengeIsCurrent = lastChallenge > max(lastSuccess, browserSync)
+            && nowTimestamp - lastChallenge <= challengeWindow
+        let accessState: String
+        if challengeIsCurrent {
+            accessState = "challenge"
+        } else if lastSuccess > 0, successAge <= availableWindow {
+            accessState = "available"
+        } else if lastSuccess > 0 {
+            accessState = "expired"
+        } else if cookieConfigured || frPlConfigured || browserSync > 0 {
+            accessState = "configured"
+        } else {
+            // FR24 has public endpoints that can work without a copied header.  Keep
+            // this state neutral until a real request has established availability.
+            accessState = "unknown"
+        }
+        let warmupUntil = browserSync > 0 ? browserSync + browserWarmupWindow : 0
+        let warmupRemaining = max(0, Int(ceil(warmupUntil - nowTimestamp)))
+        let message: String
+        switch accessState {
+        case "available":
+            message = "FR24 最近一次访问成功。"
+        case "challenge":
+            message = "FR24 当前需要验证，系统会自动退避重试。"
+        case "expired":
+            message = "FR24 最近一次成功记录已过期，将在下次查询时重新探测。"
+        case "configured":
+            message = "FR24 会话已配置，等待请求验证。"
+        default:
+            message = "FR24 尚未探测，可直接发起查询。"
+        }
+        return [
+            "access_state": accessState,
+            "cookie_configured": cookieConfigured,
+            "frpl_configured": frPlConfigured,
+            "browser_cookie_detected": browserSync > 0,
+            "last_success_at": lastSuccess > 0 ? lastSuccess : NSNull(),
+            "last_challenge_at": lastChallenge > 0 ? lastChallenge : NSNull(),
+            "browser_sync_at": browserSync > 0 ? browserSync : NSNull(),
+            "warmup_until": warmupUntil > 0 ? warmupUntil : NSNull(),
+            "warmup_remaining_seconds": warmupRemaining,
+            "message": message
         ]
+    }
+
+    static func recordSuccessfulAccess(userDefaults: UserDefaults = .standard, now: Date = Date()) {
+        userDefaults.set(now.timeIntervalSince1970, forKey: lastSuccessKey)
+        userDefaults.removeObject(forKey: lastChallengeKey)
+    }
+
+    static func recordChallenge(userDefaults: UserDefaults = .standard, now: Date = Date()) {
+        userDefaults.set(now.timeIntervalSince1970, forKey: lastChallengeKey)
+    }
+
+    static func markBrowserSync(userDefaults: UserDefaults = .standard, now: Date = Date()) {
+        userDefaults.set(now.timeIntervalSince1970, forKey: browserSyncKey)
     }
 
     static func updateAccessPayload(
@@ -1053,6 +1120,7 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
 
     static let shared = FR24BrowserFetch()
     private var webView: WKWebView?
+    private var idleReleaseWorkItem: DispatchWorkItem?
     private struct PageResponse {
         let status: Int
         let contentType: String
@@ -1206,6 +1274,8 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
     }
 
     private func ensureWebView() -> WKWebView {
+        idleReleaseWorkItem?.cancel()
+        idleReleaseWorkItem = nil
         if let webView {
             return webView
         }
@@ -1218,6 +1288,21 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
         }
         self.webView = webView
         return webView
+    }
+
+    private func scheduleIdleWebViewRelease() {
+        idleReleaseWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, self.pendingPageCompletion == nil else { return }
+            self.webView?.stopLoading()
+            self.webView?.navigationDelegate = nil
+            self.webView?.removeFromSuperview()
+            self.webView = nil
+            self.idleReleaseWorkItem = nil
+            NSLog("NavPlanner FR24 browser released after idle timeout")
+        }
+        idleReleaseWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 30, execute: workItem)
     }
 
     private static func decodePageResponse(_ page: PageResponse, requestURL: URL) -> Result<[String: Any], Error> {
@@ -1496,6 +1581,7 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
         pendingPageLastSignature = ""
         pendingPageStableReadCount = 0
         completion?(result)
+        scheduleIdleWebViewRelease()
     }
 }
 
@@ -1813,6 +1899,7 @@ private final class FR24Service {
         let clampedLimit = limit <= 0 ? 0 : max(1, min(limit, 100))
         do {
             let page = try FR24BrowserFetch.shared.performFlightHistoryPageRequest(flightToken: token)
+            FR24SessionStore.recordSuccessfulAccess(userDefaults: userDefaults)
             let flights = parseFlightHistoryPage(
                 page,
                 flightToken: token,
@@ -1828,6 +1915,9 @@ private final class FR24Service {
                 "message": flights.isEmpty ? "未找到该航班号的 FR24 历史记录。" : "已读取 FR24 航班历史。"
             ]
         } catch {
+            if Self.isChallengeLikeRequestError(error.localizedDescription) {
+                FR24SessionStore.recordChallenge(userDefaults: userDefaults)
+            }
             return [
                 "error": error.localizedDescription,
                 "flights": [],
@@ -2930,12 +3020,34 @@ private final class FR24Service {
     }
 
     private func webGet(path: String, params: [(String, String)]) throws -> [String: Any] {
-        do {
-            return try FR24BrowserFetch.shared.performJSONRequest(path: path, params: params)
-        } catch {
-            NSLog("NavPlanner FR24 browser request error path=%@ error=%@", path, error.localizedDescription)
-            if Self.shouldSurfaceBrowserRequestError(error.localizedDescription) {
-                throw serviceError(error.localizedDescription)
+        let retryDelays: [TimeInterval] = [0.7, 1.5]
+        for attempt in 0...retryDelays.count {
+            do {
+                let payload = try FR24BrowserFetch.shared.performJSONRequest(path: path, params: params)
+                FR24SessionStore.recordSuccessfulAccess(userDefaults: userDefaults)
+                return payload
+            } catch {
+                let message = error.localizedDescription
+                let retryable = Self.isChallengeLikeRequestError(message)
+                NSLog(
+                    "NavPlanner FR24 browser request error path=%@ attempt=%d retryable=%@ error=%@",
+                    path,
+                    attempt + 1,
+                    retryable ? "yes" : "no",
+                    message
+                )
+                if retryable {
+                    FR24SessionStore.recordChallenge(userDefaults: userDefaults)
+                    if attempt < retryDelays.count {
+                        let jitter = Double.random(in: 0.05...0.25)
+                        Thread.sleep(forTimeInterval: retryDelays[attempt] + jitter)
+                        continue
+                    }
+                }
+                if Self.shouldSurfaceBrowserRequestError(message) {
+                    throw serviceError(message)
+                }
+                break
             }
         }
 
@@ -2957,7 +3069,25 @@ private final class FR24Service {
         if let cookie = FR24SessionStore.requestCookieHeader(userDefaults: userDefaults), !cookie.isEmpty {
             request.setValue(cookie, forHTTPHeaderField: "Cookie")
         }
-        return try performJSONRequest(request)
+        do {
+            let payload = try performJSONRequest(request)
+            FR24SessionStore.recordSuccessfulAccess(userDefaults: userDefaults)
+            return payload
+        } catch {
+            if Self.isChallengeLikeRequestError(error.localizedDescription) {
+                FR24SessionStore.recordChallenge(userDefaults: userDefaults)
+            }
+            throw error
+        }
+    }
+
+    private static func isChallengeLikeRequestError(_ message: String) -> Bool {
+        let lowercased = message.lowercased()
+        return lowercased.contains("blocked")
+            || lowercased.contains("cloudflare")
+            || lowercased.contains("html response")
+            || lowercased.contains("http 429")
+            || lowercased.contains("too many requests")
     }
 
     private static func shouldSurfaceBrowserRequestError(_ message: String) -> Bool {
