@@ -73,9 +73,9 @@ A SwiftUI shell surrounds a WKWebView map workspace and an in-app Swift service 
 ## Interface Showcase 🖥️
 
 <p align="center">
-  <img alt="NavPlanner iPad map workspace" src="Media/ipad-us.png" width="60%" />
+  <img alt="NavPlanner iPad map workspace" src="Media/ipad-us.webp" width="60%" />
   &nbsp;&nbsp;
-  <img alt="NavPlanner iPhone route planning workspace" src="Media/iphone-us.png" width="28%" />
+  <img alt="NavPlanner iPhone route planning workspace" src="Media/iphone-us.webp" width="28%" />
 </p>
 <p align="center"><sub>Adaptive iPad workspace and compact iPhone planning flow.</sub></p>
 

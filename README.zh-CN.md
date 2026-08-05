@@ -73,9 +73,9 @@ App 以 SwiftUI 构建原生外壳，以 WKWebView 承载地图工作区，并�
 ## 界面展示 🖥️
 
 <p align="center">
-  <img alt="NavPlanner iPad 地图工作台" src="Media/ipad-us.png" width="60%" />
+  <img alt="NavPlanner iPad 地图工作台" src="Media/ipad-us.webp" width="60%" />
   &nbsp;&nbsp;
-  <img alt="NavPlanner iPhone 航路规划工作台" src="Media/iphone-us.png" width="28%" />
+  <img alt="NavPlanner iPhone 航路规划工作台" src="Media/iphone-us.webp" width="28%" />
 </p>
 <p align="center"><sub>自适应 iPad 地图工作区与紧凑型 iPhone 规划流程。</sub></p>
 
