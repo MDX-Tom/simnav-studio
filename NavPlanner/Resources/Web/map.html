@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
     <base href="navplanner://app/" />
-    <meta name="navplanner-resource-version" content="20260804-route-ux-v80" />
+    <meta name="navplanner-resource-version" content="20260807-mobile-portrait-fr24-copy-v86" />
     <title>航空航路规划器</title>
     <script>
       (() => {
@@ -28,6 +28,14 @@
         document.documentElement.lang = language;
         document.documentElement.dataset.languageMode = mode;
         document.documentElement.dataset.language = language;
+        const root = document.documentElement;
+        if (!root.dataset.mobileLayout) {
+          const portrait = !window.matchMedia || window.matchMedia("(orientation: portrait)").matches;
+          root.dataset.mobileLayout = root.dataset.device !== "pad"
+            || (root.dataset.platform === "ios" && portrait)
+            ? "true"
+            : "false";
+        }
       })();
     </script>
     <script>
@@ -71,8 +79,6 @@
             <input id="manualInput" autocomplete="off" placeholder="仅用于查看 SID / STAR / APPROACH" data-i18n-placeholder="plan.manualPlaceholder" />
             <div class="search-results hidden" id="manualResults"></div>
           </div>
-          <div class="helper-text manual-airport-hint" data-i18n="plan.manualHint">手动机场仅用于查看 SID / STAR / APPROACH 数据。</div>
-
           <div class="plan-runway-grid">
             <div>
               <label class="field-label" data-i18n="plan.departureRunway">起飞跑道</label>
@@ -94,7 +100,7 @@
           </div>
 
           <div class="button-row">
-            <button id="planButton" class="primary-button" data-i18n="plan.buildRoute">生成并绘制航路</button>
+            <button id="planButton" class="primary-button" data-i18n="plan.buildRoute">计算并绘制</button>
             <button id="recalculateButton" class="ghost-button" data-i18n="plan.recalculate">重新计算</button>
             <button id="planClearTrackButton" class="ghost-button" type="button" data-i18n="query.clearTrack">清除轨迹绘制</button>
           </div>
@@ -332,7 +338,7 @@
                 <button id="fr24SearchButton" class="primary-button compact-button" type="button" data-i18n="query.search">查询</button>
                 <button id="fr24ImportGPXButton" class="ghost-button compact-button" type="button" data-i18n="query.importGPX">手动导入</button>
                 <button id="fr24ClearTrackButton" class="ghost-button compact-button" type="button" data-i18n="query.clearTrack">清除轨迹绘制</button>
-                <button id="fr24RestoreMatchButton" class="ghost-button compact-button" type="button" data-i18n="query.restoreMatch">还原轨迹匹配</button>
+                <button id="fr24RestoreMatchButton" class="ghost-button compact-button multiline-button-label" type="button" data-i18n="query.restoreMatch">还原<br />轨迹匹配</button>
               </div>
             </div>
           </div>

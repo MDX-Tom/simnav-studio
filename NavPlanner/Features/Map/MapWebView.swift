@@ -22,7 +22,21 @@ struct MapWebView: UIViewRepresentable {
         let deviceClass = UIDevice.current.userInterfaceIdiom == .pad ? "pad" : "phone"
         let platformClass = ProcessInfo.processInfo.isiOSAppOnMac ? "mac" : "ios"
         configuration.userContentController.addUserScript(WKUserScript(
-            source: "document.documentElement.dataset.device = '\(deviceClass)'; document.documentElement.dataset.platform = '\(platformClass)';",
+            source: """
+            (() => {
+              const root = document.documentElement;
+              const deviceClass = "\(deviceClass)";
+              const platformClass = "\(platformClass)";
+              root.dataset.device = deviceClass;
+              root.dataset.platform = platformClass;
+              root.dataset.mobileLayout = deviceClass === "phone"
+                || (deviceClass === "pad"
+                  && platformClass === "ios"
+                  && (!window.matchMedia || window.matchMedia("(orientation: portrait)").matches))
+                ? "true"
+                : "false";
+            })();
+            """,
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         ))

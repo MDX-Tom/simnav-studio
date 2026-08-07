@@ -78,12 +78,11 @@ const TRANSLATIONS = {
   "plan.manualAirport": { "zh-Hans": "手动机场", en: "Manual Airport" },
   "plan.airportPlaceholder": { "zh-Hans": "ICAO / IATA / 航点", en: "ICAO / IATA / waypoint" },
   "plan.manualPlaceholder": { "zh-Hans": "仅用于查看 SID / STAR / APPROACH", en: "For SID / STAR / APPROACH lookup only" },
-  "plan.manualHint": { "zh-Hans": "手动机场仅用于查看 SID / STAR / APPROACH 数据。", en: "Manual airport is only used to inspect SID / STAR / APPROACH data." },
   "plan.departureRunway": { "zh-Hans": "起飞跑道", en: "Departure Runway" },
   "plan.arrivalRunway": { "zh-Hans": "到达跑道", en: "Arrival Runway" },
   "plan.route": { "zh-Hans": "航路", en: "Route" },
   "plan.routePlaceholder": { "zh-Hans": "", en: "" },
-  "plan.buildRoute": { "zh-Hans": "生成并绘制航路", en: "Build & Draw" },
+  "plan.buildRoute": { "zh-Hans": "计算并绘制", en: "Calculate & Draw" },
   "plan.recalculate": { "zh-Hans": "重新计算", en: "Recalculate" },
   "plan.resetAndReplan": { "zh-Hans": "重置并重新规划", en: "Reset & Replan" },
   "plan.resettingForReplan": { "zh-Hans": "正在清理旧航路、剖面与 FR24 结果并重新规划...", en: "Clearing the previous route, profiles, and FR24 results, then replanning..." },
@@ -514,12 +513,12 @@ const TRANSLATIONS = {
   "calculate.cruiseMach": { "zh-Hans": "目标巡航速度", en: "Target Cruise Speed" },
   "calculate.descentRate": { "zh-Hans": "下高目标下降率", en: "Target Descent Rate" },
   "calculate.weatherSource": { "zh-Hans": "气象数据", en: "Weather Data" },
-  "calculate.statusInitial": { "zh-Hans": "生成航路后，计算页会读取计划页航路、Procedure 和本地剖面数据。", en: "Build a route first. Calc reads the Plan route, procedures, and local profile data." },
+  "calculate.statusInitial": { "zh-Hans": "计算并绘制航路后，计算页会读取计划页航路、Procedure 和本地剖面数据。", en: "Calculate and draw a route first. Calc reads the Plan route, procedures, and local profile data." },
   "calculate.statusReady": { "zh-Hans": "已根据计划页航路生成 {count} 个剖面采样点；气象 {source} {mode}。", en: "Generated {count} profile samples from the Plan route; weather {source} {mode}." },
   "calculate.weatherModeOnline": { "zh-Hans": "在线时次 {time} / 更新 {updated}", en: "online run {time} / updated {updated}" },
   "calculate.weatherModePending": { "zh-Hans": "所选数据源加载中", en: "selected source loading" },
   "calculate.weatherModeFallback": { "zh-Hans": "本地估算层", en: "local fallback layer" },
-  "calculate.statusNoRoute": { "zh-Hans": "请先在计划页生成并绘制航路。", en: "Build and draw a route in Plan first." },
+  "calculate.statusNoRoute": { "zh-Hans": "请先在计划页计算并绘制航路。", en: "Calculate and draw a route in Plan first." },
   "calculate.weatherProfileTitle": { "zh-Hans": "航路剖面", en: "Route Profile" },
   "calculate.weatherPressureSummary": { "zh-Hans": "QNH {departure} / {arrival}", en: "QNH {departure} / {arrival}" },
   "calculate.weatherProfileAria": { "zh-Hans": "航路风向风速、云量、降雨量、地面海拔和计划高度剖面", en: "Route-relative wind, cloud, precipitation, terrain, and planned altitude profile" },
@@ -570,6 +569,7 @@ const TRANSLATIONS = {
   "query.cacheFavorite": { "zh-Hans": "收藏", en: "Favorite" },
   "query.cacheUnfavorite": { "zh-Hans": "取消收藏", en: "Unfavorite" },
   "query.cacheFavoriteBadge": { "zh-Hans": "已收藏", en: "Favorited" },
+  "query.currentDrawn": { "zh-Hans": "当前绘制", en: "Currently Drawn" },
   "query.cacheDownloaded": { "zh-Hans": "缓存 {time} / {count} 点", en: "Cached {time} / {count} pts" },
   "query.cacheDeleteConfirm": { "zh-Hans": "确认删除 {flight} 的 FR24 缓存文件？", en: "Delete FR24 cached files for {flight}?" },
   "query.cacheDeleted": { "zh-Hans": "已删除 FR24 缓存文件。", en: "FR24 cached files deleted." },
@@ -611,7 +611,7 @@ const TRANSLATIONS = {
   "query.redoTrack": { "zh-Hans": "重做上次撤销", en: "Redo Last Undo" },
   "query.clearTrack": { "zh-Hans": "清除绘制", en: "Clear Drawing" },
   "query.clearAllTrack": { "zh-Hans": "清除全部绘制", en: "Clear All Drawings" },
-  "query.restoreMatch": { "zh-Hans": "还原轨迹匹配", en: "Restore Match" },
+  "query.restoreMatch": { "zh-Hans": "还原\n轨迹匹配", en: "Restore\nMatch" },
   "query.clearCache": { "zh-Hans": "删除下载缓存", en: "Delete Download Cache" },
   "query.clearCacheConfirm": { "zh-Hans": "确认删除未收藏的 FR24 下载缓存？已收藏的 GPX、playback JSON 和 meta JSON 会保留。", en: "Delete non-favorited FR24 download cache? Favorited GPX, playback JSON, and meta JSON files will be kept." },
   "query.cacheCleared": { "zh-Hans": "已删除未收藏的 FR24 下载缓存。", en: "Non-favorited FR24 download cache deleted." },
@@ -828,6 +828,7 @@ const state = {
   mapCacheTileVersion: Date.now(),
   fr24Flights: new Map(),
   fr24CacheFlights: new Map(),
+  fr24CurrentDrawnKey: null,
   fr24SearchFlights: [],
   fr24SearchRenderOptions: {},
   fr24CacheItems: [],
@@ -1122,6 +1123,44 @@ function asyncCachedTileCanvasPixelRatio(layer) {
 function isPhoneWorkbench() {
   return document.documentElement.dataset.device !== "pad";
 }
+
+/**
+ * 功能：判断当前设备是否支持竖屏移动工作台。
+ * 输入：根节点的设备与平台标记。
+ * 输出：iPhone 与 iOS iPad 返回 true；Mac 兼容模式返回 false。
+ */
+function supportsMobileWorkbenchLayout() {
+  const root = document.documentElement;
+  return root.dataset.device !== "pad"
+    || (root.dataset.device === "pad" && root.dataset.platform === "ios");
+}
+
+/**
+ * 功能：判断当前是否正在使用与 iPhone 竖屏一致的工作台布局。
+ * 输入：根节点的 data-mobile-layout 标记。
+ * 输出：移动工作台启用时返回 true。
+ */
+function isMobileWorkbenchLayout() {
+  return document.documentElement.dataset.mobileLayout === "true";
+}
+
+/**
+ * 功能：按当前朝向同步移动工作台标记，不枚举机型或屏幕尺寸。
+ * 输入：设备、平台与 orientation 媒体查询。
+ * 输出：布局分支发生变化时返回 true。
+ */
+function syncMobileWorkbenchLayout() {
+  const root = document.documentElement;
+  const portrait = !window.matchMedia || window.matchMedia("(orientation: portrait)").matches;
+  const mobile = root.dataset.device !== "pad"
+    || (root.dataset.platform === "ios" && portrait);
+  const next = mobile ? "true" : "false";
+  const changed = root.dataset.mobileLayout !== next;
+  root.dataset.mobileLayout = next;
+  return changed;
+}
+
+syncMobileWorkbenchLayout();
 
 function isMacCompatibilityWorkbench() {
   return document.documentElement.dataset.platform === "mac";
@@ -4515,6 +4554,7 @@ function emptyDrawingSnapshot() {
       approach: null,
     },
     fr24Track: null,
+    fr24CurrentDrawnKey: null,
   };
 }
 
@@ -4531,6 +4571,7 @@ function normalizeDrawingSnapshot(snapshot) {
       approach: snapshot.procedures?.approach || null,
     },
     fr24Track: snapshot.fr24Track || null,
+    fr24CurrentDrawnKey: snapshot.fr24CurrentDrawnKey || null,
   };
 }
 
@@ -4577,6 +4618,7 @@ function currentDrawingSnapshot() {
       approach: cloneProcedureDrawingSnapshot("approach"),
     },
     fr24Track: cloneFR24TrackPayload(),
+    fr24CurrentDrawnKey: state.fr24CurrentDrawnKey,
   };
 }
 
@@ -4727,6 +4769,7 @@ function restoreDrawingSnapshot(snapshot) {
     ["sid", "star", "approach"].forEach((type) => clearProcedureDrawingState(type));
     fr24TrackLayerGroup.clearLayers();
     state.fr24TrackPayload = null;
+    setFR24CurrentDrawnCard(null);
 
     restoreRouteDrawingSnapshot(normalized.route);
     ["sid", "star", "approach"].forEach((type) => {
@@ -4734,6 +4777,7 @@ function restoreDrawingSnapshot(snapshot) {
     });
     if (normalized.fr24Track) {
       renderFR24TrackPayload(normalized.fr24Track, { fitBounds: false });
+      setFR24CurrentDrawnCard(normalized.fr24CurrentDrawnKey);
     }
 
     renderSelectedProcedures();
@@ -5178,6 +5222,19 @@ function clampNumber(value, min, max) {
     return min;
   }
   return Math.max(min, Math.min(max, number));
+}
+
+/**
+ * 功能：读取当前设备档位对应的全局文字缩减量。
+ * 输入：根节点上的 --device-font-size-reduction CSS 变量。
+ * 输出：Mac 为 -0.5，iPad 横屏为 1，iPad/iPhone 竖屏移动布局为 0。
+ */
+function deviceFontSizeReductionPx() {
+  const value = Number.parseFloat(
+    window.getComputedStyle(document.documentElement)
+      .getPropertyValue("--device-font-size-reduction"),
+  );
+  return Number.isFinite(value) ? clampNumber(value, -0.5, 1) : 0;
 }
 
 /**
@@ -6629,12 +6686,12 @@ function installPageDoubleTapZoomGuard() {
 }
 
 /**
- * 功能：锁住 iPhone WKWebView 页面级滚动，并在键盘出现时把工作台重新排进可见视口。
+ * 功能：锁住竖屏移动工作台的页面级滚动，并在键盘出现时把工作台重新排进可见视口。
  * 输入：无。
  * 输出：安装轻量监听；键盘态隐藏底部 Tab，让当前输入面板停在键盘上方。
  */
 function installMobileViewportLock() {
-  if (!isPhoneWorkbench()) {
+  if (!supportsMobileWorkbenchLayout()) {
     return;
   }
   const root = document.documentElement;
@@ -6726,6 +6783,10 @@ function installMobileViewportLock() {
   };
   const updateKeyboardLayout = () => {
     state.mobileKeyboardFrame = 0;
+    if (!isMobileWorkbenchLayout()) {
+      setKeyboardLayout(false, 0);
+      return;
+    }
     resetDocumentScroll();
     const control = focusedControl();
     const overlap = keyboardOverlap();
@@ -6899,7 +6960,7 @@ function applyMobilePanelMapRatio(value, options = {}) {
 
 function installMobilePanelDragHandle() {
   const handle = elements.mobilePanelDragHandle;
-  if (!handle || !isPhoneWorkbench()) {
+  if (!handle || !supportsMobileWorkbenchLayout()) {
     return;
   }
   applyMobilePanelMapRatio(state.mobilePanelMapRatio);
@@ -7027,7 +7088,11 @@ function installMobilePanelDragHandle() {
   };
 
   handle.addEventListener("pointerdown", (event) => {
-    if (document.body.dataset.mobileKeyboard === "open" || !isPortraitPhone()) {
+    if (
+      document.body.dataset.mobileKeyboard === "open"
+      || !isPortraitPhone()
+      || !isMobileWorkbenchLayout()
+    ) {
       return;
     }
     event.preventDefault();
@@ -7799,8 +7864,7 @@ function handleNativeAppIconChanged(payload = {}) {
 }
 
 function detailScrollHost(tab) {
-  const usesOuterMobileScroller = isPhoneWorkbench()
-    && window.innerWidth <= 1024
+  const usesOuterMobileScroller = isMobileWorkbenchLayout()
     && window.innerHeight >= window.innerWidth;
   if (usesOuterMobileScroller) {
     return elements.detailPanel;
@@ -13049,6 +13113,30 @@ function getFR24FlightByKey(key) {
   return state.fr24Flights.get(key) || state.fr24CacheFlights.get(key) || null;
 }
 
+/**
+ * 功能：把当前地图上的 FR24 轨迹关联回触发绘制的航班卡片。
+ * 输入：key 为航班卡片键；空值清除全部“当前绘制”标记。
+ * 输出：同步可见卡片的成功色边框与“当前绘制”徽标。
+ */
+function setFR24CurrentDrawnCard(key) {
+  const normalized = key ? String(key) : null;
+  state.fr24CurrentDrawnKey = normalized;
+  document.querySelectorAll(".query-flight-card[data-fr24-card-key]").forEach((card) => {
+    const current = normalized !== null && card.dataset.fr24CardKey === normalized;
+    card.classList.toggle("is-current-drawn", current);
+    const badges = card.querySelector(".query-flight-badges");
+    let badge = card.querySelector(".query-flight-badge-current");
+    if (current && badges && !badge) {
+      badge = document.createElement("span");
+      badge.className = "query-flight-badge query-flight-badge-current";
+      badge.textContent = t("query.currentDrawn");
+      badges.prepend(badge);
+    } else if (!current && badge) {
+      badge.remove();
+    }
+  });
+}
+
 function renderFR24FlightActions(key) {
   return `
     <div class="query-flight-actions">
@@ -13104,14 +13192,18 @@ function renderFR24FlightCard(flight, key, { history = false, cacheItem = false 
   const favoriteBadge = flight.favorite === true
     ? `<span class="query-flight-badge query-flight-badge-favorite">${escapeHtml(t("query.cacheFavoriteBadge"))}</span>`
     : "";
+  const isCurrentDrawn = state.fr24CurrentDrawnKey === key;
+  const currentDrawnBadge = isCurrentDrawn
+    ? `<span class="query-flight-badge query-flight-badge-current">${escapeHtml(t("query.currentDrawn"))}</span>`
+    : "";
   return `
-    <article class="query-flight-card ${history ? "is-history" : ""} ${cacheItem ? "is-cache" : ""}" data-fr24-card-key="${escapeHtml(key)}">
+    <article class="query-flight-card ${history ? "is-history" : ""} ${cacheItem ? "is-cache" : ""} ${isCurrentDrawn ? "is-current-drawn" : ""}" data-fr24-card-key="${escapeHtml(key)}">
       <div class="query-flight-head">
         <div>
           <div class="query-flight-number">${escapeHtml(flightPrimaryLabel(flight))}</div>
           <div class="query-flight-route">${escapeHtml(route)}</div>
         </div>
-        <div class="query-flight-badges">${cacheBadge}${favoriteBadge}</div>
+        <div class="query-flight-badges">${currentDrawnBadge}${cacheBadge}${favoriteBadge}</div>
       </div>
       <div class="query-flight-meta">
         <span>${escapeHtml(airline)}</span>
@@ -13302,6 +13394,7 @@ function handleNativeFR24GPXImported(payload = {}) {
     return;
   }
   const count = drawFR24TrackPoints(payload.track_points || [], { fitBounds: true });
+  setFR24CurrentDrawnCard(null);
   const message = t("query.importGPXDrawn", {
     filename: payload.filename || "GPX",
     count: formatCount(count),
@@ -13666,6 +13759,46 @@ function paddedRange(values, fallbackPadding) {
   return { min, max };
 }
 
+function fr24NiceScaleStep(rawStep) {
+  const safeStep = Math.max(Number.EPSILON, Math.abs(Number(rawStep) || 0));
+  const magnitude = 10 ** Math.floor(Math.log10(safeStep));
+  const normalized = safeStep / magnitude;
+  let factor = 10;
+  if (normalized <= 1.5) {
+    factor = 1;
+  } else if (normalized <= 3) {
+    factor = 2;
+  } else if (normalized <= 7) {
+    factor = 5;
+  }
+  return factor * magnitude;
+}
+
+function fr24AltitudeAxis(values, targetIntervals = 4) {
+  const finiteValues = values.filter(Number.isFinite);
+  if (!finiteValues.length) {
+    return { min: 0, max: 1, step: 1, ticks: [1, 0] };
+  }
+
+  const dataMin = Math.min(...finiteValues);
+  const dataMax = Math.max(...finiteValues);
+  const baseMin = dataMin >= 0 ? 0 : dataMin;
+  const intervalCount = Math.round(clampNumber(targetIntervals, 3, 6));
+  const span = Math.max(1, dataMax - baseMin);
+  const step = Math.max(500, fr24NiceScaleStep(span / intervalCount));
+  const min = dataMin >= 0 ? 0 : Math.floor(dataMin / step) * step;
+  let max = Math.ceil(dataMax / step) * step;
+  if (max <= min) {
+    max = min + step;
+  }
+  const tickCount = Math.max(1, Math.round((max - min) / step));
+  const ticks = Array.from({ length: tickCount + 1 }, (_, index) => {
+    const value = max - index * step;
+    return Math.abs(value) < step * 1e-9 ? 0 : Number(value.toPrecision(12));
+  });
+  return { min, max, step, ticks };
+}
+
 function svgPathForProfile(points, yKey) {
   let started = false;
   let path = "";
@@ -13698,8 +13831,9 @@ function drawFR24ProfileChart() {
   const width = Math.round(Math.max(320, chartRect.width || svg.clientWidth || 640));
   const height = Math.round(Math.max(120, chartRect.height || svg.clientHeight || 190));
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  const labelFontSize = clampNumber(Math.min(width / 62, height / 15), 10, 12.5);
-  const xLabelFontSize = clampNumber(Math.min(width / 72, height / 17), 9.5, 11.5);
+  const fontSizeReduction = deviceFontSizeReductionPx();
+  const labelFontSize = Math.max(1, clampNumber(Math.min(width / 62, height / 15), 10, 12.5) - fontSizeReduction);
+  const xLabelFontSize = Math.max(1, clampNumber(Math.min(width / 72, height / 17), 9.5, 11.5) - fontSizeReduction);
   const plot = {
     left: Math.round(clampNumber(width * 0.11, 54, 74)),
     right: Math.round(clampNumber(width * 0.035, 18, 34)),
@@ -13714,7 +13848,10 @@ function drawFR24ProfileChart() {
   const useTimeAxis = timestamps.length >= 2 && maxTime > minTime;
   const altitudeValues = profile.map((point) => point.altitude).filter(Number.isFinite);
   const speedValues = profile.map((point) => point.speed).filter(Number.isFinite);
-  const altitudeRange = paddedRange(altitudeValues, 500);
+  const altitudeRange = fr24AltitudeAxis(
+    altitudeValues,
+    Math.round(clampNumber(plotHeight / 40, 4, 6)),
+  );
   const speedRange = paddedRange(speedValues, 20);
   const xForPoint = (point, index) => {
     if (useTimeAxis && Number.isFinite(point.timestamp)) {
@@ -13745,11 +13882,8 @@ function drawFR24ProfileChart() {
   const axisStroke = dayTheme ? "rgba(43, 84, 112, 0.42)" : "rgba(148, 188, 218, 0.32)";
   const labelFill = dayTheme ? "rgba(39, 73, 98, 0.82)" : "rgba(203, 222, 238, 0.84)";
   const noDataFill = dayTheme ? "rgba(50, 80, 104, 0.72)" : "rgba(203, 222, 238, 0.72)";
-  const yTickCount = Math.round(clampNumber(plotHeight / 36, 4, 6));
-  const yGridLevels = Array.from({ length: yTickCount }, (_, index) => index / Math.max(1, yTickCount - 1));
-  const yGrid = yGridLevels.map((level) => {
-    const y = plot.top + level * plotHeight;
-    const altitude = altitudeRange.max - level * (altitudeRange.max - altitudeRange.min);
+  const yGrid = altitudeRange.ticks.map((altitude) => {
+    const y = yForAltitude(altitude);
     const label = altitudeValues.length ? formatFR24Altitude(altitude) : "";
     return `
       <line x1="${plot.left}" y1="${y.toFixed(1)}" x2="${(width - plot.right).toFixed(1)}" y2="${y.toFixed(1)}" stroke="${gridStroke}" stroke-width="1" />
@@ -13770,7 +13904,7 @@ function drawFR24ProfileChart() {
     `;
   }).join("");
   const noData = !altitudeValues.length && !speedValues.length
-    ? `<text x="${width / 2}" y="${height / 2}" fill="${noDataFill}" font-size="${clampNumber(width / 44, 12, 14).toFixed(1)}" font-weight="700" text-anchor="middle">${escapeHtml(t("query.profileNoData"))}</text>`
+    ? `<text x="${width / 2}" y="${height / 2}" fill="${noDataFill}" font-size="${Math.max(1, clampNumber(width / 44, 12, 14) - fontSizeReduction).toFixed(1)}" font-weight="700" text-anchor="middle">${escapeHtml(t("query.profileNoData"))}</text>`
     : "";
   const altitudeStrokeWidth = clampNumber(height / 54, 2.8, 3.8);
   const speedStrokeWidth = clampNumber(height / 78, 1.9, 2.8);
@@ -14025,6 +14159,9 @@ async function downloadAndDrawFR24Track(key) {
     await syncPlanAirportsFromFR24Flight(payload.flight || flight, { signal: controller.signal });
     throwIfAborted(controller.signal);
     const count = drawFR24TrackPoints(payload.track_points || []);
+    if (count >= 2) {
+      setFR24CurrentDrawnCard(key);
+    }
     updateFR24CacheSummary(payload.cache || state.fr24CacheStatus || {});
     updateFR24AccessSummary(payload.access || state.fr24AccessStatus || {});
     setFR24QueryStatus(t("query.drawn", { count }));
@@ -14061,7 +14198,10 @@ async function matchFR24FlightTrack(key) {
       return;
     }
     throwIfAborted(controller.signal);
-    drawFR24TrackPoints(download.track_points || [], { fitBounds: false });
+    const drawnCount = drawFR24TrackPoints(download.track_points || [], { fitBounds: false });
+    if (drawnCount >= 2) {
+      setFR24CurrentDrawnCard(key);
+    }
     updateFR24CacheSummary(download.cache || state.fr24CacheStatus || {});
     updateFR24AccessSummary(download.access || state.fr24AccessStatus || {});
     if (state.currentRoutePayload && !state.preTrackMatchRoutePayload) {
@@ -14109,6 +14249,7 @@ function clearFR24TrackDrawing(options = {}) {
   const eventLike = options && typeof options === "object" && "target" in options;
   const recordHistory = eventLike ? true : options.recordHistory !== false;
   if (!state.fr24TrackPayload) {
+    setFR24CurrentDrawnCard(null);
     setFR24QueryStatus(t("query.noFR24Track"), true);
     updateTrackHistoryControlState();
     return;
@@ -14118,6 +14259,7 @@ function clearFR24TrackDrawing(options = {}) {
   }
   fr24TrackLayerGroup.clearLayers();
   state.fr24TrackPayload = null;
+  setFR24CurrentDrawnCard(null);
   state.fr24ProfileCursorIndex = 0;
   updateFR24ProfilePanel();
   applyMapOverlayVisibility();
@@ -14294,6 +14436,7 @@ const calculatePage = createCalculatePage({
   currentLanguage,
   escapeHtml,
   clampNumber,
+  deviceFontSizeReductionPx,
   withDisplayLongitudes,
   normalizeLongitude,
   greatCircleDistanceNm,
@@ -14448,13 +14591,26 @@ elements.mobileBottomTabButtons.forEach((button) => {
   button.addEventListener("click", () => setMobileBottomTab(button.dataset.mobileTab));
 });
 window.addEventListener("resize", () => {
+  const mobileLayoutChanged = syncMobileWorkbenchLayout();
+  if (mobileLayoutChanged) {
+    document.body.classList.remove("map-expanded", "left-panel-expanded");
+    elements.mapExpandButton?.classList.remove("is-expanded");
+    elements.sidebarExpandButton?.classList.remove("is-expanded");
+    window.requestAnimationFrame(() => {
+      map.invalidateSize({ animate: false, pan: false });
+      scheduleVectorMapResizeSync();
+    });
+  }
   updateMapTileZoomOffsetControl();
   scheduleFR24ProfileChartResize();
   scheduleCalculateRender();
 }, { passive: true });
 window.addEventListener("orientationchange", () => {
   window.setTimeout(() => {
+    syncMobileWorkbenchLayout();
     updateMapTileZoomOffsetControl();
+    map.invalidateSize({ animate: false, pan: false });
+    scheduleVectorMapResizeSync();
     scheduleFR24ProfileChartResize();
     scheduleCalculateRender();
   }, 180);

@@ -131,6 +131,7 @@ export function createCalculatePage(context) {
     currentLanguage,
     escapeHtml,
     clampNumber,
+    deviceFontSizeReductionPx,
     withDisplayLongitudes,
     normalizeLongitude,
     greatCircleDistanceNm,
@@ -1586,7 +1587,8 @@ export function createCalculatePage(context) {
 
   function svgText(x, y, text, options = {}) {
     const family = options.family ? ` font-family="${escapeHtml(options.family)}"` : "";
-    return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" fill="${options.fill}" font-size="${options.size.toFixed(1)}" font-weight="${options.weight || 760}" text-anchor="${options.anchor || "middle"}"${family}>${escapeHtml(text)}</text>`;
+    const size = Math.max(1, options.size - deviceFontSizeReductionPx());
+    return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" fill="${options.fill}" font-size="${size.toFixed(1)}" font-weight="${options.weight || 760}" text-anchor="${options.anchor || "middle"}"${family}>${escapeHtml(text)}</text>`;
   }
 
   function drawRelativeWindArrowSvg(x, y, components, colors) {
@@ -1928,7 +1930,7 @@ export function createCalculatePage(context) {
     }
     if (!profile?.samples?.length) {
       state.calculateWeatherLayout = null;
-      svg.innerHTML = `<text x="50%" y="50%" fill="rgba(190,205,220,.78)" font-size="13" font-weight="780" text-anchor="middle">${escapeHtml(t("calculate.statusNoRoute"))}</text>`;
+      svg.innerHTML = `<text x="50%" y="50%" fill="rgba(190,205,220,.78)" font-size="${Math.max(1, 13 - deviceFontSizeReductionPx())}" font-weight="780" text-anchor="middle">${escapeHtml(t("calculate.statusNoRoute"))}</text>`;
       return;
     }
     const colors = calculateChartColors();
@@ -2319,7 +2321,7 @@ export function createCalculatePage(context) {
     }
     if (!profile?.samples?.length) {
       state.calculateSpeedLayout = null;
-      svg.innerHTML = `<text x="50%" y="50%" fill="rgba(190,205,220,.78)" font-size="13" font-weight="780" text-anchor="middle">${escapeHtml(t("calculate.statusNoRoute"))}</text>`;
+      svg.innerHTML = `<text x="50%" y="50%" fill="rgba(190,205,220,.78)" font-size="${Math.max(1, 13 - deviceFontSizeReductionPx())}" font-weight="780" text-anchor="middle">${escapeHtml(t("calculate.statusNoRoute"))}</text>`;
       return;
     }
     const colors = calculateChartColors();
