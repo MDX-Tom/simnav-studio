@@ -157,109 +157,13 @@ App 以 SwiftUI 构建原生外壳，以 WKWebView 承载地图工作区，并�
 
 架构图以用户可见的核心工作流为主线，而不是从框架分层开始。每个编号步骤按 **功能入口 → 本地 API → 实现原理 → 返回 payload** 展开，同时保留贯穿全流程的运行时与本地数据平面。
 
-```mermaid
-flowchart TB
-  START(["核心工作流<br/>规划 → 查看 → 计算 → 对照"])
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/architecture/project-architecture-zh-dark.webp" />
+  <source media="(prefers-color-scheme: light)" srcset="docs/architecture/project-architecture-zh-light.webp" />
+  <img src="docs/architecture/project-architecture-zh-light.webp" alt="NavPlanner 系统架构图：以核心工作流为主线" />
+</picture>
 
-  subgraph RUNTIME["共享运行时与数据契约"]
-    APP["SwiftUI 原生外壳<br/>生命周期 · 主题 · 设备布局"]
-    WEB["WKWebView 工作台<br/>计划 · 机场 · 计算 · 查询 · 设置"]
-    BRIDGE["navplanner:// Scheme Handler + JS Bridge<br/>类型化本地 API · 原生回调"]
-    MAP["地图内核<br/>Leaflet / MapLibre · 叠加层 · resize 安全绘制"]
-    APP --> WEB
-    WEB --> BRIDGE
-    WEB --> MAP
-  end
-
-  subgraph PLAN["1 · 计划 → 解析并绘制航路"]
-    PLAN_INPUT["计划页输入<br/>起飞 · 到达 · 跑道 · 航路 / ***"]
-    PLAN_API["/api/route/resolve"]
-    RESOLVE["PlannerService<br/>机场别名 · 标识校验"]
-    ROUTE_ENGINE["航路引擎<br/>airway graph · route-between · A* · DCT / *** 降级"]
-    ROUTE_PAYLOAD["航路 payload<br/>legs · route_display · 已选 Procedure/跑道"]
-    PLAN_INPUT --> PLAN_API --> RESOLVE --> ROUTE_ENGINE --> ROUTE_PAYLOAD
-  end
-
-  subgraph AIRPORT["2 · 机场 → 查看 Procedure"]
-    AIRPORT_INPUT["机场页 / 地图弹窗<br/>起飞 · 到达 · 手动机场槽位"]
-    AIRPORT_API["/api/airport · /api/procedure · /api/procedure-preview · /api/nav-overlay"]
-    DB_LOOKUP["PlannerService + SQLite<br/>跑道 · 频率 · Procedure 查询"]
-    GEOMETRY["Procedure 几何<br/>RF/AF 弧线 · 复飞 · 等待 · 跑道筛选"]
-    PROC_PAYLOAD["Procedure payload<br/>摘要 · 路径 · 高度/速度限制"]
-    AIRPORT_INPUT --> AIRPORT_API --> DB_LOOKUP --> GEOMETRY --> PROC_PAYLOAD
-  end
-
-  subgraph CALC["3 · 计算飞行剖面与燃油"]
-    CALC_INPUT["计算页输入<br/>机型 · 重量/燃油 · 巡航/下降 · 天气/QNH"]
-    LOCAL_MODEL["本地剖面模型<br/>风 · 地形 · 性能 · 燃油"]
-    WEATHER["/api/weather/open-meteo<br/>可选气压层天气"]
-    TERRAIN["/api/terrain/terrarium<br/>可选 DEM 采样"]
-    PROFILE["剖面 payload<br/>FL/hPa · 地形 · 降水 · GS/VS · 燃油"]
-    CALC_INPUT --> LOCAL_MODEL --> PROFILE
-    WEATHER -. "增强 / 降级" .-> LOCAL_MODEL
-    TERRAIN -. "增强 / 降级" .-> LOCAL_MODEL
-  end
-
-  subgraph FR24["4 · 查询 → 回放并拟合轨迹"]
-    QUERY_INPUT["查询页输入<br/>航线 · flight / flightId · 缓存 GPX"]
-    ACCESS["App 内 WKWebView 会话<br/>可选在线路径 · 用户同步"]
-    FR24_API["/api/fr24/search · history · download"]
-    TRACK_CACHE["FR24 缓存<br/>GPX · playback JSON · metadata"]
-    MATCH_API["/api/route/track-match"]
-    MATCH_ENGINE["Procedure-first 拟合器<br/>实际机场同步 → SID/STAR/APPROACH → airway A* → 平滑"]
-    TRACK_PAYLOAD["轨迹 payload<br/>地图线 · 高度/速度剖面 · 拟合航路"]
-    QUERY_INPUT --> ACCESS
-    ACCESS -. "可选在线增强" .-> FR24_API
-    FR24_API --> TRACK_CACHE
-    QUERY_INPUT --> MATCH_API
-    TRACK_CACHE --> MATCH_API
-    MATCH_API --> MATCH_ENGINE --> TRACK_PAYLOAD
-  end
-
-  subgraph DATA["5 · 设置 → 持久化并刷新本地数据"]
-    DATA_INPUT["设置页<br/>导入 · 选择 · 删除 · 恢复 · 下载"]
-    DB_STORE["LocalDataStore<br/>Application Support · SQLite · 串行读取"]
-    MAP_STORE["MapStore / OnlineTileCache<br/>PMTiles · MBTiles · SQLite · 缓存"]
-    STATUS["状态 payload<br/>活动数据库 · 资源元数据 · 进度"]
-    DATA_INPUT --> DB_STORE --> STATUS
-    DATA_INPUT --> MAP_STORE --> STATUS
-  end
-
-  START --> PLAN_INPUT
-  BRIDGE --> PLAN_INPUT
-  BRIDGE --> AIRPORT_INPUT
-  BRIDGE --> CALC_INPUT
-  BRIDGE --> QUERY_INPUT
-  BRIDGE --> DATA_INPUT
-  ROUTE_PAYLOAD --> AIRPORT_INPUT
-  ROUTE_PAYLOAD --> CALC_INPUT
-  ROUTE_PAYLOAD --> QUERY_INPUT
-  ROUTE_PAYLOAD --> MATCH_API
-  PROC_PAYLOAD --> CALC_INPUT
-  PROC_PAYLOAD --> MATCH_ENGINE
-  DB_STORE --> RESOLVE
-  DB_STORE --> DB_LOOKUP
-  MAP_STORE --> MAP
-  MAP_STORE --> TERRAIN
-  ROUTE_PAYLOAD --> MAP
-  PROC_PAYLOAD --> MAP
-  TRACK_PAYLOAD --> MAP
-  PROFILE --> WEB
-  STATUS --> WEB
-
-  classDef runtime fill:#0f172a,color:#ffffff,stroke:#0f172a;
-  classDef workflow fill:#0f766e,color:#ffffff,stroke:#0f766e,stroke-width:2px;
-  classDef api fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7;
-  classDef principle fill:#fef3c7,color:#713f12,stroke:#d97706;
-  classDef data fill:#ecfdf5,color:#065f46,stroke:#059669;
-  classDef optional fill:#f5f3ff,color:#5b21b6,stroke:#7c3aed,stroke-dasharray:5 5;
-  class APP,WEB,BRIDGE,MAP runtime;
-  class START,PLAN_INPUT,AIRPORT_INPUT,CALC_INPUT,QUERY_INPUT,DATA_INPUT workflow;
-  class PLAN_API,AIRPORT_API,WEATHER,TERRAIN,FR24_API,MATCH_API api;
-  class RESOLVE,ROUTE_ENGINE,DB_LOOKUP,GEOMETRY,LOCAL_MODEL,MATCH_ENGINE principle;
-  class ROUTE_PAYLOAD,PROC_PAYLOAD,PROFILE,TRACK_PAYLOAD,DB_STORE,MAP_STORE,TRACK_CACHE,STATUS data;
-  class WEATHER,TERRAIN,ACCESS,FR24_API optional;
-```
+[打开可编辑的 Drawio 源文件](docs/architecture/project-architecture.drawio)。
 
 编号工作流把依赖方向明确展示出来：航路规划产出的 payload 会被机场、计算和查询复用；Procedure 选择同时约束剖面计算和轨迹拟合；设置页提供所有离线路径依赖的本地数据库与地图存储。箭头同时表达以下实现原理：
 

@@ -157,109 +157,13 @@ Online map cache and offline packages are managed separately. Clearing the onlin
 
 The architecture is organized around the user-facing core workflow rather than starting from frameworks. Each numbered stage expands as **feature entry → local API → implementation principle → returned payload**, while the shared runtime and local data plane stay visible across the whole path.
 
-```mermaid
-flowchart TB
-  START(["Core workflow<br/>plan → inspect → calculate → compare"])
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/architecture/project-architecture-en-dark.webp" />
+  <source media="(prefers-color-scheme: light)" srcset="docs/architecture/project-architecture-en-light.webp" />
+  <img src="docs/architecture/project-architecture-en-light.webp" alt="NavPlanner architecture: workflow-first system design" />
+</picture>
 
-  subgraph RUNTIME["Shared runtime and data contract"]
-    APP["SwiftUI shell<br/>lifecycle · theme · device layout"]
-    WEB["WKWebView workspace<br/>Plan · Airport · Calc · Query · Settings"]
-    BRIDGE["navplanner:// scheme handler + JS bridge<br/>typed local API · native callbacks"]
-    MAP["Map kernel<br/>Leaflet / MapLibre · overlays · resize-safe rendering"]
-    APP --> WEB
-    WEB --> BRIDGE
-    WEB --> MAP
-  end
-
-  subgraph PLAN["1 · Plan → resolve and draw route"]
-    PLAN_INPUT["Plan fields<br/>departure · arrival · runways · route / ***"]
-    PLAN_API["/api/route/resolve"]
-    RESOLVE["PlannerService<br/>airport aliases · identifier validation"]
-    ROUTE_ENGINE["Route engine<br/>airway graph · route-between · A* · DCT / *** fallback"]
-    ROUTE_PAYLOAD["Route payload<br/>legs · route_display · selected procedures/runways"]
-    PLAN_INPUT --> PLAN_API --> RESOLVE --> ROUTE_ENGINE --> ROUTE_PAYLOAD
-  end
-
-  subgraph AIRPORT["2 · Airport → inspect procedures"]
-    AIRPORT_INPUT["Airport tab / map popup<br/>departure · arrival · manual slot"]
-    AIRPORT_API["/api/airport · /api/procedure · /api/procedure-preview · /api/nav-overlay"]
-    DB_LOOKUP["PlannerService + SQLite<br/>runway · frequency · procedure lookup"]
-    GEOMETRY["Procedure geometry<br/>RF/AF arcs · missed approach · holds · runway filters"]
-    PROC_PAYLOAD["Procedure payload<br/>summary · path · altitude/speed limits"]
-    AIRPORT_INPUT --> AIRPORT_API --> DB_LOOKUP --> GEOMETRY --> PROC_PAYLOAD
-  end
-
-  subgraph CALC["3 · Calculate profiles and fuel"]
-    CALC_INPUT["Calc tab<br/>aircraft · weight/fuel · cruise/descent · weather/QNH"]
-    LOCAL_MODEL["Local profile model<br/>wind · terrain · performance · fuel"]
-    WEATHER["/api/weather/open-meteo<br/>optional pressure-level weather"]
-    TERRAIN["/api/terrain/terrarium<br/>optional DEM sampling"]
-    PROFILE["Profile payload<br/>FL/hPa · terrain · precipitation · GS/VS · fuel"]
-    CALC_INPUT --> LOCAL_MODEL --> PROFILE
-    WEATHER -. "enhance / fallback" .-> LOCAL_MODEL
-    TERRAIN -. "enhance / fallback" .-> LOCAL_MODEL
-  end
-
-  subgraph FR24["4 · Query → replay and match tracks"]
-    QUERY_INPUT["Query tab<br/>route · flight / flightId · cached GPX"]
-    ACCESS["In-app WKWebView session<br/>optional online path · user-synced"]
-    FR24_API["/api/fr24/search · history · download"]
-    TRACK_CACHE["FR24 cache<br/>GPX · playback JSON · metadata"]
-    MATCH_API["/api/route/track-match"]
-    MATCH_ENGINE["Procedure-first matcher<br/>actual-airport sync → SID/STAR/APPROACH → airway A* → smoothing"]
-    TRACK_PAYLOAD["Track payload<br/>map line · altitude/speed profile · matched route"]
-    QUERY_INPUT --> ACCESS
-    ACCESS -. "optional online enhancement" .-> FR24_API
-    FR24_API --> TRACK_CACHE
-    QUERY_INPUT --> MATCH_API
-    TRACK_CACHE --> MATCH_API
-    MATCH_API --> MATCH_ENGINE --> TRACK_PAYLOAD
-  end
-
-  subgraph DATA["5 · Settings → persist and refresh local data"]
-    DATA_INPUT["Settings<br/>import · select · delete · restore · download"]
-    DB_STORE["LocalDataStore<br/>Application Support · SQLite · serial reads"]
-    MAP_STORE["MapStore / OnlineTileCache<br/>PMTiles · MBTiles · SQLite · cache"]
-    STATUS["Status payloads<br/>active database · resource metadata · progress"]
-    DATA_INPUT --> DB_STORE --> STATUS
-    DATA_INPUT --> MAP_STORE --> STATUS
-  end
-
-  START --> PLAN_INPUT
-  BRIDGE --> PLAN_INPUT
-  BRIDGE --> AIRPORT_INPUT
-  BRIDGE --> CALC_INPUT
-  BRIDGE --> QUERY_INPUT
-  BRIDGE --> DATA_INPUT
-  ROUTE_PAYLOAD --> AIRPORT_INPUT
-  ROUTE_PAYLOAD --> CALC_INPUT
-  ROUTE_PAYLOAD --> QUERY_INPUT
-  ROUTE_PAYLOAD --> MATCH_API
-  PROC_PAYLOAD --> CALC_INPUT
-  PROC_PAYLOAD --> MATCH_ENGINE
-  DB_STORE --> RESOLVE
-  DB_STORE --> DB_LOOKUP
-  MAP_STORE --> MAP
-  MAP_STORE --> TERRAIN
-  ROUTE_PAYLOAD --> MAP
-  PROC_PAYLOAD --> MAP
-  TRACK_PAYLOAD --> MAP
-  PROFILE --> WEB
-  STATUS --> WEB
-
-  classDef runtime fill:#0f172a,color:#ffffff,stroke:#0f172a;
-  classDef workflow fill:#0f766e,color:#ffffff,stroke:#0f766e,stroke-width:2px;
-  classDef api fill:#e0f2fe,color:#0c4a6e,stroke:#0284c7;
-  classDef principle fill:#fef3c7,color:#713f12,stroke:#d97706;
-  classDef data fill:#ecfdf5,color:#065f46,stroke:#059669;
-  classDef optional fill:#f5f3ff,color:#5b21b6,stroke:#7c3aed,stroke-dasharray:5 5;
-  class APP,WEB,BRIDGE,MAP runtime;
-  class START,PLAN_INPUT,AIRPORT_INPUT,CALC_INPUT,QUERY_INPUT,DATA_INPUT workflow;
-  class PLAN_API,AIRPORT_API,WEATHER,TERRAIN,FR24_API,MATCH_API api;
-  class RESOLVE,ROUTE_ENGINE,DB_LOOKUP,GEOMETRY,LOCAL_MODEL,MATCH_ENGINE principle;
-  class ROUTE_PAYLOAD,PROC_PAYLOAD,PROFILE,TRACK_PAYLOAD,DB_STORE,MAP_STORE,TRACK_CACHE,STATUS data;
-  class WEATHER,TERRAIN,ACCESS,FR24_API optional;
-```
+[Open the editable Drawio source](docs/architecture/project-architecture.drawio).
 
 The numbered workflow makes the dependency direction explicit: route planning produces the payload consumed by Airport, Calc, and Query; Procedure selection constrains both profile calculation and track matching; Settings feeds the local database and map stores that every offline path depends on. The arrows also expose the implementation principles:
 
