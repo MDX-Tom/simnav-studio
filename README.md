@@ -1,10 +1,6 @@
 <div align="center">
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="Media/navplanner-hero-dark.webp" />
-  <source media="(prefers-color-scheme: light)" srcset="Media/navplanner-hero-light.webp" />
-  <img src="Media/navplanner-hero-light.webp" alt="NavPlanner — a local-first sim-flight planning desk" width="84%" />
-</picture><br />
+<img src="Media/navplanner-hero-en.webp" alt="NavPlanner on iPhone and iPad, showing the LGAV to EDDM route and STAR selection" width="84%" /><br />
 
 <p>
   <a href="https://github.com/MDX-Tom/NavPlanner-App/stargazers"><img src="https://img.shields.io/github/stars/MDX-Tom/NavPlanner-App?logo=github&label=Stars" alt="GitHub Stars" /></a>
@@ -72,12 +68,18 @@ A SwiftUI shell surrounds a WKWebView map workspace and an in-app Swift service 
 
 ## Interface Showcase 🖥️
 
-<p align="center">
-  <img alt="NavPlanner iPad map workspace" src="Media/ipad-us.webp" width="60%" />
-  &nbsp;&nbsp;
-  <img alt="NavPlanner iPhone route planning workspace" src="Media/iphone-us.webp" width="28%" />
-</p>
-<p align="center"><sub>Adaptive iPad workspace and compact iPhone planning flow.</sub></p>
+<table>
+  <tr>
+    <td align="center"><strong>Light · iPhone 17 Pro portrait</strong><br /><img alt="NavPlanner light theme on iPhone previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/day/02-procedure-iphone.webp" width="360" /></td>
+    <td align="center"><strong>Light · iPad Pro 13-inch landscape</strong><br /><img alt="NavPlanner light theme on iPad previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/day/02-procedure-ipad.webp" width="700" /></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Dark · iPhone 17 Pro portrait</strong><br /><img alt="NavPlanner dark theme on iPhone previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/night/02-procedure-iphone.webp" width="360" /></td>
+    <td align="center"><strong>Dark · iPad Pro 13-inch landscape</strong><br /><img alt="NavPlanner dark theme on iPad previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/night/02-procedure-ipad.webp" width="700" /></td>
+  </tr>
+</table>
+
+<p align="center"><sub>LGAV → EDDM automatic planning, RW08R selection, and runway-filtered STAR overview; the complete procedure geometry stays visible without clipping.</sub></p>
 
 <a id="workflows"></a>
 
@@ -92,15 +94,37 @@ A SwiftUI shell surrounds a WKWebView map workspace and an in-app Swift service 
 4. Enter a route string, leave it blank for full auto-planning, or use `***` between fixes to auto-plan a segment.
 5. Tap **Generate & Draw Route**.
 
+<table>
+  <tr>
+    <th align="center">iPhone 17 Pro · Portrait</th>
+    <th align="center">iPad Pro 13-inch · Landscape</th>
+  </tr>
+  <tr>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/01-plan-iphone.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/01-plan-iphone.webp" /><img alt="Plan and draw LGAV to EDDM on iPhone" src="Media/workflows/en/day/01-plan-iphone.webp" width="360" /></picture></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/01-plan-ipad.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/01-plan-ipad.webp" /><img alt="Plan and draw LGAV to EDDM on iPad" src="Media/workflows/en/day/01-plan-ipad.webp" width="700" /></picture></td>
+  </tr>
+</table>
+
 </details>
 
 <details>
 <summary><strong>2 · Inspect airports and procedures</strong></summary>
 
-1. Enter a manual airport in Plan, or tap an airport on the map.
-2. Open the **Airport** tab and switch between departure, arrival, and manual slots.
-3. Review runways, communication frequencies, and procedure lists.
-4. Tap a procedure to preview its path on the map.
+1. Build a route, then open the **Airport** tab and switch to the EDDM arrival slot.
+2. Select a runway such as `RW08R` and review the filtered procedure lists.
+3. Tap the **STAR** heading to preview all matching STAR paths, or tap one procedure to focus its path.
+4. Review runway data, communication frequencies, and the visible procedure geometry together.
+
+<table>
+  <tr>
+    <th align="center">iPhone 17 Pro · Portrait</th>
+    <th align="center">iPad Pro 13-inch · Landscape</th>
+  </tr>
+  <tr>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/02-procedure-iphone.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/02-procedure-iphone.webp" /><img alt="Select EDDM RW08R and preview its STAR overview on iPhone" src="Media/workflows/en/day/02-procedure-iphone.webp" width="360" /></picture></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/02-procedure-ipad.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/02-procedure-ipad.webp" /><img alt="Select EDDM RW08R and preview its STAR overview on iPad" src="Media/workflows/en/day/02-procedure-ipad.webp" width="700" /></picture></td>
+  </tr>
+</table>
 
 </details>
 
@@ -113,6 +137,17 @@ A SwiftUI shell surrounds a WKWebView map workspace and an in-app Swift service 
 4. Check the ground-speed / vertical-speed profile and fuel estimate.
 
 The calculation model is local-first and works offline. Online weather is an enhancement and falls back to local estimates when unavailable; Terrarium DEM tiles are sampled when available and degrade to a conservative local terrain estimate when unavailable. Direct weather-source licensing, offline DEM packages, and fuller aircraft-performance libraries remain planned enhancements.
+
+<table>
+  <tr>
+    <th align="center">iPhone 17 Pro · Portrait</th>
+    <th align="center">iPad Pro 13-inch · Landscape</th>
+  </tr>
+  <tr>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/03-calculate-iphone.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/03-calculate-iphone.webp" /><img alt="Calculate the LGAV to EDDM flight profile on iPhone" src="Media/workflows/en/day/03-calculate-iphone.webp" width="360" /></picture></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/03-calculate-ipad.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/03-calculate-ipad.webp" /><img alt="Calculate the LGAV to EDDM flight profile on iPad" src="Media/workflows/en/day/03-calculate-ipad.webp" width="700" /></picture></td>
+  </tr>
+</table>
 
 </details>
 
@@ -129,6 +164,17 @@ When a loaded flight reports different actual airports, Query synchronizes them 
 Downloaded tracks are cached locally as GPX, playback JSON, and metadata. Query can search the cache, draw or match cached tracks, share GPX, favorite important tracks, open the cache folder, and clear non-favorited downloads.
 
 > **Online enhancement.** FR24 is optional. If the network is unavailable, the session expires, or FR24 returns a verification page, local planning, airport lookup, procedures, nav overlays, and offline maps remain available. NavPlanner reuses only the session completed by the user inside the app; it does not bypass Cloudflare or automate CAPTCHA challenges.
+
+<table>
+  <tr>
+    <th align="center">iPhone 17 Pro · Portrait</th>
+    <th align="center">iPad Pro 13-inch · Landscape</th>
+  </tr>
+  <tr>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/04-fr24-iphone.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/04-fr24-iphone.webp" /><img alt="Draw and inspect an LGAV to EDDM FR24 profile on iPhone" src="Media/workflows/en/day/04-fr24-iphone.webp" width="360" /></picture></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/04-fr24-ipad.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/04-fr24-ipad.webp" /><img alt="Draw and inspect an LGAV to EDDM FR24 profile on iPad" src="Media/workflows/en/day/04-fr24-ipad.webp" width="700" /></picture></td>
+  </tr>
+</table>
 
 </details>
 
@@ -148,6 +194,17 @@ Online map cache and offline packages are managed separately. Clearing the onlin
 1. In **Settings** → **Navigation Database**, tap **Choose s3db**.
 2. Pick a `.s3db`, `.sqlite`, `.sqlite3`, or `.db` file from Files.
 3. NavPlanner switches to the imported database and refreshes route, procedure, and nav-overlay caches.
+
+<table>
+  <tr>
+    <th align="center">iPhone 17 Pro · Portrait</th>
+    <th align="center">iPad Pro 13-inch · Landscape</th>
+  </tr>
+  <tr>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/05-settings-iphone.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/05-settings-iphone.webp" /><img alt="Manage offline maps and local settings on iPhone" src="Media/workflows/en/day/05-settings-iphone.webp" width="360" /></picture></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/05-settings-ipad.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/05-settings-ipad.webp" /><img alt="Manage offline maps and the navigation database on iPad" src="Media/workflows/en/day/05-settings-ipad.webp" width="700" /></picture></td>
+  </tr>
+</table>
 
 </details>
 

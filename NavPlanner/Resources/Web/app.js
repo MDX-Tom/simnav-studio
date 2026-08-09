@@ -810,6 +810,7 @@ const state = {
   navOverlayZoom: null,
   navOverlayDrawZoom: null,
   navOverlayRetryTimer: 0,
+  simulatorDebugHideNavOverlay: false,
   activeRouteAbortController: null,
   activeRouteOperation: "",
   procedureCache: new Map(),
@@ -10733,6 +10734,19 @@ async function refreshNavOverlay() {
   const zoom = Math.round(map.getZoom());
   window.clearTimeout(state.navOverlayRetryTimer);
   state.navOverlayRetryTimer = 0;
+  if (state.simulatorDebugHideNavOverlay) {
+    state.navOverlayAbortController?.abort();
+    state.navOverlayAbortController = null;
+    navLayerGroup.clearLayers();
+    navLabelLayerGroup.clearLayers();
+    navAirwayLayerGroup.clearLayers();
+    navAirwayLabelLayerGroup.clearLayers();
+    navTerminalLayerGroup.clearLayers();
+    navTerminalLabelLayerGroup.clearLayers();
+    navPointLayerGroup.clearLayers();
+    navPointLabelLayerGroup.clearLayers();
+    return;
+  }
   if (
     map.getContainer().classList.contains("is-map-moving") ||
     map.getContainer().classList.contains("is-smooth-zooming")
@@ -13828,8 +13842,11 @@ function drawFR24ProfileChart() {
 
   const chartElement = svg.parentElement || svg;
   const chartRect = chartElement.getBoundingClientRect();
-  const width = Math.round(Math.max(320, chartRect.width || svg.clientWidth || 640));
-  const height = Math.round(Math.max(120, chartRect.height || svg.clientHeight || 190));
+  // viewBox 必须与 SVG 的布局视口同宽高。移动竖屏图表只有 98px 高，
+  // 旧的 120px 下限配合 preserveAspectRatio="none" 会把坐标轴文字纵向压缩。
+  // clientWidth/clientHeight 使用 zoom 前的布局尺寸，外层 CSS zoom 会再统一缩放两轴。
+  const width = Math.max(1, Math.round(svg.clientWidth || chartElement.clientWidth || chartRect.width || 640));
+  const height = Math.max(1, Math.round(svg.clientHeight || chartElement.clientHeight || chartRect.height || 190));
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   const fontSizeReduction = deviceFontSizeReductionPx();
   const labelFontSize = Math.max(1, clampNumber(Math.min(width / 62, height / 15), 10, 12.5) - fontSizeReduction);
@@ -14742,6 +14759,148 @@ async function simulatorDebugWaitFor(predicate, timeoutMs = 30000, intervalMs = 
   return Boolean(predicate());
 }
 
+function simulatorDebugScrollTarget(tab, selector, offset = 20) {
+  const fallbackHost = detailScrollHost(tab);
+  const target = typeof selector === "string" ? document.querySelector(selector) : null;
+  if (!fallbackHost || !target) {
+    return false;
+  }
+  // iPad 机场页由 .airport-panels 承担实际滚动，外层 detail section 本身不滚动。
+  // 从目标向上查找最近的可滚动祖先，手机竖屏没有嵌套 scroller 时仍回退到 detailPanel。
+  let host = target.parentElement;
+  while (host && host !== fallbackHost) {
+    const style = window.getComputedStyle(host);
+    if (/(auto|scroll)/.test(style.overflowY) && host.scrollHeight > host.clientHeight + 1) {
+      break;
+    }
+    host = host.parentElement;
+  }
+  if (!host || (host === fallbackHost && host.scrollHeight <= host.clientHeight + 1)) {
+    host = fallbackHost;
+  }
+  const hostRect = host.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+  host.scrollTop = Math.max(0, host.scrollTop + targetRect.top - hostRect.top - Number(offset || 0));
+  host.dispatchEvent(new Event("scroll"));
+  return true;
+}
+
+function simulatorDebugRouteViewportSnapshot() {
+  const routePoints = withDisplayLongitudes(state.currentRoutePayload?.points || [])
+    .filter((point) => Number.isFinite(Number(point?.lat)) && Number.isFinite(Number(point?.lon)));
+  const size = map.getSize();
+  const mapRect = map.getContainer().getBoundingClientRect();
+  const projected = routePoints.map((point) => map.latLngToContainerPoint(latLngForPoint(point)));
+  const clippedPoints = projected.filter((point) => (
+    point.x < 0 || point.y < 0 || point.x > size.x || point.y > size.y
+  )).length;
+  const visibleLabelRects = Array.from(document.querySelectorAll(".route-smart-label span"))
+    .flatMap((element) => {
+      const markerElement = element.closest(".route-smart-label") || element;
+      const style = window.getComputedStyle(markerElement);
+      const rect = element.getBoundingClientRect();
+      if (
+        rect.width <= 0
+        || rect.height <= 0
+        || style.display === "none"
+        || style.visibility === "hidden"
+        || Number(style.opacity || 1) <= 0
+      ) {
+        return [];
+      }
+      return [{ text: element.textContent?.trim() || "", rect }];
+    });
+  const clippedLabelItems = visibleLabelRects.filter(({ rect }) => (
+    rect.left < mapRect.left
+    || rect.top < mapRect.top
+    || rect.right > mapRect.right
+    || rect.bottom > mapRect.bottom
+  ));
+  const labelEdgeMarginPx = visibleLabelRects.length
+    ? Math.min(...visibleLabelRects.flatMap(({ rect }) => [
+      rect.left - mapRect.left,
+      rect.top - mapRect.top,
+      mapRect.right - rect.right,
+      mapRect.bottom - rect.bottom,
+    ]))
+    : 0;
+  const edgeMarginPx = projected.length
+    ? Math.min(...projected.flatMap((point) => [
+      point.x,
+      point.y,
+      size.x - point.x,
+      size.y - point.y,
+    ]))
+    : 0;
+  return {
+    pointCount: routePoints.length,
+    viewportWidth: size.x,
+    viewportHeight: size.y,
+    clippedPoints,
+    visibleLabels: visibleLabelRects.length,
+    clippedLabels: clippedLabelItems.length,
+    clippedLabelTexts: clippedLabelItems.map((item) => item.text),
+    labelEdgeMarginPx: Number(labelEdgeMarginPx.toFixed(1)),
+    edgeMarginPx: Number(edgeMarginPx.toFixed(1)),
+    zoom: Number(map.getZoom().toFixed(2)),
+  };
+}
+
+function simulatorDebugProcedureOverviewViewportSnapshot() {
+  const overview = state.procedureOverview;
+  const size = map.getSize();
+  if (!overview?.payload) {
+    return {
+      active: false,
+      pointCount: 0,
+      viewportWidth: size.x,
+      viewportHeight: size.y,
+      clippedPoints: 0,
+      edgeMarginPx: 0,
+      zoom: Number(map.getZoom().toFixed(2)),
+    };
+  }
+  const procedures = (overview.payload.procedures || []).filter((item) => (
+    !overview.groupIdentifier
+    || String(item.group_identifier || "").toUpperCase() === overview.groupIdentifier
+  ));
+  const points = procedures.flatMap((item) => [
+    ...(item.path || []),
+    ...(item.primary_path || []),
+    ...(item.missed_path || []),
+    ...(item.waypoints || []),
+  ]).flatMap((point) => {
+    const lat = Number(point?.lat);
+    const lon = Number(point?.lon);
+    return Number.isFinite(lat) && Number.isFinite(lon) ? [{ lat, lon }] : [];
+  });
+  const projected = points.map((point) => map.latLngToContainerPoint(latLngForPoint(point)));
+  const clippedPoints = projected.filter((point) => (
+    point.x < 0 || point.y < 0 || point.x > size.x || point.y > size.y
+  )).length;
+  const edgeMarginPx = projected.length
+    ? Math.min(...projected.flatMap((point) => [
+      point.x,
+      point.y,
+      size.x - point.x,
+      size.y - point.y,
+    ]))
+    : 0;
+  return {
+    active: true,
+    slot: overview.slot,
+    type: overview.type,
+    airport: overview.airport,
+    runway: overview.runway,
+    pointCount: points.length,
+    viewportWidth: size.x,
+    viewportHeight: size.y,
+    clippedPoints,
+    edgeMarginPx: Number(edgeMarginPx.toFixed(1)),
+    zoom: Number(map.getZoom().toFixed(2)),
+  };
+}
+
 function simulatorDebugRouteLabelSnapshot(label = "") {
   const markers = Array.from(document.querySelectorAll(".route-smart-label span"))
     .map((element) => {
@@ -14933,6 +15092,448 @@ async function runSimulatorAirportMapStress(sequence) {
     markerMaxHeight: Number(Math.max(0, ...markerSamples.map((sample) => sample.height)).toFixed(2)),
     markerOversizeSamples: oversizeSamples.length,
   };
+}
+
+/**
+ * 功能：为模拟器回归与文档截图生成一条确定性的 FR24 航迹。
+ * 输入：options 可指定点数、起始时间、是否缩放地图及是否把图表量测写入调试日志。
+ * 输出：航迹点数与 SVG 布局量测；不发起网络请求，也不会进入正式运行路径。
+ */
+async function runSimulatorSyntheticFR24Track(options = {}) {
+  const routePoints = withDisplayLongitudes(state.currentRoutePayload?.points || [])
+    .filter((point) => Number.isFinite(Number(point?.lat)) && Number.isFinite(Number(point?.lon)));
+  if (routePoints.length < 2) {
+    return { passed: false, reason: "route missing", pointCount: 0 };
+  }
+
+  const cumulativeDistances = [0];
+  for (let index = 1; index < routePoints.length; index += 1) {
+    cumulativeDistances.push(
+      cumulativeDistances[index - 1] + Math.max(0.001, greatCircleDistanceNm(routePoints[index - 1], routePoints[index])),
+    );
+  }
+  const totalDistanceNm = cumulativeDistances[cumulativeDistances.length - 1];
+  const pointCount = Math.round(clampNumber(Number(options.pointCount) || 480, 120, 1200));
+  const startTimestamp = Math.floor(Number(options.startTimestamp) || 1_775_347_200);
+  const durationSeconds = Math.round(clampNumber(Number(options.durationSeconds) || totalDistanceNm * 7.7, 3600, 14400));
+  let segmentIndex = 0;
+  const trackPoints = Array.from({ length: pointCount }, (_, index) => {
+    const ratio = index / Math.max(1, pointCount - 1);
+    const targetDistance = ratio * totalDistanceNm;
+    while (
+      segmentIndex < routePoints.length - 2
+      && cumulativeDistances[segmentIndex + 1] < targetDistance
+    ) {
+      segmentIndex += 1;
+    }
+    const segmentStart = routePoints[segmentIndex];
+    const segmentEnd = routePoints[segmentIndex + 1];
+    const segmentDistance = Math.max(0.001, cumulativeDistances[segmentIndex + 1] - cumulativeDistances[segmentIndex]);
+    const segmentRatio = clampNumber(
+      (targetDistance - cumulativeDistances[segmentIndex]) / segmentDistance,
+      0,
+      1,
+    );
+    const climbRatio = clampNumber(ratio / 0.19, 0, 1);
+    const descentRatio = clampNumber((1 - ratio) / 0.23, 0, 1);
+    const altitudeRatio = Math.min(
+      climbRatio * climbRatio * (3 - 2 * climbRatio),
+      descentRatio * descentRatio * (3 - 2 * descentRatio),
+    );
+    const speedRatio = Math.min(
+      clampNumber(ratio / 0.13, 0, 1),
+      clampNumber((1 - ratio) / 0.17, 0, 1),
+    );
+    return {
+      lat: Number(segmentStart.lat) + (Number(segmentEnd.lat) - Number(segmentStart.lat)) * segmentRatio,
+      lon: Number(segmentStart.lon) + (Number(segmentEnd.lon) - Number(segmentStart.lon)) * segmentRatio,
+      timestamp: startTimestamp + Math.round(durationSeconds * ratio),
+      altitude_ft: Math.round(650 + altitudeRatio * 36_350),
+      speed_kt: Math.round(170 + speedRatio * 295),
+    };
+  });
+
+  const departure = state.currentRouteAirports?.departure || elements.departureInput?.value || "LGAV";
+  const arrival = state.currentRouteAirports?.arrival || elements.arrivalInput?.value || "EDDM";
+  renderFR24Flights([{
+    fr24_id: "SIM-LGAV-EDDM-A3802",
+    flight: "A3 802",
+    callsign: "AEE802",
+    origin_icao: departure,
+    dest_icao: arrival,
+    airline: "Aegean Airlines",
+    aircraft: "A320-232",
+    aircraft_registration: "SX-DVV",
+    status: currentLanguage() === "zh-Hans" ? "已落地" : "Landed",
+    scheduled_departure: startTimestamp - 240,
+    actual_departure: startTimestamp,
+    scheduled_arrival: startTimestamp + durationSeconds + 180,
+    actual_arrival: startTimestamp + durationSeconds,
+    duration_seconds: durationSeconds,
+  }], { prefix: "simulator-screenshot" });
+  const flightKey = state.fr24Flights.keys().next().value;
+  const drawnCount = drawFR24TrackPoints(trackPoints, {
+    fitBounds: options.fitBounds !== false,
+    recordHistory: false,
+  });
+  if (drawnCount >= 2 && flightKey) {
+    setFR24CurrentDrawnCard(flightKey);
+  }
+  setFR24QueryStatus(t("query.drawn", { count: drawnCount }));
+  await simulatorDebugNextPaint(3);
+  scheduleFR24ProfileChartResize();
+  await simulatorDebugNextPaint(3);
+
+  const svg = elements.fr24ProfileSvg;
+  const rect = svg?.getBoundingClientRect();
+  const viewBox = svg?.viewBox?.baseVal;
+  const scaleX = rect && viewBox?.width ? rect.width / viewBox.width : 0;
+  const scaleY = rect && viewBox?.height ? rect.height / viewBox.height : 0;
+  const chartMetrics = {
+    viewBoxWidth: Number((viewBox?.width || 0).toFixed(2)),
+    viewBoxHeight: Number((viewBox?.height || 0).toFixed(2)),
+    clientWidth: svg?.clientWidth || 0,
+    clientHeight: svg?.clientHeight || 0,
+    renderedWidth: Number((rect?.width || 0).toFixed(2)),
+    renderedHeight: Number((rect?.height || 0).toFixed(2)),
+    scaleX: Number(scaleX.toFixed(4)),
+    scaleY: Number(scaleY.toFixed(4)),
+    axisScaleRatio: scaleX > 0 ? Number((scaleY / scaleX).toFixed(4)) : 0,
+  };
+  const result = {
+    passed: drawnCount === pointCount
+      && chartMetrics.viewBoxWidth === chartMetrics.clientWidth
+      && chartMetrics.viewBoxHeight === chartMetrics.clientHeight
+      && Math.abs(chartMetrics.axisScaleRatio - 1) <= 0.02,
+    pointCount: drawnCount,
+    totalDistanceNm: Number(totalDistanceNm.toFixed(1)),
+    chartMetrics,
+  };
+  writeLocalStorageValue("navplannerDebugSyntheticFR24Result", JSON.stringify(result));
+  if (options.reportMetrics === true) {
+    postNativeEvent("runtimeDiagnostic", {
+      level: result.passed ? "warning" : "error",
+      message: `NavPlanner FR24 profile regression ${JSON.stringify(result)}`,
+    });
+  }
+  return result;
+}
+
+function simulatorDebugSvgMetrics(svg) {
+  const rect = svg?.getBoundingClientRect();
+  const viewBox = svg?.viewBox?.baseVal;
+  const scaleX = rect && viewBox?.width ? rect.width / viewBox.width : 0;
+  const scaleY = rect && viewBox?.height ? rect.height / viewBox.height : 0;
+  return {
+    viewBoxWidth: Number((viewBox?.width || 0).toFixed(2)),
+    viewBoxHeight: Number((viewBox?.height || 0).toFixed(2)),
+    clientWidth: svg?.clientWidth || 0,
+    clientHeight: svg?.clientHeight || 0,
+    renderedWidth: Number((rect?.width || 0).toFixed(2)),
+    renderedHeight: Number((rect?.height || 0).toFixed(2)),
+    axisScaleRatio: scaleX > 0 ? Number((scaleY / scaleX).toFixed(4)) : 0,
+  };
+}
+
+async function simulatorDebugSelectAirportFromInput(slot, ident) {
+  const target = elements[`${slot}Input`];
+  const results = elements[`${slot}Results`];
+  if (!target || !results) {
+    return { passed: false, slot, ident, reason: "input missing", elapsedMs: 0 };
+  }
+  const startedAt = performance.now();
+  const suppressedWait = Math.max(0, state.searchSuppressedUntil - performance.now() + 24);
+  if (suppressedWait > 0) {
+    await new Promise((resolve) => window.setTimeout(resolve, suppressedWait));
+  }
+  target.focus({ preventScroll: true });
+  target.value = ident;
+  target.dispatchEvent(new InputEvent("input", { bubbles: true, data: ident, inputType: "insertText" }));
+  const rendered = await simulatorDebugWaitFor(() => (
+    !results.classList.contains("hidden")
+    && Array.from(results.querySelectorAll(".search-item")).some((row) => (
+      row.querySelector(".search-item-title")?.textContent?.trim().toUpperCase() === ident
+    ))
+  ), 5000, 40);
+  const row = Array.from(results.querySelectorAll(".search-item")).find((item) => (
+    item.querySelector(".search-item-title")?.textContent?.trim().toUpperCase() === ident
+  ));
+  row?.click();
+  const loaded = rendered && Boolean(row) && await simulatorDebugWaitFor(() => (
+    state[`${slot}Airport`]?.airport_identifier === ident
+  ), 8000, 60);
+  return {
+    passed: loaded,
+    slot,
+    ident,
+    rendered,
+    selected: Boolean(row),
+    loadedIdent: state[`${slot}Airport`]?.airport_identifier || "",
+    elapsedMs: Math.round(performance.now() - startedAt),
+  };
+}
+
+async function runSimulatorWorkflowStress(options = {}) {
+  const repeatCount = Math.round(clampNumber(Number(options.repeatCount) || 5, 1, 10));
+  const departure = String(options.departure || "LGAV").trim().toUpperCase();
+  const arrival = String(options.arrival || "EDDM").trim().toUpperCase();
+  const cycles = [];
+  const frameDeltas = [];
+  const longTasks = [];
+  let previousFrame = 0;
+  let frameHandle = 0;
+  let sampling = true;
+  const sampleFrame = (timestamp) => {
+    if (previousFrame) {
+      frameDeltas.push(timestamp - previousFrame);
+    }
+    previousFrame = timestamp;
+    if (sampling) {
+      frameHandle = window.requestAnimationFrame(sampleFrame);
+    }
+  };
+  frameHandle = window.requestAnimationFrame(sampleFrame);
+  let longTaskObserver = null;
+  if (typeof PerformanceObserver === "function") {
+    try {
+      longTaskObserver = new PerformanceObserver((list) => {
+        list.getEntries().forEach((entry) => longTasks.push(Number(entry.duration.toFixed(2))));
+      });
+      longTaskObserver.observe({ type: "longtask", buffered: true });
+    } catch (_error) {
+      longTaskObserver = null;
+    }
+  }
+
+  for (let iteration = 0; iteration < repeatCount; iteration += 1) {
+    const cycleStartedAt = performance.now();
+    setMobileBottomTab("plan");
+    const departureSelection = await simulatorDebugSelectAirportFromInput("departure", departure);
+    const arrivalSelection = await simulatorDebugSelectAirportFromInput("arrival", arrival);
+
+    const planStartedAt = performance.now();
+    await buildRoute({ forceAuto: true });
+    const planElapsedMs = Math.round(performance.now() - planStartedAt);
+    const routeAfterPlan = simulatorDebugRouteViewportSnapshot();
+
+    const bannerSamples = [];
+    const ratios = [24, 72, 32, 64, 46];
+    for (const ratio of ratios) {
+      applyMobilePanelMapRatio(ratio);
+      await simulatorDebugNextPaint(2);
+      await new Promise((resolve) => window.setTimeout(resolve, 190));
+      bannerSamples.push({ ratio, routeViewport: simulatorDebugRouteViewportSnapshot() });
+    }
+
+    const tabStartedAt = performance.now();
+    for (const tab of ["airport", "query", "calculate", "settings", "plan", "calculate"]) {
+      setMobileBottomTab(tab);
+      await simulatorDebugNextPaint(2);
+    }
+    const tabElapsedMs = Math.round(performance.now() - tabStartedAt);
+
+    state.calculateZfwKg = 60_500 + iteration * 650;
+    state.calculateFuelKg = 8_100 + iteration * 420;
+    state.calculateCruiseAltitudeFt = 35_000 + iteration * 500;
+    state.calculateCruiseMach = 0.76 + iteration * 0.005;
+    state.calculateDescentRateFpm = 1_500 + iteration * 100;
+    state.calculateProfileZoom = 1 + iteration * 0.18;
+    state.calculateProfilePanRatio = iteration / Math.max(1, repeatCount - 1);
+    syncCalculateControls();
+    const calculateStartedAt = performance.now();
+    scheduleCalculateRender();
+    await new Promise((resolve) => window.setTimeout(resolve, 320));
+    await simulatorDebugNextPaint(4);
+    const calculateElapsedMs = Math.round(performance.now() - calculateStartedAt);
+
+    applyThemeMode(iteration % 2 ? "night" : "day", { persist: false });
+    applyWeightUnit(iteration % 2 ? "lb" : "kg", { persist: false, announce: false });
+    applyPressureUnit(iteration % 2 ? "in" : "hpa", { persist: false, announce: false });
+    setMapSourceMode(iteration % 2 ? "offline" : "online", { persist: false });
+    updateMapTypeOptionState();
+
+    const routePoints = withDisplayLongitudes(state.currentRoutePayload?.points || []);
+    if (routePoints.length >= 2) {
+      const focus = routePoints[Math.round((routePoints.length - 1) * ((iteration + 1) / (repeatCount + 1)))];
+      await simulatorDebugWaitForMapAction(() => {
+        map.flyTo([focus.lat, focus.lon], 5.8 + (iteration % 3) * 0.7, { duration: 0.24 });
+      });
+      await simulatorDebugWaitForMapAction(() => {
+        map.panBy([iteration % 2 ? 120 : -120, iteration % 2 ? -80 : 80], { animate: true, duration: 0.2 });
+      });
+      await simulatorDebugWaitForMapAction(() => {
+        map.fitBounds(L.latLngBounds(routePoints.map(latLngForPoint)), {
+          padding: [32, 32],
+          maxZoom: 6.5,
+          animate: false,
+        });
+      }, 900);
+    }
+    scheduleRouteLabelRender();
+    await simulatorDebugNextPaint(4);
+
+    const root = document.documentElement;
+    const cycleResult = {
+      iteration: iteration + 1,
+      elapsedMs: Math.round(performance.now() - cycleStartedAt),
+      airportSelections: [departureSelection, arrivalSelection],
+      planElapsedMs,
+      routePointCount: state.currentRoutePayload?.points?.length || 0,
+      planStatus: elements.statusText?.textContent || "",
+      routeAfterPlan,
+      bannerSamples,
+      tabElapsedMs,
+      calculateElapsedMs,
+      calculateStatus: elements.calcStatusText?.textContent || "",
+      weatherChart: simulatorDebugSvgMetrics(elements.calcWeatherProfileSvg),
+      speedChart: simulatorDebugSvgMetrics(elements.calcSpeedProfileSvg),
+      routeLabels: simulatorDebugRouteLabelSnapshot(`workflow-${iteration + 1}`),
+      horizontalOverflowPx: Math.max(0, root.scrollWidth - root.clientWidth),
+      finalRouteViewport: simulatorDebugRouteViewportSnapshot(),
+    };
+    cycles.push(cycleResult);
+    postNativeEvent("runtimeDiagnostic", {
+      level: cycleResult.airportSelections.every((item) => item.passed) ? "warning" : "error",
+      message: `NavPlanner workflow stress cycle ${JSON.stringify({
+        iteration: cycleResult.iteration,
+        elapsedMs: cycleResult.elapsedMs,
+        airportSelections: cycleResult.airportSelections,
+        planElapsedMs: cycleResult.planElapsedMs,
+        routePointCount: cycleResult.routePointCount,
+        routeAfterPlan: cycleResult.routeAfterPlan,
+        bannerClippedPoints: cycleResult.bannerSamples.map((item) => item.routeViewport.clippedPoints),
+        tabElapsedMs: cycleResult.tabElapsedMs,
+        calculateElapsedMs: cycleResult.calculateElapsedMs,
+        weatherAxisScaleRatio: cycleResult.weatherChart.axisScaleRatio,
+        speedAxisScaleRatio: cycleResult.speedChart.axisScaleRatio,
+        routeLabelOverlapCount: cycleResult.routeLabels.overlapCount,
+        horizontalOverflowPx: cycleResult.horizontalOverflowPx,
+        finalRouteViewport: cycleResult.finalRouteViewport,
+      })}`,
+    });
+  }
+
+  sampling = false;
+  if (frameHandle) {
+    window.cancelAnimationFrame(frameHandle);
+  }
+  longTaskObserver?.disconnect();
+  const airportFailures = cycles.flatMap((cycle) => cycle.airportSelections).filter((item) => !item.passed);
+  const result = {
+    repeatCount,
+    passed: airportFailures.length === 0
+      && cycles.every((cycle) => cycle.routePointCount >= 2)
+      && cycles.every((cycle) => cycle.horizontalOverflowPx === 0),
+    airportFailureCount: airportFailures.length,
+    frames: simulatorDebugFrameSummary(frameDeltas),
+    longTasks: {
+      count: longTasks.length,
+      maxMs: Number(Math.max(0, ...longTasks).toFixed(2)),
+      over100ms: longTasks.filter((value) => value > 100).length,
+    },
+    cycles,
+  };
+  writeLocalStorageValue("navplannerDebugWorkflowStressResult", JSON.stringify(result));
+  postNativeEvent("runtimeDiagnostic", {
+    level: result.passed ? "warning" : "error",
+    message: `NavPlanner workflow stress summary ${JSON.stringify({
+      repeatCount: result.repeatCount,
+      passed: result.passed,
+      airportFailureCount: result.airportFailureCount,
+      frames: result.frames,
+      longTasks: result.longTasks,
+      cycleElapsedMs: result.cycles.map((item) => item.elapsedMs),
+      planElapsedMs: result.cycles.map((item) => item.planElapsedMs),
+      calculateElapsedMs: result.cycles.map((item) => item.calculateElapsedMs),
+      maxBannerClippedPoints: Math.max(0, ...result.cycles.flatMap((item) => (
+        item.bannerSamples.map((sample) => sample.routeViewport.clippedPoints)
+      ))),
+    })}`,
+  });
+  return result;
+}
+
+async function runSimulatorFR24Stress(options = {}) {
+  const repeatCount = Math.round(clampNumber(Number(options.repeatCount) || 5, 1, 10));
+  const action = options.action === "match" ? "match" : "draw";
+  const searchEach = options.searchEach === true;
+  const queries = [];
+  const actions = [];
+  setMobileBottomTab("query");
+  for (let iteration = 0; iteration < repeatCount; iteration += 1) {
+    if (searchEach || iteration === 0 || !state.fr24Flights.size) {
+      const queryStartedAt = performance.now();
+      await searchFR24Flights();
+      const queryResult = {
+        iteration: iteration + 1,
+        elapsedMs: Math.round(performance.now() - queryStartedAt),
+        flightCount: state.fr24Flights.size,
+        status: elements.fr24QueryStatus?.textContent || "",
+        error: elements.fr24QueryStatus?.classList.contains("settings-status-error") || false,
+      };
+      queries.push(queryResult);
+      postNativeEvent("runtimeDiagnostic", {
+        level: queryResult.error ? "error" : "warning",
+        message: `NavPlanner FR24 stress query ${JSON.stringify(queryResult)}`,
+      });
+    }
+    const keys = Array.from(state.fr24Flights.keys());
+    const key = keys.length ? keys[iteration % keys.length] : "";
+    const flight = key ? state.fr24Flights.get(key) : null;
+    const actionStartedAt = performance.now();
+    if (key && action === "match") {
+      await matchFR24FlightTrack(key);
+    } else if (key) {
+      await downloadAndDrawFR24Track(key);
+    }
+    scheduleFR24ProfileChartResize();
+    await simulatorDebugNextPaint(4);
+    const actionResult = {
+      iteration: iteration + 1,
+      action,
+      key,
+      flight: flightPrimaryLabel(flight || {}),
+      elapsedMs: Math.round(performance.now() - actionStartedAt),
+      status: elements.fr24QueryStatus?.textContent || "",
+      error: elements.fr24QueryStatus?.classList.contains("settings-status-error") || false,
+      trackPointCount: state.fr24TrackPayload?.track_points?.length || 0,
+      currentDrawnKey: state.fr24CurrentDrawnKey || "",
+      routePointCount: state.currentRoutePayload?.points?.length || 0,
+      profileHidden: elements.fr24ProfileCard?.classList.contains("hidden") || false,
+      profileChart: simulatorDebugSvgMetrics(elements.fr24ProfileSvg),
+      routeViewport: simulatorDebugRouteViewportSnapshot(),
+    };
+    actions.push(actionResult);
+    postNativeEvent("runtimeDiagnostic", {
+      level: actionResult.error ? "error" : "warning",
+      message: `NavPlanner FR24 stress action ${JSON.stringify(actionResult)}`,
+    });
+  }
+  const result = {
+    repeatCount,
+    action,
+    searchEach,
+    passed: actions.length === repeatCount
+      && actions.every((item) => !item.error && item.trackPointCount >= 2),
+    queries,
+    actions,
+  };
+  writeLocalStorageValue("navplannerDebugFR24StressResult", JSON.stringify(result));
+  postNativeEvent("runtimeDiagnostic", {
+    level: result.passed ? "warning" : "error",
+    message: `NavPlanner FR24 stress summary ${JSON.stringify({
+      repeatCount: result.repeatCount,
+      action: result.action,
+      searchEach: result.searchEach,
+      passed: result.passed,
+      queryElapsedMs: result.queries.map((item) => item.elapsedMs),
+      queryFlightCounts: result.queries.map((item) => item.flightCount),
+      actionElapsedMs: result.actions.map((item) => item.elapsedMs),
+      actionTrackPointCounts: result.actions.map((item) => item.trackPointCount),
+      actionErrors: result.actions.map((item) => item.error),
+    })}`,
+  });
+  return result;
 }
 
 async function runSimulatorResetReplanProbe(options = {}) {
@@ -15164,6 +15765,19 @@ async function applySimulatorDebugLaunch() {
   if (config.buildRoute) {
     await buildRoute({ forceAuto: config.forceAuto !== false });
   }
+  if (config.mapOverlayVisibility && typeof config.mapOverlayVisibility === "object") {
+    Object.keys(state.mapOverlayVisibility).forEach((key) => {
+      if (typeof config.mapOverlayVisibility[key] === "boolean") {
+        state.mapOverlayVisibility[key] = config.mapOverlayVisibility[key];
+      }
+    });
+    applyMapOverlayVisibility();
+  }
+  if (config.hideNavOverlay === true) {
+    state.simulatorDebugHideNavOverlay = true;
+    state.navOverlayVersion += 1;
+    await refreshNavOverlay();
+  }
   if (typeof config.fr24DepartureOverride === "string") {
     elements.departureInput.value = config.fr24DepartureOverride.trim().toUpperCase();
   }
@@ -15205,6 +15819,46 @@ async function applySimulatorDebugLaunch() {
   if (detailTab) {
     setDetailTab(detailTab);
   }
+  if (AIRPORT_SLOTS.includes(config.airportSlot)) {
+    setActiveAirportSlot(config.airportSlot);
+  }
+  if (["sid", "star", "approach"].includes(config.procedurePreviewType)) {
+    const selected = state.selectedProcedures[config.procedurePreviewType];
+    if (selected) {
+      await previewProcedure(
+        config.procedurePreviewType,
+        selected.airport,
+        selected.procedure,
+        selected.transition,
+        {
+          source: "manual",
+          skipFitBounds: config.procedureFitBounds === false,
+          recordHistory: false,
+        },
+      );
+    }
+  }
+  if (["sid", "star", "approach"].includes(config.procedureOverviewType)) {
+    const slot = AIRPORT_SLOTS.includes(config.procedureOverviewSlot)
+      ? config.procedureOverviewSlot
+      : "arrival";
+    if (typeof config.procedureOverviewRunway === "string") {
+      // 文档截图重放真实操作顺序：机场资料加载完成后，先选跑道，再点击程序总览标题。
+      updateRunwayChoice(slot, config.procedureOverviewRunway.trim().toUpperCase());
+    }
+    await activateProcedureOverview(slot, config.procedureOverviewType, { force: true });
+  }
+  if (["online", "offline"].includes(config.settingsMapSource)) {
+    // 截图只切换设置页的选择态与子菜单，不修改真实底图或持久化用户偏好。
+    setMapSourceMode(config.settingsMapSource, { persist: false });
+    updateMapTypeOptionState();
+  }
+  if (config.syntheticFR24Track === true || (config.syntheticFR24Track && typeof config.syntheticFR24Track === "object")) {
+    const result = await runSimulatorSyntheticFR24Track(
+      config.syntheticFR24Track === true ? {} : config.syntheticFR24Track,
+    );
+    writeLocalStorageValue("navplannerDebugSyntheticFR24Result", JSON.stringify(result));
+  }
   if (config.resetReplanProbe && typeof config.resetReplanProbe === "object") {
     const result = await runSimulatorResetReplanProbe(config.resetReplanProbe);
     writeLocalStorageValue("navplannerDebugResetReplanResult", JSON.stringify(result));
@@ -15216,6 +15870,12 @@ async function applySimulatorDebugLaunch() {
   if (Array.isArray(config.airportMapStressSequence)) {
     const result = await runSimulatorAirportMapStress(config.airportMapStressSequence);
     writeLocalStorageValue("navplannerDebugAirportMapStressResult", JSON.stringify(result));
+  }
+  if (config.workflowStress && typeof config.workflowStress === "object") {
+    await runSimulatorWorkflowStress(config.workflowStress);
+  }
+  if (config.fr24Stress && typeof config.fr24Stress === "object") {
+    await runSimulatorFR24Stress(config.fr24Stress);
   }
   if (config.runFR24Search === true) {
     setMobileBottomTab("query");
@@ -15324,6 +15984,25 @@ async function applySimulatorDebugLaunch() {
       scheduleCalculateRender();
     }, 320);
   }
+  if (typeof config.detailScrollTarget === "string") {
+    await new Promise((resolve) => window.setTimeout(resolve, 360));
+    simulatorDebugScrollTarget(
+      detailTab || state.activeDetailTab,
+      config.detailScrollTarget,
+      Number(config.detailScrollOffset) || 20,
+    );
+    await simulatorDebugNextPaint(3);
+  } else if (Number.isFinite(Number(config.detailScrollRatio))) {
+    await new Promise((resolve) => window.setTimeout(resolve, 320));
+    const tab = detailTab || state.activeDetailTab;
+    const host = detailScrollHost(tab);
+    if (host) {
+      host.scrollTop = Math.max(0, host.scrollHeight - host.clientHeight)
+        * clampNumber(Number(config.detailScrollRatio), 0, 1);
+      host.dispatchEvent(new Event("scroll"));
+      await simulatorDebugNextPaint(3);
+    }
+  }
   if (Array.isArray(config.openFR24VerificationDelaysMs)) {
     config.openFR24VerificationDelaysMs.forEach((rawDelay) => {
       const delay = Math.max(0, Number(rawDelay) || 0);
@@ -15331,6 +16010,71 @@ async function applySimulatorDebugLaunch() {
     });
   } else if (config.openFR24Verification === true) {
     window.setTimeout(openFR24VerificationBrowser, 120);
+  }
+  if (config.fitRouteAfterLayout === true) {
+    // 放到全部标签切换、banner 调整、图表渲染和详情滚动之后，避免延迟布局再次改变地图视口。
+    await new Promise((resolve) => window.setTimeout(resolve, 180));
+    map.invalidateSize({ animate: false, pan: false });
+    const routePoints = withDisplayLongitudes(state.currentRoutePayload?.points || [])
+      .filter((point) => Number.isFinite(Number(point?.lat)) && Number.isFinite(Number(point?.lon)));
+    if (routePoints.length >= 2) {
+      const padding = Math.round(clampNumber(Number(config.fitRoutePadding) || 32, 16, 72));
+      const maxZoom = clampNumber(Number(config.fitRouteMaxZoom) || 6.5, 4, 10);
+      await simulatorDebugWaitForMapAction(() => {
+        map.fitBounds(L.latLngBounds(routePoints.map(latLngForPoint)), {
+          padding: [padding, padding],
+          maxZoom,
+          animate: false,
+        });
+      }, 900);
+      await simulatorDebugNextPaint(4);
+    }
+  }
+  if (config.fitProcedureOverviewAfterLayout === true && state.procedureOverview?.payload) {
+    // banner、标签页和详情滚动都会改变地图高度；最后再拟合一次总览，确保程序无截断。
+    await new Promise((resolve) => window.setTimeout(resolve, 180));
+    map.invalidateSize({ animate: false, pan: false });
+    // 自动规划选中的 details 分组可能在延迟 toggle 后进入局部聚焦；截图要求保留 STAR 全类总览。
+    state.procedureOverview.groupIdentifier = null;
+    collapseProcedureOverviewGroups(
+      state.procedureOverview.slot,
+      state.procedureOverview.type,
+      state.procedureOverview.airport,
+    );
+    await simulatorDebugWaitForMapAction(() => {
+      drawProcedureOverview();
+    }, 1400);
+    await simulatorDebugNextPaint(4);
+    // 折叠自动选中分组会改变机场详情的总高度；在最终 DOM 稳定后再次滚到 STAR 标题，
+    // 保证 iPad 横屏也能与地图总览同时展示跑道筛选后的 STAR 列表。
+    if (typeof config.detailScrollTarget === "string") {
+      simulatorDebugScrollTarget(
+        detailTab || state.activeDetailTab,
+        config.detailScrollTarget,
+        Number(config.detailScrollOffset) || 20,
+      );
+      await simulatorDebugNextPaint(3);
+    }
+  }
+  if (config.reportReady === true) {
+    await new Promise((resolve) => window.setTimeout(resolve, 520));
+    await simulatorDebugNextPaint(4);
+    postNativeEvent("runtimeDiagnostic", {
+      level: "warning",
+      message: `NavPlanner screenshot ready ${JSON.stringify({
+        name: config.name || "",
+        mobileTab: state.activeMobileTab,
+        detailTab: state.activeDetailTab,
+        language: currentLanguage(),
+        theme: document.documentElement.dataset.theme || "",
+        orientation: window.innerWidth > window.innerHeight ? "landscape" : "portrait",
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        routePoints: state.currentRoutePayload?.points?.length || 0,
+        routeViewport: simulatorDebugRouteViewportSnapshot(),
+        procedureOverviewViewport: simulatorDebugProcedureOverviewViewportSnapshot(),
+      })}`,
+    });
   }
   console.info("NavPlanner simulator debug launch applied", config.name || "");
 }

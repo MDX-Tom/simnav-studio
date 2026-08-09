@@ -53,7 +53,6 @@ struct MapWebView: UIViewRepresentable {
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         ))
-#endif
         if let debugScript = simulatorDebugLaunchScript() {
             configuration.userContentController.addUserScript(WKUserScript(
                 source: debugScript,
@@ -61,6 +60,7 @@ struct MapWebView: UIViewRepresentable {
                 forMainFrameOnly: true
             ))
         }
+#endif
         configuration.userContentController.add(context.coordinator.scriptHandler, name: "navplanner")
         configuration.allowsInlineMediaPlayback = true
 
@@ -159,8 +159,6 @@ struct MapWebView: UIViewRepresentable {
         })();
         """
     }
-#endif
-
     private func simulatorDebugLaunchScript() -> String? {
         let key = "NAVPLANNER_SIM_DEBUG_JSON"
         guard let payload = ProcessInfo.processInfo.environment[key],
@@ -172,6 +170,7 @@ struct MapWebView: UIViewRepresentable {
         }
         return "window.__NAVPLANNER_SIM_DEBUG_JSON = \(literal);"
     }
+#endif
 
     private func macTextInputTraitsScript() -> String {
         """
@@ -469,6 +468,7 @@ struct MapWebView: UIViewRepresentable {
             NSLog("NavPlanner FR24 verification controller created")
             presenter.present(navigation, animated: true) {
 #if DEBUG
+                controller.scheduleSimulatorAutoSyncIfConfigured()
                 controller.scheduleSimulatorAutoDismissIfConfigured()
 #endif
             }
@@ -998,6 +998,17 @@ private final class FR24VerificationViewController: UIViewController, WKNavigati
     }
 
 #if DEBUG
+    func scheduleSimulatorAutoSyncIfConfigured() {
+        let key = "NAVPLANNER_SIM_VERIFICATION_AUTO_SYNC_MS"
+        guard let raw = ProcessInfo.processInfo.environment[key],
+              let milliseconds = Double(raw),
+              milliseconds > 0
+        else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + milliseconds / 1_000) { [weak self] in
+            self?.syncSession()
+        }
+    }
+
     func scheduleSimulatorAutoDismissIfConfigured() {
         let key = "NAVPLANNER_SIM_VERIFICATION_AUTO_DISMISS_MS"
         guard let raw = ProcessInfo.processInfo.environment[key],
