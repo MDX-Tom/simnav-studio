@@ -39,6 +39,7 @@
 		B00000000000000000000016 /* NavPlannerSchemeHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000016 /* NavPlannerSchemeHandler.swift */; };
 		B00000000000000000000017 /* MapBridgeScriptHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000017 /* MapBridgeScriptHandler.swift */; };
 		B00000000000000000000102 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000102 /* Assets.xcassets */; };
+		B00000000000000000000103 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000103 /* PrivacyInfo.xcprivacy */; };
 		B00000000000000000000104 /* Web in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000104 /* Web */; };
 		B00000000000000000000105 /* Database in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000105 /* Database */; };
 /* End PBXBuildFile section */
@@ -314,6 +315,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B00000000000000000000102 /* Assets.xcassets in Resources */,
+				B00000000000000000000103 /* PrivacyInfo.xcprivacy in Resources */,
 				B00000000000000000000104 /* Web in Resources */,
 				B00000000000000000000105 /* Database in Resources */,
 			);
@@ -425,8 +427,8 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.midaxia.navplanner;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = minimal;
 				SWIFT_VERSION = 5.0;
@@ -464,8 +466,8 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.midaxia.navplanner;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = minimal;
 				SWIFT_VERSION = 5.0;

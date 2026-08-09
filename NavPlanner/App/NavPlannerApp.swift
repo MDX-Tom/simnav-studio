@@ -1,6 +1,16 @@
 import SwiftUI
 #if canImport(UIKit)
 import UIKit
+
+extension ProcessInfo {
+    var navPlannerIsRunningOnMac: Bool {
+        #if targetEnvironment(macCatalyst)
+        true
+        #else
+        isiOSAppOnMac
+        #endif
+    }
+}
 #endif
 
 @main
@@ -159,7 +169,7 @@ private struct MacWindowGeometryConfigurator: UIViewControllerRepresentable {
 
         func requestMacGeometryIfNeeded() {
             let forceLandscapeForSimulatorDebug = ProcessInfo.processInfo.environment["NAVPLANNER_SIM_FORCE_LANDSCAPE"] == "1"
-            let isRunningOnMac = ProcessInfo.processInfo.isiOSAppOnMac
+            let isRunningOnMac = ProcessInfo.processInfo.navPlannerIsRunningOnMac
             guard !didRequestMacGeometry,
                   (isRunningOnMac || forceLandscapeForSimulatorDebug),
                   let windowScene = view.window?.windowScene
@@ -235,7 +245,7 @@ private struct MacWindowGeometryConfigurator: UIViewControllerRepresentable {
         }
 
         private func captureMacWindowSize() {
-            guard ProcessInfo.processInfo.isiOSAppOnMac,
+            guard ProcessInfo.processInfo.navPlannerIsRunningOnMac,
                   canPersistMacWindowSize,
                   let windowScene = view.window?.windowScene
             else {

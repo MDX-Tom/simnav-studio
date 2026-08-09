@@ -1301,6 +1301,7 @@ const VECTOR_PAN_BUFFER_MAX_PX = 1120;
 const NAV_LABEL_SNAPSHOT_BUFFER_PX = 320;
 const NAV_LABEL_SNAPSHOT_SPRITE_PADDING_PX = 6;
 const NAV_LABEL_SNAPSHOT_ATLAS_MAX_WIDTH_PX = 2048;
+const LABEL_COLLISION_HIDE_OVERLAP_RATIO = 0.6;
 const ASYNC_CACHED_TILE_REQUEST_TIMEOUT_MS = 6500;
 const ASYNC_CACHED_TILE_RETRY_DELAYS_MS = [120, 260, 520, 1000, 1800, 3200, 5200, 8000];
 const ROUTE_WORLD_COPY_OFFSETS = [-720, -360, 0, 360, 720];
@@ -3127,12 +3128,12 @@ function activateNavLabelSnapshot(mode = "pan") {
   navLabelSnapshotMode = mode;
   snapshotPane.style.visibility = "visible";
   map.getContainer().classList.add("has-nav-label-snapshot");
+  const symbolSnapshotPane = map.getPane("navSymbolSnapshotPane");
+  if (navSymbolSnapshotReady && symbolSnapshotPane) {
+    symbolSnapshotPane.style.visibility = "visible";
+    map.getContainer().classList.add("has-nav-symbol-snapshot");
+  }
   if (mode === "zoom") {
-    const symbolSnapshotPane = map.getPane("navSymbolSnapshotPane");
-    if (navSymbolSnapshotReady && symbolSnapshotPane) {
-      symbolSnapshotPane.style.visibility = "visible";
-      map.getContainer().classList.add("has-nav-symbol-snapshot");
-    }
     renderNavLabelZoomSnapshot();
     detachNavLabelPane();
   }
@@ -3812,10 +3813,16 @@ function applyVectorMapPanMirror() {
  * 输出：无返回值；合并高频 drag/move 事件。
  */
 function scheduleVectorMapPanMirror() {
-  if (!vectorMapPanMirrorActive || vectorMapPanMirrorFrame) {
+  if (!vectorMapPanMirrorActive) {
     return;
   }
-  vectorMapPanMirrorFrame = window.requestAnimationFrame(applyVectorMapPanMirror);
+  if (vectorMapPanMirrorFrame) {
+    window.cancelAnimationFrame(vectorMapPanMirrorFrame);
+    vectorMapPanMirrorFrame = 0;
+  }
+  // Leaflet 已在 drag/move 事件触发前提交当前 mapPane 位移；同一事件内更新
+  // MapLibre 的 CSS 镜像，避免 Mac/iPad 合成器把底图落后一帧。
+  applyVectorMapPanMirror();
 }
 
 /**
@@ -3835,7 +3842,9 @@ function applyVectorMapZoomMirror() {
   const originX = vectorMapPanBufferPx + size.x / 2;
   const originY = vectorMapPanBufferPx + size.y / 2;
   vectorMapContainer.style.transformOrigin = `${originX}px ${originY}px`;
-  vectorMapContainer.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(${scale})`;
+  // CSS 的 translate 在 scale 之后应用；围绕非中心锚点缩放时，中心变化量
+  // 也必须乘以 scale，才能与 Leaflet 的覆盖物保持同一屏幕投影。
+  vectorMapContainer.style.transform = `translate3d(${dx * scale}px, ${dy * scale}px, 0) scale(${scale})`;
 }
 
 /**
@@ -3844,10 +3853,14 @@ function applyVectorMapZoomMirror() {
  * 输出：无返回值；合并高频 zoom/move 事件。
  */
 function scheduleVectorMapZoomMirror() {
-  if (!vectorMapZoomMirrorActive || vectorMapZoomMirrorFrame) {
+  if (!vectorMapZoomMirrorActive) {
     return;
   }
-  vectorMapZoomMirrorFrame = window.requestAnimationFrame(applyVectorMapZoomMirror);
+  if (vectorMapZoomMirrorFrame) {
+    window.cancelAnimationFrame(vectorMapZoomMirrorFrame);
+    vectorMapZoomMirrorFrame = 0;
+  }
+  applyVectorMapZoomMirror();
 }
 
 /**
@@ -9739,11 +9752,36 @@ function routeLabelRectCells(rect) {
   return cells;
 }
 
+function labelRectArea(rect) {
+  return Math.max(0, Number(rect?.right) - Number(rect?.left))
+    * Math.max(0, Number(rect?.bottom) - Number(rect?.top));
+}
+
+function labelRectIntersectionArea(left, right) {
+  const width = Math.max(0, Math.min(left.right, right.right) - Math.max(left.left, right.left));
+  const height = Math.max(0, Math.min(left.bottom, right.bottom) - Math.max(left.top, right.top));
+  return width * height;
+}
+
+function labelRectOverlapRatio(left, right, { relativeTo = "smaller" } = {}) {
+  const intersection = labelRectIntersectionArea(left, right);
+  if (intersection <= 0) {
+    return 0;
+  }
+  const leftArea = labelRectArea(left);
+  const rightArea = labelRectArea(right);
+  const denominator = relativeTo === "left"
+    ? leftArea
+    : Math.min(leftArea, rightArea);
+  return denominator > 0 ? intersection / denominator : 0;
+}
+
+function labelRectsOverlapBeyondThreshold(left, right, options = {}) {
+  return labelRectOverlapRatio(left, right, options) > LABEL_COLLISION_HIDE_OVERLAP_RATIO;
+}
+
 function routeLabelRectsOverlap(left, right) {
-  return left.left < right.right
-    && left.right > right.left
-    && left.top < right.bottom
-    && left.bottom > right.top;
+  return labelRectsOverlapBeyondThreshold(left, right);
 }
 
 function renderRouteLabels() {
@@ -9943,14 +9981,32 @@ function navLabelGridKeysForRect(layout, rect) {
   return keys;
 }
 
-function reserveNavLabelRect(layout, rect) {
-  navLabelGridKeysForRect(layout, rect).forEach((key) => layout.occupied.add(key));
+function reserveNavLabelRect(layout, rect, kind = "label") {
+  const entry = { rect, kind };
+  navLabelGridKeysForRect(layout, rect).forEach((key) => {
+    const entries = layout.collisionGrid.get(key) || [];
+    entries.push(entry);
+    layout.collisionGrid.set(key, entries);
+  });
+}
+
+function navLabelRectHasBlockingOverlap(layout, rect) {
+  const candidates = new Set();
+  navLabelGridKeysForRect(layout, rect).forEach((key) => {
+    (layout.collisionGrid.get(key) || []).forEach((entry) => candidates.add(entry));
+  });
+  return Array.from(candidates).some((entry) => labelRectsOverlapBeyondThreshold(
+    rect,
+    entry.rect,
+    // 航路走廊不是标签；只有覆盖候选标签自身 60% 以上时才保留其优先级。
+    { relativeTo: entry.kind === "route" ? "left" : "smaller" },
+  ));
 }
 
 /**
  * 功能：为 nav-overlay 标签建立当前视口的屏幕网格预算。
- * 规则：主航路及已有主航路标签先占位；低优先级机场、航路和普通点
- * 只有在网格无碰撞且类别预算未用完时才显示。
+ * 规则：主航路及已有主航路标签先占位；网格只负责快速定位候选，
+ * 两个标签实际重合超过 60% 时才隐藏低优先级者。
  */
 function createNavLabelCollisionLayout(zoom) {
   const mapSize = map.getSize();
@@ -9980,7 +10036,7 @@ function createNavLabelCollisionLayout(zoom) {
     cellHeight,
     columns,
     rows,
-    occupied: new Set(),
+    collisionGrid: new Map(),
     routeIdentifiers,
     routeAirways,
     total: 0,
@@ -10017,7 +10073,7 @@ function createNavLabelCollisionLayout(zoom) {
         right: x + 16,
         top: y - 13,
         bottom: y + 13,
-      });
+      }, "route");
     }
   }
   return layout;
@@ -10036,10 +10092,6 @@ function navLabelFitsCollisionLayout(layout, lat, lon, text, className) {
     layout.rejected += 1;
     return false;
   }
-  if (layout.total >= layout.maxTotal || layout.counts[category] >= layout.limits[category]) {
-    layout.rejected += 1;
-    return false;
-  }
   const point = map.latLngToContainerPoint([lat, lon]);
   if (point.x < 4 || point.y < 4 || point.x > layout.width - 4 || point.y > layout.height - 4) {
     layout.rejected += 1;
@@ -10050,17 +10102,18 @@ function navLabelFitsCollisionLayout(layout, lat, lon, text, className) {
     ? clampNumber(normalizedText.length * (compact ? 4.2 : 5.5) + 10, compact ? 24 : 30, compact ? 42 : 58)
     : clampNumber(normalizedText.length * (compact ? 4.8 : 6.1) + 10, compact ? 24 : 30, compact ? 62 : 84);
   const height = category === "airway" ? (compact ? 12 : 19) : (compact ? 14 : 20);
-  const keys = navLabelGridKeysForRect(layout, {
+  const rect = {
     left: point.x - width / 2 - 3,
     right: point.x + width / 2 + 3,
     top: point.y - height / 2 - 3,
     bottom: point.y + height / 2 + 3,
-  });
-  if (!keys.length || keys.some((key) => layout.occupied.has(key))) {
+  };
+  const keys = navLabelGridKeysForRect(layout, rect);
+  if (!keys.length || navLabelRectHasBlockingOverlap(layout, rect)) {
     layout.rejected += 1;
     return false;
   }
-  keys.forEach((key) => layout.occupied.add(key));
+  reserveNavLabelRect(layout, rect);
   layout.counts[category] += 1;
   layout.total += 1;
   layout.accepted += 1;
@@ -15680,10 +15733,19 @@ function simulatorDebugRouteLabelSnapshot(label = "") {
     })
     .filter((item) => item.visible);
   const overlaps = [];
+  const partialOverlaps = [];
   for (let leftIndex = 0; leftIndex < markers.length; leftIndex += 1) {
     for (let rightIndex = leftIndex + 1; rightIndex < markers.length; rightIndex += 1) {
-      if (routeLabelRectsOverlap(markers[leftIndex].rect, markers[rightIndex].rect)) {
-        overlaps.push([markers[leftIndex].text, markers[rightIndex].text]);
+      const overlapRatio = labelRectOverlapRatio(markers[leftIndex].rect, markers[rightIndex].rect);
+      if (overlapRatio > 0) {
+        const overlap = {
+          labels: [markers[leftIndex].text, markers[rightIndex].text],
+          ratio: Number(overlapRatio.toFixed(3)),
+        };
+        partialOverlaps.push(overlap);
+        if (overlapRatio > LABEL_COLLISION_HIDE_OVERLAP_RATIO) {
+          overlaps.push(overlap);
+        }
       }
     }
   }
@@ -15700,6 +15762,8 @@ function simulatorDebugRouteLabelSnapshot(label = "") {
     duplicateAirwayLabels: airwayTexts.length - new Set(airwayTexts).size,
     overlapCount: overlaps.length,
     overlaps,
+    partialOverlapCount: partialOverlaps.length,
+    partialOverlaps,
     labels: markers.map((item) => item.text),
   };
 }

@@ -20,7 +20,7 @@ struct MapWebView: UIViewRepresentable {
             forURLScheme: "navplanner"
         )
         let deviceClass = UIDevice.current.userInterfaceIdiom == .pad ? "pad" : "phone"
-        let platformClass = ProcessInfo.processInfo.isiOSAppOnMac ? "mac" : "ios"
+        let platformClass = ProcessInfo.processInfo.navPlannerIsRunningOnMac ? "mac" : "ios"
         configuration.userContentController.addUserScript(WKUserScript(
             source: """
             (() => {
@@ -537,7 +537,7 @@ struct MapWebView: UIViewRepresentable {
 
         private func focusFormControl() {
             guard let webView else { return }
-            if ProcessInfo.processInfo.isiOSAppOnMac {
+            if ProcessInfo.processInfo.navPlannerIsRunningOnMac {
                 configureMacTextInput(in: webView)
                 // WKContentView can remain first responder even when no HTML form
                 // control is editing, so walking UIKit's responder tree gives a false
@@ -551,7 +551,7 @@ struct MapWebView: UIViewRepresentable {
             if !webView.isFirstResponder {
                 webView.becomeFirstResponder()
             }
-            if ProcessInfo.processInfo.isiOSAppOnMac {
+            if ProcessInfo.processInfo.navPlannerIsRunningOnMac {
                 DispatchQueue.main.async { [weak self, weak webView] in
                     guard let self, let webView else { return }
                     self.configureMacTextInput(in: webView)
@@ -560,14 +560,14 @@ struct MapWebView: UIViewRepresentable {
         }
 
         private func configureMacTextInput(in webView: WKWebView) {
-            guard ProcessInfo.processInfo.isiOSAppOnMac else { return }
+            guard ProcessInfo.processInfo.navPlannerIsRunningOnMac else { return }
             webView.inputAssistantItem.leadingBarButtonGroups = []
             webView.inputAssistantItem.trailingBarButtonGroups = []
         }
 
         private func blurFormControl() {
             guard let webView else { return }
-            if ProcessInfo.processInfo.isiOSAppOnMac {
+            if ProcessInfo.processInfo.navPlannerIsRunningOnMac {
                 macFormControlIsActive = false
             }
             webView.endEditing(true)

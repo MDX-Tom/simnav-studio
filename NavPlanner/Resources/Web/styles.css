@@ -55,6 +55,7 @@
   --mobile-keyboard-height: 0px;
   --mobile-map-flex: 66fr;
   --mobile-panel-flex: 34fr;
+  --map-loading-background: #0b1622;
   --body-background:
     linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
     linear-gradient(180deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
@@ -102,6 +103,7 @@ html[data-theme-mode="day"] {
   --rail-hover-top: rgba(255, 255, 255, 0.98);
   --rail-hover-bottom: rgba(232, 245, 250, 0.94);
   --rail-hover-color: #183041;
+  --map-loading-background: #d7dfdb;
   --rail-hover-shadow:
     0 0 14px rgba(36, 125, 162, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.94);
@@ -3585,7 +3587,12 @@ html[data-theme="day"] .selection-leg-turn {
 }
 
 .leaflet-container {
-  background: #d7dfdb;
+  background: var(--map-loading-background);
+}
+
+.leaflet-pane.terrain-pane .leaflet-tile:not(.leaflet-tile-loaded),
+.online-tile-viewport-transition {
+  background-color: var(--map-loading-background);
 }
 
 /* 真瓦片尚未到达时显示同一 Canvas 中的父瓦片象限；放大平滑形成模糊预览。 */
@@ -3616,14 +3623,6 @@ html[data-theme="day"] .selection-leg-turn {
   will-change: transform;
 }
 
-#map.is-smooth-zooming .nav-pane,
-#map.is-smooth-zooming .point-pane,
-#map.is-smooth-zooming .route-hit-pane,
-#map.is-smooth-zooming .route-pane,
-#map.is-smooth-zooming .label-pane {
-  will-change: transform;
-}
-
 #map.is-map-moving .nav-pane,
 #map.is-map-moving .point-pane,
 #map.is-map-moving .route-hit-pane,
@@ -3631,9 +3630,7 @@ html[data-theme="day"] .selection-leg-turn {
 #map.is-map-moving .label-pane,
 #map.is-map-moving .nav-label-pane,
 #map.is-smooth-zooming .nav-label-pane {
-  backface-visibility: hidden;
   pointer-events: none;
-  will-change: transform;
 }
 
 #map.is-map-moving.has-nav-label-snapshot .nav-label-pane,
@@ -3710,7 +3707,7 @@ html[data-theme="day"] .selection-leg-turn {
   inset: calc(var(--vector-pan-buffer, 720px) * -1);
   z-index: 120;
   overflow: hidden;
-  background: #dce8e7;
+  background: var(--map-loading-background);
   opacity: 0;
   pointer-events: none;
   backface-visibility: hidden;
