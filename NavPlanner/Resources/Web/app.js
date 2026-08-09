@@ -483,6 +483,14 @@ const TRANSLATIONS = {
   "query.historyLoaded": { "zh-Hans": "已加载 {count} 条航班历史。", en: "Loaded {count} history records." },
   "query.noHistory": { "zh-Hans": "暂无可用航班历史。", en: "No flight history available." },
   "query.downloadDraw": { "zh-Hans": "下载并绘制轨迹", en: "Download & Draw Track" },
+  "query.drawPlanned": { "zh-Hans": "绘制计划航路（虚线）", en: "Draw Planned Route (Dashed)" },
+  "query.plannedBadge": { "zh-Hans": "未起飞 · 计划航班", en: "Not Departed · Scheduled" },
+  "query.plannedHint": { "zh-Hans": "尚未起飞，FR24 暂无实际轨迹；可用本地自动规划航路进行虚线预览。", en: "This flight has not departed and has no FR24 track yet. A local auto-planned route can be previewed as a dashed line." },
+  "query.planning": { "zh-Hans": "正在生成计划航班的本地虚线航路...", en: "Building a local dashed route for the scheduled flight..." },
+  "query.phasePlanning": { "zh-Hans": "正在计算计划航路", en: "Calculating planned route" },
+  "query.plannedDrawn": { "zh-Hans": "已用本地自动规划绘制计划航路，共 {count} 个点；该虚线不是实际飞行轨迹。", en: "Drew a locally auto-planned route with {count} points. The dashed line is not an actual flight track." },
+  "query.plannedMatchUnavailable": { "zh-Hans": "航班尚未起飞，暂无实际轨迹可拟合。", en: "The flight has not departed, so no actual track is available to match." },
+  "query.plannedRouteUnavailable": { "zh-Hans": "无法为该计划航班生成可绘制的本地航路。", en: "No drawable local route could be generated for this scheduled flight." },
   "query.matchTrack": { "zh-Hans": "匹配轨迹", en: "Match Track" },
   "query.downloading": { "zh-Hans": "正在下载 FR24 GPX 轨迹...", en: "Downloading FR24 GPX track..." },
   "query.phaseDownloading": { "zh-Hans": "正在下载与解析轨迹", en: "Downloading and parsing track" },
@@ -493,6 +501,7 @@ const TRANSLATIONS = {
   "query.cancelled": { "zh-Hans": "FR24 操作已停止。", en: "FR24 operation stopped." },
   "query.drawn": { "zh-Hans": "已绘制 FR24 GPX 轨迹，共 {count} 个点。", en: "FR24 GPX track drawn with {count} points." },
   "query.airportsSynced": { "zh-Hans": "已按航班实际航线同步计划机场：{departure} → {arrival}。", en: "Plan airports synced to the flight's actual route: {departure} → {arrival}." },
+  "query.plannedAirportsSynced": { "zh-Hans": "已按计划航班同步计划机场：{departure} → {arrival}。", en: "Plan airports synced to the scheduled flight: {departure} → {arrival}." },
   "query.matching": { "zh-Hans": "正在使用本地 airway 图匹配 FR24 轨迹...", en: "Matching FR24 track with the local airway graph..." },
   "query.matched": { "zh-Hans": "{message} 已匹配 {distance}nm。", en: "{message} Matched {distance}nm." },
   "query.profileTitle": { "zh-Hans": "FR24 高度剖面", en: "FR24 Altitude Profile" },
@@ -13588,7 +13597,10 @@ async function syncPlanAirportsFromFR24Flight(flight, options = {}) {
   renderRunwayButtons("arrival");
   setActiveAirportSlot("departure");
   hideSearchResults();
-  const message = t("query.airportsSynced", { departure, arrival });
+  const message = t(isFR24PlannedFlight(flight) ? "query.plannedAirportsSynced" : "query.airportsSynced", {
+    departure,
+    arrival,
+  });
   setFR24QueryStatus(message);
   setStatus(message, false, "success");
   return { departure, arrival };
@@ -13670,6 +13682,26 @@ function formatFlightActualRoute(flight) {
   return t("query.actualRoute", { route });
 }
 
+/**
+ * 功能：识别尚未起飞、因此没有可下载 playback 的计划航班。
+ * 边界：已起飞、已落地、取消或备降记录不进入计划预览；明确 Scheduled/计划状态优先。
+ */
+function isFR24PlannedFlight(flight) {
+  if (!flight || normalizeFlightTimestamp(flight.actual_departure)) {
+    return false;
+  }
+  const status = String(flight.status || "").trim().toLowerCase();
+  if (/(cancel|canceled|cancelled|取消|landed|arrived|departed|diverted|落地|到达|起飞|备降)/i.test(status)) {
+    return false;
+  }
+  if (/(scheduled|planned|计划|未起飞|not departed)/i.test(status)) {
+    return true;
+  }
+  const scheduledDeparture = normalizeFlightTimestamp(flight.scheduled_departure);
+  return !String(flight.fr24_id || "").trim()
+    && Boolean(scheduledDeparture && scheduledDeparture >= Math.floor(Date.now() / 1000) - 6 * 3600);
+}
+
 function getFR24FlightByKey(key) {
   return state.fr24Flights.get(key) || state.fr24CacheFlights.get(key) || null;
 }
@@ -13698,11 +13730,12 @@ function setFR24CurrentDrawnCard(key) {
   });
 }
 
-function renderFR24FlightActions(key) {
+function renderFR24FlightActions(flight, key) {
+  const planned = isFR24PlannedFlight(flight);
   return `
     <div class="query-flight-actions">
-      <button class="ghost-button compact-button" type="button" data-fr24-action="draw" data-fr24-key="${escapeHtml(key)}">${escapeHtml(t("query.downloadDraw"))}</button>
-      <button class="ghost-button compact-button" type="button" data-fr24-action="match" data-fr24-key="${escapeHtml(key)}">${escapeHtml(t("query.matchTrack"))}</button>
+      <button class="ghost-button compact-button" type="button" data-fr24-action="draw" data-fr24-key="${escapeHtml(key)}">${escapeHtml(t(planned ? "query.drawPlanned" : "query.downloadDraw"))}</button>
+      <button class="ghost-button compact-button" type="button" data-fr24-action="match" data-fr24-key="${escapeHtml(key)}" ${planned ? `disabled title="${escapeHtml(t("query.plannedMatchUnavailable"))}"` : ""}>${escapeHtml(t("query.matchTrack"))}</button>
     </div>
   `;
 }
@@ -13735,6 +13768,7 @@ function renderFR24CacheActions(flight, key) {
 }
 
 function renderFR24FlightCard(flight, key, { history = false, cacheItem = false } = {}) {
+  const planned = !cacheItem && isFR24PlannedFlight(flight);
   const route = `${flightAirportCode(flight, "origin")} → ${flightAirportCode(flight, "dest")}`;
   const airline = flight.airline || t("query.airlineUnknown");
   const aircraft = [flight.aircraft, flight.aircraft_registration].filter(Boolean).join(" / ") || t("query.aircraftUnknown");
@@ -13757,14 +13791,20 @@ function renderFR24FlightCard(flight, key, { history = false, cacheItem = false 
   const currentDrawnBadge = isCurrentDrawn
     ? `<span class="query-flight-badge query-flight-badge-current">${escapeHtml(t("query.currentDrawn"))}</span>`
     : "";
+  const plannedBadge = planned
+    ? `<span class="query-flight-badge query-flight-badge-planned">${escapeHtml(t("query.plannedBadge"))}</span>`
+    : "";
+  const plannedHint = planned
+    ? `<div class="query-flight-planned-hint">${escapeHtml(t("query.plannedHint"))}</div>`
+    : "";
   return `
-    <article class="query-flight-card ${history ? "is-history" : ""} ${cacheItem ? "is-cache" : ""} ${isCurrentDrawn ? "is-current-drawn" : ""}" data-fr24-card-key="${escapeHtml(key)}">
+    <article class="query-flight-card ${history ? "is-history" : ""} ${cacheItem ? "is-cache" : ""} ${planned ? "is-planned" : ""} ${isCurrentDrawn ? "is-current-drawn" : ""}" data-fr24-card-key="${escapeHtml(key)}">
       <div class="query-flight-head">
         <div>
           <div class="query-flight-number">${escapeHtml(flightPrimaryLabel(flight))}</div>
           <div class="query-flight-route">${escapeHtml(route)}</div>
         </div>
-        <div class="query-flight-badges">${currentDrawnBadge}${cacheBadge}${favoriteBadge}</div>
+        <div class="query-flight-badges">${currentDrawnBadge}${plannedBadge}${cacheBadge}${favoriteBadge}</div>
       </div>
       <div class="query-flight-meta">
         <span>${escapeHtml(airline)}</span>
@@ -13775,7 +13815,8 @@ function renderFR24FlightCard(flight, key, { history = false, cacheItem = false 
         <span>${escapeHtml(t("query.duration", { duration: formatFlightDuration(flight.duration_seconds) }))}</span>
         ${downloadedLine}
       </div>
-      ${cacheItem ? renderFR24CacheActions(flight, key) : renderFR24FlightActions(key)}
+      ${plannedHint}
+      ${cacheItem ? renderFR24CacheActions(flight, key) : renderFR24FlightActions(flight, key)}
       ${renderFR24CardProgress(key)}
       ${history || cacheItem ? "" : `
         <details class="query-history">
@@ -14337,6 +14378,7 @@ function cloneFR24TrackPayload(payload = state.fr24TrackPayload) {
     return null;
   }
   return {
+    planned: payload.planned === true,
     track_points: payload.track_points.map((point) => ({
       lat: Number(point.lat),
       lon: Number(point.lon),
@@ -14409,7 +14451,11 @@ function fr24ProfileDataPoints() {
 }
 
 function shouldShowFR24ProfilePanel() {
-  return Boolean(state.fr24TrackPayload && isMapOverlayVisible("fr24"));
+  return Boolean(
+    state.fr24TrackPayload
+    && state.fr24TrackPayload.planned !== true
+    && isMapOverlayVisible("fr24"),
+  );
 }
 
 function paddedRange(values, fallbackPadding) {
@@ -14763,7 +14809,9 @@ function handleFR24ProfilePointer(event) {
 }
 
 function renderFR24TrackPayload(payload, { fitBounds = false } = {}) {
-  const basePoints = cloneFR24TrackPayload(payload)?.track_points || [];
+  const clonedPayload = cloneFR24TrackPayload(payload);
+  const basePoints = clonedPayload?.track_points || [];
+  const planned = clonedPayload?.planned === true;
   fr24TrackLayerGroup.clearLayers();
   if (basePoints.length < 2) {
     state.fr24TrackPayload = null;
@@ -14777,29 +14825,29 @@ function renderFR24TrackPayload(payload, { fitBounds = false } = {}) {
   ROUTE_WORLD_COPY_OFFSETS.forEach((longitudeOffset) => {
     segments.forEach((segment) => {
       const latlngs = routeWorldCopy(segment.points, longitudeOffset).map(latLngForPoint);
+      const dashed = planned || segment.dashed;
       const layer = L.polyline(latlngs, {
         pane: "routePane",
-        color: "#050505",
-        weight: routeStrokeWeight(segment.dashed ? 2.8 : 3.4),
-        opacity: segment.dashed ? 0.82 : 0.92,
+        color: planned ? "#4f5965" : "#050505",
+        weight: routeStrokeWeight(dashed ? 2.8 : 3.4),
+        opacity: dashed ? 0.86 : 0.92,
         interactive: false,
         lineCap: "round",
         lineJoin: "round",
-        dashArray: segment.dashed ? "7 8" : null,
+        dashArray: dashed ? (planned ? "10 9" : "7 8") : null,
       }).addTo(fr24TrackLayerGroup);
       layer.bringToFront();
     });
   });
-  state.fr24TrackPayload = { track_points: cloneFR24TrackPayload({ track_points: basePoints }).track_points };
+  state.fr24TrackPayload = {
+    planned,
+    track_points: cloneFR24TrackPayload({ track_points: basePoints }).track_points,
+  };
   state.fr24ProfileCursorIndex = clampNumber(state.fr24ProfileCursorIndex, 0, basePoints.length - 1);
   if (fitBounds) {
-    const bounds = L.polyline(basePoints.map(latLngForPoint), {
-      pane: "routePane",
-      color: "#000000",
-      weight: 0,
-      opacity: 0,
-      interactive: false,
-    }).addTo(fr24TrackLayerGroup).getBounds();
+    // 只用坐标计算视野，不把透明辅助 polyline 留在 FR24 图层中；
+    // 这样图层统计和撤销快照都只包含用户真正看得到的轨迹。
+    const bounds = L.latLngBounds(basePoints.map(latLngForPoint));
     markRouteViewportIntent("focused");
     state.programmaticMapViewUntil = performance.now() + 1200;
     map.fitBounds(bounds, { padding: [36, 36] });
@@ -14810,12 +14858,12 @@ function renderFR24TrackPayload(payload, { fitBounds = false } = {}) {
   return basePoints.length;
 }
 
-function drawFR24TrackPoints(trackPoints, { fitBounds = true, recordHistory = true } = {}) {
+function drawFR24TrackPoints(trackPoints, { fitBounds = true, recordHistory = true, planned = false } = {}) {
   const basePoints = normalizedFR24TrackPoints(trackPoints);
   if (recordHistory && (state.fr24TrackPayload || basePoints.length >= 2)) {
     pushDrawingUndoState();
   }
-  const count = renderFR24TrackPayload({ track_points: basePoints }, { fitBounds });
+  const count = renderFR24TrackPayload({ track_points: basePoints, planned }, { fitBounds });
   updateTrackHistoryControlState();
   return count;
 }
@@ -14825,11 +14873,42 @@ async function downloadAndDrawFR24Track(key) {
   if (!flight) {
     return;
   }
+  const planned = isFR24PlannedFlight(flight);
   const controller = new AbortController();
-  beginFR24CardProgress(key, t("query.phaseDownloading"), controller);
+  beginFR24CardProgress(key, t(planned ? "query.phasePlanning" : "query.phaseDownloading"), controller);
   setFR24QueryBusy(true);
-  setFR24QueryStatus(t("query.downloading"));
+  setFR24QueryStatus(t(planned ? "query.planning" : "query.downloading"));
   try {
+    if (planned) {
+      const route = await syncPlanAirportsFromFR24Flight(flight, { signal: controller.signal })
+        || currentQueryRouteInputs();
+      if (!route) {
+        return;
+      }
+      throwIfAborted(controller.signal);
+      const departureRunway = state.selectedRunways.departure || "ALL";
+      const arrivalRunway = state.selectedRunways.arrival || "ALL";
+      const params = new URLSearchParams({
+        departure: route.departure,
+        arrival: route.arrival,
+        route: "",
+        departure_runway: departureRunway,
+        arrival_runway: arrivalRunway,
+      });
+      const plannedRoute = await fetchJson(`/api/route/resolve?${params.toString()}`, {
+        signal: controller.signal,
+      });
+      throwIfAborted(controller.signal);
+      const count = drawFR24TrackPoints(plannedRoute.points || [], { planned: true });
+      if (count < 2) {
+        throw new Error(t("query.plannedRouteUnavailable"));
+      }
+      setFR24CurrentDrawnCard(key);
+      const message = t("query.plannedDrawn", { count });
+      setFR24QueryStatus(message);
+      setStatus(message, false, "success");
+      return;
+    }
     const payload = await fetchFR24TrackPayload(flight, { signal: controller.signal });
     await syncPlanAirportsFromFR24Flight(payload.flight || flight, { signal: controller.signal });
     throwIfAborted(controller.signal);
@@ -14856,6 +14935,10 @@ async function downloadAndDrawFR24Track(key) {
 async function matchFR24FlightTrack(key) {
   const flight = getFR24FlightByKey(key);
   if (!flight) {
+    return;
+  }
+  if (isFR24PlannedFlight(flight)) {
+    setFR24QueryStatus(t("query.plannedMatchUnavailable"), true);
     return;
   }
   const controller = beginRouteOperation(t("track.operation"));
@@ -15878,6 +15961,80 @@ async function runSimulatorSyntheticFR24Track(options = {}) {
   return result;
 }
 
+async function runSimulatorSyntheticFR24PlannedFlight(options = {}) {
+  const departure = String(options.departure || "LXA").trim().toUpperCase();
+  const arrival = String(options.arrival || "NGQ").trim().toUpperCase();
+  const scheduledDeparture = Math.floor(Date.now() / 1000) + 7 * 24 * 3600;
+  const flight = {
+    flight: String(options.flight || "TV9943"),
+    callsign: String(options.callsign || "TBA9943"),
+    origin_iata: departure,
+    dest_iata: arrival,
+    airline: "Tibet Airlines",
+    aircraft: "",
+    status: "Scheduled",
+    scheduled_departure: scheduledDeparture,
+    scheduled_arrival: scheduledDeparture + 2 * 3600,
+    duration_seconds: 2 * 3600,
+  };
+  setMobileBottomTab("query");
+  setDetailTab("query");
+  renderFR24Flights([flight], { history: true, prefix: "simulator-planned" });
+  const key = state.fr24Flights.keys().next().value;
+  const cardBefore = key
+    ? document.querySelector(`[data-fr24-card-key="${CSS.escape(key)}"]`)
+    : null;
+  const plannedClassBefore = cardBefore?.classList.contains("is-planned") || false;
+  const plannedBadgeBefore = cardBefore?.querySelector(".query-flight-badge-planned")?.textContent?.trim() || "";
+  const matchDisabledBefore = Boolean(cardBefore?.querySelector('[data-fr24-action="match"]')?.disabled);
+  if (key && options.draw !== false) {
+    await downloadAndDrawFR24Track(key);
+  }
+  await simulatorDebugNextPaint(3);
+  let dashedLayerCount = 0;
+  let solidLayerCount = 0;
+  fr24TrackLayerGroup.eachLayer((layer) => {
+    if (!(layer instanceof L.Polyline)) {
+      return;
+    }
+    if (String(layer.options?.dashArray || "").trim()) {
+      dashedLayerCount += 1;
+    } else {
+      solidLayerCount += 1;
+    }
+  });
+  const result = {
+    passed: plannedClassBefore
+      && Boolean(plannedBadgeBefore)
+      && matchDisabledBefore
+      && state.fr24TrackPayload?.planned === true
+      && (state.fr24TrackPayload?.track_points?.length || 0) >= 2
+      && dashedLayerCount > 0
+      && solidLayerCount === 0
+      && Boolean(elements.fr24ProfileCard?.classList.contains("hidden")),
+    flight: flight.flight,
+    departure: elements.departureInput?.value || "",
+    arrival: elements.arrivalInput?.value || "",
+    plannedClass: plannedClassBefore,
+    plannedBadge: plannedBadgeBefore,
+    matchDisabled: matchDisabledBefore,
+    trackPointCount: state.fr24TrackPayload?.track_points?.length || 0,
+    plannedPayload: state.fr24TrackPayload?.planned === true,
+    dashedLayerCount,
+    solidLayerCount,
+    profileHidden: elements.fr24ProfileCard?.classList.contains("hidden") || false,
+    queryStatus: elements.fr24QueryStatus?.textContent || "",
+  };
+  writeLocalStorageValue("navplannerDebugSyntheticFR24PlannedResult", JSON.stringify(result));
+  if (options.reportMetrics === true) {
+    postNativeEvent("runtimeDiagnostic", {
+      level: result.passed ? "warning" : "error",
+      message: `NavPlanner FR24 planned regression ${JSON.stringify(result)}`,
+    });
+  }
+  return result;
+}
+
 function simulatorDebugSvgMetrics(svg) {
   const rect = svg?.getBoundingClientRect();
   const viewBox = svg?.viewBox?.baseVal;
@@ -16533,6 +16690,12 @@ async function applySimulatorDebugLaunch() {
       config.syntheticFR24Track === true ? {} : config.syntheticFR24Track,
     );
     writeLocalStorageValue("navplannerDebugSyntheticFR24Result", JSON.stringify(result));
+  }
+  if (config.syntheticFR24PlannedFlight === true || (config.syntheticFR24PlannedFlight && typeof config.syntheticFR24PlannedFlight === "object")) {
+    const result = await runSimulatorSyntheticFR24PlannedFlight(
+      config.syntheticFR24PlannedFlight === true ? {} : config.syntheticFR24PlannedFlight,
+    );
+    writeLocalStorageValue("navplannerDebugSyntheticFR24PlannedResult", JSON.stringify(result));
   }
   if (config.resetReplanProbe && typeof config.resetReplanProbe === "object") {
     const result = await runSimulatorResetReplanProbe(config.resetReplanProbe);

@@ -1,15 +1,16 @@
 <div align="center">
 
-<img src="Media/navplanner-hero-zh-Hans.webp" alt="NavPlanner 在 iPhone 与 iPad 上展示 LGAV 至 EDDM 航路及 STAR 选择" width="84%" /><br />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="Media/navplanner-hero-zh-Hans-dark.webp" />
+  <source media="(prefers-color-scheme: light)" srcset="Media/navplanner-hero-zh-Hans.webp" />
+  <img src="Media/navplanner-hero-zh-Hans.webp" alt="NavPlanner 在 iPhone 与 iPad 上展示 LGAV 至 EDDM 航路及 STAR 选择" width="84%" />
+</picture><br />
 
 <p>
   <a href="https://github.com/MDX-Tom/NavPlanner-App/stargazers"><img src="https://img.shields.io/github/stars/MDX-Tom/NavPlanner-App?logo=github&label=Stars" alt="GitHub Stars" /></a>
-  <img src="https://img.shields.io/badge/iOS-17.0%2B-0A84FF?logo=apple&logoColor=white" alt="iOS 17.0+" />
-  <img src="https://img.shields.io/badge/Swift-5.0-F05138?logo=swift&logoColor=white" alt="Swift 5.0" />
-  <img src="https://img.shields.io/badge/UI-SwiftUI-0D96F6?logo=swift&logoColor=white" alt="SwiftUI" />
-  <img src="https://img.shields.io/badge/设备-iPhone%20%7C%20iPad-475569" alt="iPhone 与 iPad" />
+  <img src="https://img.shields.io/badge/设备-iPhone%20%7C%20iPad%20%7C%20mac-475569" alt="iPhone、iPad与mac" />
+    <img src="https://img.shields.io/badge/Swift-5.0-F05138?logo=swift&logoColor=white" alt="Swift 5.0" />
   <img src="https://img.shields.io/badge/版本-0.1.0-0F766E" alt="版本 0.1.0" />
-  <img src="https://img.shields.io/badge/模式-本地优先-7C3AED" alt="本地优先" />
 </p>
 
 <p>
@@ -70,16 +71,16 @@ App 以 SwiftUI 构建原生外壳，以 WKWebView 承载地图工作区，并�
 
 <table>
   <tr>
-    <td align="center"><strong>亮色 · iPhone 17 Pro 竖屏</strong><br /><img alt="iPhone 亮色主题下预览按跑道筛选的 EDDM STAR 总览" src="Media/workflows/zh-Hans/day/02-procedure-iphone.webp" width="360" /></td>
-    <td align="center"><strong>亮色 · iPad Pro 13 英寸横屏</strong><br /><img alt="iPad 亮色主题下预览按跑道筛选的 EDDM STAR 总览" src="Media/workflows/zh-Hans/day/02-procedure-ipad.webp" width="700" /></td>
+    <td align="center"><strong>亮色 · iPhone 17 Pro 竖屏</strong><br /><img alt="iPhone 亮色主题下预览按跑道筛选的 EDDM STAR 总览" src="Media/workflows/zh-Hans/day/02-procedure-iphone.webp" height="340" /></td>
+    <td align="center"><strong>亮色 · iPad Pro 13 英寸横屏</strong><br /><img alt="iPad 亮色主题下预览按跑道筛选的 EDDM STAR 总览" src="Media/workflows/zh-Hans/day/02-procedure-ipad.webp" height="340" /></td>
   </tr>
   <tr>
-    <td align="center"><strong>暗色 · iPhone 17 Pro 竖屏</strong><br /><img alt="iPhone 暗色主题下预览按跑道筛选的 EDDM STAR 总览" src="Media/workflows/zh-Hans/night/02-procedure-iphone.webp" width="360" /></td>
-    <td align="center"><strong>暗色 · iPad Pro 13 英寸横屏</strong><br /><img alt="iPad 暗色主题下预览按跑道筛选的 EDDM STAR 总览" src="Media/workflows/zh-Hans/night/02-procedure-ipad.webp" width="700" /></td>
+    <td align="center"><strong>暗色 · iPhone 17 Pro 竖屏</strong><br /><img alt="iPhone 暗色主题下预览按跑道筛选的 EDDM STAR 总览" src="Media/workflows/zh-Hans/night/02-procedure-iphone.webp" height="340" /></td>
+    <td align="center"><strong>暗色 · iPad Pro 13 英寸横屏</strong><br /><img alt="iPad 暗色主题下预览按跑道筛选的 EDDM STAR 总览" src="Media/workflows/zh-Hans/night/02-procedure-ipad.webp" height="340" /></td>
   </tr>
 </table>
 
-<p align="center"><sub>LGAV → EDDM 自动规划后选择 RW08R，再预览按跑道筛选的 STAR 总览；完整程序几何均保留安全边距、没有截断。</sub></p>
+<p align="center"><sub>界面展示：EDDM RW08R STAR 程序预览页面</sub></p>
 
 <a id="workflows"></a>
 
@@ -96,12 +97,12 @@ App 以 SwiftUI 构建原生外壳，以 WKWebView 承载地图工作区，并�
 
 <table>
   <tr>
-    <th align="center">iPhone 17 Pro · 竖屏</th>
-    <th align="center">iPad Pro 13 英寸 · 横屏</th>
+    <th align="center">iPhone</th>
+    <th align="center">iPad/macOS</th>
   </tr>
   <tr>
-    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/zh-Hans/night/01-plan-iphone.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/zh-Hans/day/01-plan-iphone.webp" /><img alt="在 iPhone 上规划并绘制 LGAV 至 EDDM" src="Media/workflows/zh-Hans/day/01-plan-iphone.webp" width="360" /></picture></td>
-    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/zh-Hans/night/01-plan-ipad.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/zh-Hans/day/01-plan-ipad.webp" /><img alt="在 iPad 上规划并绘制 LGAV 至 EDDM" src="Media/workflows/zh-Hans/day/01-plan-ipad.webp" width="700" /></picture></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/zh-Hans/night/01-plan-iphone.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/zh-Hans/day/01-plan-iphone.webp" /><img alt="在 iPhone 上规划并绘制 LGAV 至 EDDM" src="Media/workflows/zh-Hans/day/01-plan-iphone.webp" height="340" /></picture></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/zh-Hans/night/01-plan-ipad.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/zh-Hans/day/01-plan-ipad.webp" /><img alt="在 iPad 上规划并绘制 LGAV 至 EDDM" src="Media/workflows/zh-Hans/day/01-plan-ipad.webp" height="340" /></picture></td>
   </tr>
 </table>
 
@@ -117,12 +118,12 @@ App 以 SwiftUI 构建原生外壳，以 WKWebView 承载地图工作区，并�
 
 <table>
   <tr>
-    <th align="center">iPhone 17 Pro · 竖屏</th>
-    <th align="center">iPad Pro 13 英寸 · 横屏</th>
+    <th align="center">iPhone</th>
+    <th align="center">iPad/macOS</th>
   </tr>
   <tr>
-    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/zh-Hans/night/02-procedure-iphone.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/zh-Hans/day/02-procedure-iphone.webp" /><img alt="在 iPhone 上选择 EDDM RW08R 并预览 STAR 总览" src="Media/workflows/zh-Hans/day/02-procedure-iphone.webp" width="360" /></picture></td>
-    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/zh-Hans/night/02-procedure-ipad.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/zh-Hans/day/02-procedure-ipad.webp" /><img alt="在 iPad 上选择 EDDM RW08R 并预览 STAR 总览" src="Media/workflows/zh-Hans/day/02-procedure-ipad.webp" width="700" /></picture></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/zh-Hans/night/02-procedure-iphone.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/zh-Hans/day/02-procedure-iphone.webp" /><img alt="在 iPhone 上选择 EDDM RW08R 并预览 STAR 总览" src="Media/workflows/zh-Hans/day/02-procedure-iphone.webp" height="340" /></picture></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/zh-Hans/night/02-procedure-ipad.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/zh-Hans/day/02-procedure-ipad.webp" /><img alt="在 iPad 上选择 EDDM RW08R 并预览 STAR 总览" src="Media/workflows/zh-Hans/day/02-procedure-ipad.webp" height="340" /></picture></td>
   </tr>
 </table>
 
@@ -140,12 +141,12 @@ App 以 SwiftUI 构建原生外壳，以 WKWebView 承载地图工作区，并�
 
 <table>
   <tr>
-    <th align="center">iPhone 17 Pro · 竖屏</th>
-    <th align="center">iPad Pro 13 英寸 · 横屏</th>
+    <th align="center">iPhone</th>
+    <th align="center">iPad/macOS</th>
   </tr>
   <tr>
-    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/zh-Hans/night/03-calculate-iphone.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/zh-Hans/day/03-calculate-iphone.webp" /><img alt="在 iPhone 上计算 LGAV 至 EDDM 飞行剖面" src="Media/workflows/zh-Hans/day/03-calculate-iphone.webp" width="360" /></picture></td>
-    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/zh-Hans/night/03-calculate-ipad.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/zh-Hans/day/03-calculate-ipad.webp" /><img alt="在 iPad 上计算 LGAV 至 EDDM 飞行剖面" src="Media/workflows/zh-Hans/day/03-calculate-ipad.webp" width="700" /></picture></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/zh-Hans/night/03-calculate-iphone.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/zh-Hans/day/03-calculate-iphone.webp" /><img alt="在 iPhone 上计算 LGAV 至 EDDM 飞行剖面" src="Media/workflows/zh-Hans/day/03-calculate-iphone.webp" height="340" /></picture></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/zh-Hans/night/03-calculate-ipad.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/zh-Hans/day/03-calculate-ipad.webp" /><img alt="在 iPad 上计算 LGAV 至 EDDM 飞行剖面" src="Media/workflows/zh-Hans/day/03-calculate-ipad.webp" height="340" /></picture></td>
   </tr>
 </table>
 
@@ -159,6 +160,8 @@ App 以 SwiftUI 构建原生外壳，以 WKWebView 承载地图工作区，并�
 3. 查询该航线最近最多 10 个航班，或手动搜索航班号 / flightId。
 4. 下载并绘制轨迹、导入 GPX、查看高度 / 速度剖面，或把轨迹拟合到本地航路引擎。
 
+尚未起飞的航班会使用深灰色计划卡片显示。由于 FR24 此时还没有实际 playback，NavPlanner 会明确提示这一限制，并可使用本地自动规划器以虚线绘制计划预览；该虚线不会被表述为实际飞行轨迹或 FR24 filed route。
+
 若已加载航班的实际起降机场与计划页不同，Query 会在拟合前把实际机场同步回 Plan。对于终端采样充分、跑道判断可靠的轨迹，系统会先匹配完整的 SID / STAR / Approach，再以 Procedure 边界为端点拟合中间航路。
 
 下载轨迹会以 GPX、playback JSON 和 metadata 缓存在本机。Query 可检索缓存、绘制或拟合缓存轨迹、分享 GPX、收藏重要轨迹、打开缓存目录，并清理未收藏的下载记录。
@@ -167,12 +170,12 @@ App 以 SwiftUI 构建原生外壳，以 WKWebView 承载地图工作区，并�
 
 <table>
   <tr>
-    <th align="center">iPhone 17 Pro · 竖屏</th>
-    <th align="center">iPad Pro 13 英寸 · 横屏</th>
+    <th align="center">iPhone</th>
+    <th align="center">iPad/macOS</th>
   </tr>
   <tr>
-    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/zh-Hans/night/04-fr24-iphone.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/zh-Hans/day/04-fr24-iphone.webp" /><img alt="在 iPhone 上绘制并查看 LGAV 至 EDDM FR24 剖面" src="Media/workflows/zh-Hans/day/04-fr24-iphone.webp" width="360" /></picture></td>
-    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/zh-Hans/night/04-fr24-ipad.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/zh-Hans/day/04-fr24-ipad.webp" /><img alt="在 iPad 上绘制并查看 LGAV 至 EDDM FR24 剖面" src="Media/workflows/zh-Hans/day/04-fr24-ipad.webp" width="700" /></picture></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/zh-Hans/night/04-fr24-iphone.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/zh-Hans/day/04-fr24-iphone.webp" /><img alt="在 iPhone 上绘制并查看 LGAV 至 EDDM FR24 剖面" src="Media/workflows/zh-Hans/day/04-fr24-iphone.webp" height="340" /></picture></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/zh-Hans/night/04-fr24-ipad.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/zh-Hans/day/04-fr24-ipad.webp" /><img alt="在 iPad 上绘制并查看 LGAV 至 EDDM FR24 剖面" src="Media/workflows/zh-Hans/day/04-fr24-ipad.webp" height="340" /></picture></td>
   </tr>
 </table>
 
@@ -201,8 +204,8 @@ App 以 SwiftUI 构建原生外壳，以 WKWebView 承载地图工作区，并�
     <th align="center">iPad Pro 13 英寸 · 横屏</th>
   </tr>
   <tr>
-    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/zh-Hans/night/05-settings-iphone.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/zh-Hans/day/05-settings-iphone.webp" /><img alt="在 iPhone 上管理离线地图和本地设置" src="Media/workflows/zh-Hans/day/05-settings-iphone.webp" width="360" /></picture></td>
-    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/zh-Hans/night/05-settings-ipad.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/zh-Hans/day/05-settings-ipad.webp" /><img alt="在 iPad 上管理离线地图和导航数据库" src="Media/workflows/zh-Hans/day/05-settings-ipad.webp" width="700" /></picture></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/zh-Hans/night/05-settings-iphone.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/zh-Hans/day/05-settings-iphone.webp" /><img alt="在 iPhone 上管理离线地图和本地设置" src="Media/workflows/zh-Hans/day/05-settings-iphone.webp" height="340" /></picture></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/zh-Hans/night/05-settings-ipad.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/zh-Hans/day/05-settings-ipad.webp" /><img alt="在 iPad 上管理离线地图和导航数据库" src="Media/workflows/zh-Hans/day/05-settings-ipad.webp" height="340" /></picture></td>
   </tr>
 </table>
 
@@ -219,8 +222,6 @@ App 以 SwiftUI 构建原生外壳，以 WKWebView 承载地图工作区，并�
   <source media="(prefers-color-scheme: light)" srcset="docs/architecture/project-architecture-zh-light.webp" />
   <img src="docs/architecture/project-architecture-zh-light.webp" alt="NavPlanner 系统架构图：以核心工作流为主线" />
 </picture>
-
-[打开可编辑的 Drawio 源文件](docs/architecture/project-architecture.drawio)。
 
 编号工作流把依赖方向明确展示出来：航路规划产出的 payload 会被机场、计算和查询复用；Procedure 选择同时约束剖面计算和轨迹拟合；设置页提供所有离线路径依赖的本地数据库与地图存储。箭头同时表达以下实现原理：
 

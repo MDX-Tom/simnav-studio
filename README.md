@@ -1,15 +1,16 @@
 <div align="center">
 
-<img src="Media/navplanner-hero-en.webp" alt="NavPlanner on iPhone and iPad, showing the LGAV to EDDM route and STAR selection" width="84%" /><br />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="Media/navplanner-hero-en-dark.webp" />
+  <source media="(prefers-color-scheme: light)" srcset="Media/navplanner-hero-en.webp" />
+  <img src="Media/navplanner-hero-en.webp" alt="NavPlanner on iPhone and iPad, showing the LGAV to EDDM route and STAR selection" width="84%" />
+</picture><br />
 
 <p>
   <a href="https://github.com/MDX-Tom/NavPlanner-App/stargazers"><img src="https://img.shields.io/github/stars/MDX-Tom/NavPlanner-App?logo=github&label=Stars" alt="GitHub Stars" /></a>
-  <img src="https://img.shields.io/badge/iOS-17.0%2B-0A84FF?logo=apple&logoColor=white" alt="iOS 17.0+" />
+  <img src="https://img.shields.io/badge/Devices-iPhone%20%7C%20iPad%20%7C%20Mac-475569" alt="iPhone, iPad, and Mac" />
   <img src="https://img.shields.io/badge/Swift-5.0-F05138?logo=swift&logoColor=white" alt="Swift 5.0" />
-  <img src="https://img.shields.io/badge/UI-SwiftUI-0D96F6?logo=swift&logoColor=white" alt="SwiftUI" />
-  <img src="https://img.shields.io/badge/Devices-iPhone%20%7C%20iPad-475569" alt="iPhone and iPad" />
   <img src="https://img.shields.io/badge/Version-0.1.0-0F766E" alt="Version 0.1.0" />
-  <img src="https://img.shields.io/badge/Mode-Local--first-7C3AED" alt="Local-first" />
 </p>
 
 <p>
@@ -70,16 +71,16 @@ A SwiftUI shell surrounds a WKWebView map workspace and an in-app Swift service 
 
 <table>
   <tr>
-    <td align="center"><strong>Light · iPhone 17 Pro portrait</strong><br /><img alt="NavPlanner light theme on iPhone previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/day/02-procedure-iphone.webp" width="360" /></td>
-    <td align="center"><strong>Light · iPad Pro 13-inch landscape</strong><br /><img alt="NavPlanner light theme on iPad previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/day/02-procedure-ipad.webp" width="700" /></td>
+    <td align="center"><strong>Light · iPhone 17 Pro portrait</strong><br /><img alt="NavPlanner light theme on iPhone previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/day/02-procedure-iphone.webp" height="340" /></td>
+    <td align="center"><strong>Light · iPad Pro 13-inch landscape</strong><br /><img alt="NavPlanner light theme on iPad previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/day/02-procedure-ipad.webp" height="340" /></td>
   </tr>
   <tr>
-    <td align="center"><strong>Dark · iPhone 17 Pro portrait</strong><br /><img alt="NavPlanner dark theme on iPhone previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/night/02-procedure-iphone.webp" width="360" /></td>
-    <td align="center"><strong>Dark · iPad Pro 13-inch landscape</strong><br /><img alt="NavPlanner dark theme on iPad previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/night/02-procedure-ipad.webp" width="700" /></td>
+    <td align="center"><strong>Dark · iPhone 17 Pro portrait</strong><br /><img alt="NavPlanner dark theme on iPhone previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/night/02-procedure-iphone.webp" height="340" /></td>
+    <td align="center"><strong>Dark · iPad Pro 13-inch landscape</strong><br /><img alt="NavPlanner dark theme on iPad previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/night/02-procedure-ipad.webp" height="340" /></td>
   </tr>
 </table>
 
-<p align="center"><sub>LGAV → EDDM automatic planning, RW08R selection, and runway-filtered STAR overview; the complete procedure geometry stays visible without clipping.</sub></p>
+<p align="center"><sub>Interface showcase: EDDM RW08R STAR procedure preview.</sub></p>
 
 <a id="workflows"></a>
 
@@ -96,12 +97,12 @@ A SwiftUI shell surrounds a WKWebView map workspace and an in-app Swift service 
 
 <table>
   <tr>
-    <th align="center">iPhone 17 Pro · Portrait</th>
-    <th align="center">iPad Pro 13-inch · Landscape</th>
+    <th align="center">iPhone</th>
+    <th align="center">iPad/macOS</th>
   </tr>
   <tr>
-    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/01-plan-iphone.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/01-plan-iphone.webp" /><img alt="Plan and draw LGAV to EDDM on iPhone" src="Media/workflows/en/day/01-plan-iphone.webp" width="360" /></picture></td>
-    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/01-plan-ipad.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/01-plan-ipad.webp" /><img alt="Plan and draw LGAV to EDDM on iPad" src="Media/workflows/en/day/01-plan-ipad.webp" width="700" /></picture></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/01-plan-iphone.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/01-plan-iphone.webp" /><img alt="Plan and draw LGAV to EDDM on iPhone" src="Media/workflows/en/day/01-plan-iphone.webp" height="340" /></picture></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/01-plan-ipad.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/01-plan-ipad.webp" /><img alt="Plan and draw LGAV to EDDM on iPad" src="Media/workflows/en/day/01-plan-ipad.webp" height="340" /></picture></td>
   </tr>
 </table>
 
@@ -117,12 +118,12 @@ A SwiftUI shell surrounds a WKWebView map workspace and an in-app Swift service 
 
 <table>
   <tr>
-    <th align="center">iPhone 17 Pro · Portrait</th>
-    <th align="center">iPad Pro 13-inch · Landscape</th>
+    <th align="center">iPhone</th>
+    <th align="center">iPad/macOS</th>
   </tr>
   <tr>
-    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/02-procedure-iphone.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/02-procedure-iphone.webp" /><img alt="Select EDDM RW08R and preview its STAR overview on iPhone" src="Media/workflows/en/day/02-procedure-iphone.webp" width="360" /></picture></td>
-    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/02-procedure-ipad.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/02-procedure-ipad.webp" /><img alt="Select EDDM RW08R and preview its STAR overview on iPad" src="Media/workflows/en/day/02-procedure-ipad.webp" width="700" /></picture></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/02-procedure-iphone.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/02-procedure-iphone.webp" /><img alt="Select EDDM RW08R and preview its STAR overview on iPhone" src="Media/workflows/en/day/02-procedure-iphone.webp" height="340" /></picture></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/02-procedure-ipad.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/02-procedure-ipad.webp" /><img alt="Select EDDM RW08R and preview its STAR overview on iPad" src="Media/workflows/en/day/02-procedure-ipad.webp" height="340" /></picture></td>
   </tr>
 </table>
 
@@ -140,12 +141,12 @@ The calculation model is local-first and works offline. Online weather is an enh
 
 <table>
   <tr>
-    <th align="center">iPhone 17 Pro · Portrait</th>
-    <th align="center">iPad Pro 13-inch · Landscape</th>
+    <th align="center">iPhone</th>
+    <th align="center">iPad/macOS</th>
   </tr>
   <tr>
-    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/03-calculate-iphone.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/03-calculate-iphone.webp" /><img alt="Calculate the LGAV to EDDM flight profile on iPhone" src="Media/workflows/en/day/03-calculate-iphone.webp" width="360" /></picture></td>
-    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/03-calculate-ipad.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/03-calculate-ipad.webp" /><img alt="Calculate the LGAV to EDDM flight profile on iPad" src="Media/workflows/en/day/03-calculate-ipad.webp" width="700" /></picture></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/03-calculate-iphone.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/03-calculate-iphone.webp" /><img alt="Calculate the LGAV to EDDM flight profile on iPhone" src="Media/workflows/en/day/03-calculate-iphone.webp" height="340" /></picture></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/03-calculate-ipad.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/03-calculate-ipad.webp" /><img alt="Calculate the LGAV to EDDM flight profile on iPad" src="Media/workflows/en/day/03-calculate-ipad.webp" height="340" /></picture></td>
   </tr>
 </table>
 
@@ -159,6 +160,8 @@ The calculation model is local-first and works offline. Online weather is an enh
 3. List up to 10 recent flights for the route, or search a flight number / flightId manually.
 4. Download and draw a track, import GPX, inspect altitude / speed profiles, or match the track against the local route engine.
 
+Flights that have not departed are shown as deep-gray scheduled cards. Because FR24 has no actual playback for them yet, NavPlanner clearly labels the limitation and can draw a dashed preview generated by the local auto-planner; the dashed line is not presented as an actual or filed FR24 track.
+
 When a loaded flight reports different actual airports, Query synchronizes them back to Plan before matching. For dense tracks with reliable terminal samples, matching identifies the complete SID / STAR / Approach first, then fits the enroute airway between procedure boundaries.
 
 Downloaded tracks are cached locally as GPX, playback JSON, and metadata. Query can search the cache, draw or match cached tracks, share GPX, favorite important tracks, open the cache folder, and clear non-favorited downloads.
@@ -167,12 +170,12 @@ Downloaded tracks are cached locally as GPX, playback JSON, and metadata. Query 
 
 <table>
   <tr>
-    <th align="center">iPhone 17 Pro · Portrait</th>
-    <th align="center">iPad Pro 13-inch · Landscape</th>
+    <th align="center">iPhone</th>
+    <th align="center">iPad/macOS</th>
   </tr>
   <tr>
-    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/04-fr24-iphone.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/04-fr24-iphone.webp" /><img alt="Draw and inspect an LGAV to EDDM FR24 profile on iPhone" src="Media/workflows/en/day/04-fr24-iphone.webp" width="360" /></picture></td>
-    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/04-fr24-ipad.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/04-fr24-ipad.webp" /><img alt="Draw and inspect an LGAV to EDDM FR24 profile on iPad" src="Media/workflows/en/day/04-fr24-ipad.webp" width="700" /></picture></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/04-fr24-iphone.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/04-fr24-iphone.webp" /><img alt="Draw and inspect an LGAV to EDDM FR24 profile on iPhone" src="Media/workflows/en/day/04-fr24-iphone.webp" height="340" /></picture></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/04-fr24-ipad.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/04-fr24-ipad.webp" /><img alt="Draw and inspect an LGAV to EDDM FR24 profile on iPad" src="Media/workflows/en/day/04-fr24-ipad.webp" height="340" /></picture></td>
   </tr>
 </table>
 
@@ -201,8 +204,8 @@ Online map cache and offline packages are managed separately. Clearing the onlin
     <th align="center">iPad Pro 13-inch · Landscape</th>
   </tr>
   <tr>
-    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/05-settings-iphone.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/05-settings-iphone.webp" /><img alt="Manage offline maps and local settings on iPhone" src="Media/workflows/en/day/05-settings-iphone.webp" width="360" /></picture></td>
-    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/05-settings-ipad.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/05-settings-ipad.webp" /><img alt="Manage offline maps and the navigation database on iPad" src="Media/workflows/en/day/05-settings-ipad.webp" width="700" /></picture></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/05-settings-iphone.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/05-settings-iphone.webp" /><img alt="Manage offline maps and local settings on iPhone" src="Media/workflows/en/day/05-settings-iphone.webp" height="340" /></picture></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/05-settings-ipad.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/05-settings-ipad.webp" /><img alt="Manage offline maps and the navigation database on iPad" src="Media/workflows/en/day/05-settings-ipad.webp" height="340" /></picture></td>
   </tr>
 </table>
 
@@ -219,8 +222,6 @@ The architecture is organized around the user-facing core workflow rather than s
   <source media="(prefers-color-scheme: light)" srcset="docs/architecture/project-architecture-en-light.webp" />
   <img src="docs/architecture/project-architecture-en-light.webp" alt="NavPlanner architecture: workflow-first system design" />
 </picture>
-
-[Open the editable Drawio source](docs/architecture/project-architecture.drawio).
 
 The numbered workflow makes the dependency direction explicit: route planning produces the payload consumed by Airport, Calc, and Query; Procedure selection constrains both profile calculation and track matching; Settings feeds the local database and map stores that every offline path depends on. The arrows also expose the implementation principles:
 

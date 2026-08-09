@@ -242,16 +242,21 @@ capture_one() {
 
 compose_hero() {
   local language="$1"
-  local source_phone="$MEDIA_DIR/$language/day/02-procedure-iphone.webp"
-  local source_ipad="$MEDIA_DIR/$language/day/02-procedure-ipad.webp"
-  local hero_png="$RAW_DIR/navplanner-hero-${language}.png"
-  local hero_webp="$ROOT_DIR/Media/navplanner-hero-${language}.webp"
+  local theme="$2"
+  local suffix=""
+  if [[ "$theme" == "night" ]]; then
+    suffix="-dark"
+  fi
+  local source_phone="$MEDIA_DIR/$language/$theme/02-procedure-iphone.webp"
+  local source_ipad="$MEDIA_DIR/$language/$theme/02-procedure-ipad.webp"
+  local hero_png="$RAW_DIR/navplanner-hero-${language}${suffix}.png"
+  local hero_webp="$ROOT_DIR/Media/navplanner-hero-${language}${suffix}.webp"
   DEVELOPER_DIR="$DEVELOPER_PATH" xcrun swift \
     "$SCRIPT_DIR/compose_readme_hero.swift" \
-    "$source_phone" "$source_ipad" "$hero_png"
+    "$source_phone" "$source_ipad" "$hero_png" "$theme"
   local byte_count
   byte_count="$(compress_webp "$hero_png" "$hero_webp")"
-  printf 'Hero %-58s  %6s bytes\n' "$language" "$byte_count"
+  printf 'Hero %-58s  %6s bytes\n' "${language}-${theme}" "$byte_count"
 }
 
 compose_contact_sheets() {
@@ -321,11 +326,15 @@ if [[ -z "$CAPTURE_FILTER_VALUE" ]]; then
     printf '截图数量错误：期望 40，实际 %s。\n' "$available_capture_count" >&2
     exit 1
   fi
-  compose_hero en
-  compose_hero zh-Hans
+  compose_hero en day
+  compose_hero en night
+  compose_hero zh-Hans day
+  compose_hero zh-Hans night
 elif [[ "${NAVPLANNER_REBUILD_HERO:-0}" == "1" ]]; then
-  compose_hero en
-  compose_hero zh-Hans
+  compose_hero en day
+  compose_hero en night
+  compose_hero zh-Hans day
+  compose_hero zh-Hans night
 fi
 
 printf 'README 截图完成。Manifest：%s\n' "$MANIFEST_PATH"

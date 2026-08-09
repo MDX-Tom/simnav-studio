@@ -3,18 +3,20 @@
 import AppKit
 import Foundation
 
-guard CommandLine.arguments.count == 4 else {
-    FileHandle.standardError.write(Data("用法：compose_readme_hero.swift <iphone.webp> <ipad.webp> <output.png>\n".utf8))
+guard (4...5).contains(CommandLine.arguments.count) else {
+    FileHandle.standardError.write(Data("用法：compose_readme_hero.swift <iphone.webp> <ipad.webp> <output.png> [day|night]\n".utf8))
     exit(2)
 }
 
 let phoneURL = URL(fileURLWithPath: CommandLine.arguments[1])
 let padURL = URL(fileURLWithPath: CommandLine.arguments[2])
 let outputURL = URL(fileURLWithPath: CommandLine.arguments[3])
+let theme = CommandLine.arguments.count == 5 ? CommandLine.arguments[4].lowercased() : "day"
+let isNight = theme == "night"
 guard let phoneImage = NSImage(contentsOf: phoneURL),
       let padImage = NSImage(contentsOf: padURL)
 else {
-    FileHandle.standardError.write(Data("无法读取亮色 README 截图。\n".utf8))
+    FileHandle.standardError.write(Data("无法读取 README 截图。\n".utf8))
     exit(3)
 }
 
@@ -23,20 +25,29 @@ let canvas = NSImage(size: canvasSize)
 canvas.lockFocus()
 
 let backgroundRect = NSRect(origin: .zero, size: canvasSize)
-NSGradient(colors: [
-    NSColor(calibratedRed: 0.91, green: 0.97, blue: 0.99, alpha: 1),
-    NSColor(calibratedRed: 0.78, green: 0.89, blue: 0.95, alpha: 1),
-])?.draw(in: backgroundRect, angle: -18)
+let backgroundColors = isNight
+    ? [
+        NSColor(calibratedRed: 0.035, green: 0.065, blue: 0.10, alpha: 1),
+        NSColor(calibratedRed: 0.075, green: 0.12, blue: 0.18, alpha: 1),
+    ]
+    : [
+        NSColor(calibratedRed: 0.91, green: 0.97, blue: 0.99, alpha: 1),
+        NSColor(calibratedRed: 0.78, green: 0.89, blue: 0.95, alpha: 1),
+    ]
+NSGradient(colors: backgroundColors)?.draw(in: backgroundRect, angle: -18)
 
 func drawScreenshot(_ image: NSImage, in rect: NSRect, cornerRadius: CGFloat, shadowRadius: CGFloat) {
     NSGraphicsContext.saveGraphicsState()
     let shadow = NSShadow()
-    shadow.shadowColor = NSColor(calibratedWhite: 0.10, alpha: 0.28)
+    shadow.shadowColor = NSColor(calibratedWhite: 0.02, alpha: isNight ? 0.72 : 0.28)
     shadow.shadowBlurRadius = shadowRadius
     shadow.shadowOffset = NSSize(width: 0, height: -8)
     shadow.set()
 
-    NSColor(calibratedWhite: 1, alpha: 0.94).setFill()
+    (isNight
+        ? NSColor(calibratedRed: 0.16, green: 0.20, blue: 0.25, alpha: 0.96)
+        : NSColor(calibratedWhite: 1, alpha: 0.94)
+    ).setFill()
     NSBezierPath(roundedRect: rect.insetBy(dx: -7, dy: -7), xRadius: cornerRadius + 7, yRadius: cornerRadius + 7).fill()
     NSGraphicsContext.restoreGraphicsState()
 
@@ -46,7 +57,7 @@ func drawScreenshot(_ image: NSImage, in rect: NSRect, cornerRadius: CGFloat, sh
     NSGraphicsContext.restoreGraphicsState()
 }
 
-// 亮色 iPad 横屏作为工作台主体，iPhone 竖屏在左前方；两台设备均完整保留。
+// iPad 横屏作为工作台主体，iPhone 竖屏在左前方；日夜主题分别使用对应截图和背景。
 drawScreenshot(
     padImage,
     in: NSRect(x: 305, y: 66, width: 1100, height: 825),
