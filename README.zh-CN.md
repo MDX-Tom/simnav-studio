@@ -108,6 +108,8 @@ App 以 SwiftUI 构建原生外壳，以 WKWebView 承载地图工作区，并�
 
 </details>
 
+#
+
 <details open>
 <summary><strong>2 · 查看机场和 Procedure</strong></summary>
 
@@ -128,6 +130,8 @@ App 以 SwiftUI 构建原生外壳，以 WKWebView 承载地图工作区，并�
 </table>
 
 </details>
+
+#
 
 <details open>
 <summary><strong>3 · 计算飞行剖面与燃油</strong></summary>
@@ -151,6 +155,8 @@ App 以 SwiftUI 构建原生外壳，以 WKWebView 承载地图工作区，并�
 </table>
 
 </details>
+
+#
 
 <details open>
 <summary><strong>4 · FR24 轨迹：查询、下载、回放、拟合</strong></summary>
@@ -181,6 +187,8 @@ App 以 SwiftUI 构建原生外壳，以 WKWebView 承载地图工作区，并�
 
 </details>
 
+#
+
 <details open>
 <summary><strong>5 · 管理离线地图和导航数据库</strong></summary>
 
@@ -200,8 +208,8 @@ App 以 SwiftUI 构建原生外壳，以 WKWebView 承载地图工作区，并�
 
 <table align="center" width="92%">
   <tr>
-    <th align="center">iPhone 17 Pro · 竖屏</th>
-    <th align="center">iPad Pro 13 英寸 · 横屏</th>
+    <th align="center">iPhone</th>
+    <th align="center">iPad/macOS</th>
   </tr>
   <tr>
     <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/zh-Hans/night/05-settings-iphone.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/zh-Hans/day/05-settings-iphone.webp" /><img alt="在 iPhone 上管理离线地图和本地设置" src="Media/workflows/zh-Hans/day/05-settings-iphone.webp" height="313" /></picture></td>

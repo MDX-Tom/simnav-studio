@@ -108,6 +108,8 @@ A SwiftUI shell surrounds a WKWebView map workspace and an in-app Swift service 
 
 </details>
 
+#
+
 <details open>
 <summary><strong>2 · Inspect airports and procedures</strong></summary>
 
@@ -128,6 +130,8 @@ A SwiftUI shell surrounds a WKWebView map workspace and an in-app Swift service 
 </table>
 
 </details>
+
+#
 
 <details open>
 <summary><strong>3 · Calculate profiles and fuel</strong></summary>
@@ -151,6 +155,8 @@ The calculation model is local-first and works offline. Online weather is an enh
 </table>
 
 </details>
+
+#
 
 <details open>
 <summary><strong>4 · FR24 tracks: query, download, replay, and match</strong></summary>
@@ -181,6 +187,8 @@ Downloaded tracks are cached locally as GPX, playback JSON, and metadata. Query 
 
 </details>
 
+#
+
 <details open>
 <summary><strong>5 · Manage offline maps and navigation databases</strong></summary>
 
@@ -200,8 +208,8 @@ Online map cache and offline packages are managed separately. Clearing the onlin
 
 <table align="center" width="92%">
   <tr>
-    <th align="center">iPhone 17 Pro · Portrait</th>
-    <th align="center">iPad Pro 13-inch · Landscape</th>
+    <th align="center">iPhone</th>
+    <th align="center">iPad/macOS</th>
   </tr>
   <tr>
     <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="Media/workflows/en/night/05-settings-iphone.webp" /><source media="(prefers-color-scheme: light)" srcset="Media/workflows/en/day/05-settings-iphone.webp" /><img alt="Manage offline maps and local settings on iPhone" src="Media/workflows/en/day/05-settings-iphone.webp" height="313" /></picture></td>
