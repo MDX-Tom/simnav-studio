@@ -31,4 +31,4 @@ NAVPLANNER_CAPTURE_FILTER='en-day-04-fr24-iphone' \
   Tools/ReadmeScreenshots/capture_readme_screenshots.sh
 ```
 
-脚本将原始 PNG、每次启动日志、完整 Debug JSON manifest，以及直接由当前 40 张 WebP 重建的 8 张联系表写入已被 `.gitignore` 忽略的 `codex/ux-tests/2026-08-09-lgav-eddm/`；公开产物写入 `Media/workflows/`。即使只定向重拍一张图，只要 40 张公开图仍齐全，脚本也会刷新全部联系表，避免本地视觉证据滞后。完整批次最后会分别用各语言亮色 / 暗色 STAR 场景组合 iPhone / iPad 首页 hero，README 通过 `<picture>` 跟随系统主题切换。每张 WebP 会自动缩放和逐级调质，超过 150 kB 时任务失败。STAR 截图还会断言程序总览已激活且 `clippedPoints: 0`，因此路线/程序缩放不能过大、过小或越出画面；Calculate 与 FR24 场景会比较 SVG `viewBox` 和实际 client 尺寸的横纵缩放比，非等比轴或文字压缩会直接让任务失败。
+脚本将原始 PNG、每次启动日志、完整 Debug JSON manifest，以及直接由当前 40 张 WebP 重建的 8 张联系表写入已被 `.gitignore` 忽略的 `codex/ux-tests/2026-08-09-lgav-eddm/`；公开产物写入 `Media/workflows/`。即使只定向重拍一张图，只要 40 张公开图仍齐全，脚本也会刷新全部联系表，避免本地视觉证据滞后。完整批次最后会分别用各语言亮色 / 暗色 STAR 场景组合 iPhone / iPad 首页 hero，README 通过 `<picture>` 跟随系统主题切换。Hero 合成器会把 iPhone 与 iPad 截图矩形分别垂直居中；1450×900pt 画布上的 iPad 连同外扩 7pt 设备框后，上下纯色留白均为 30.5pt（最终 2× WebP 各 61px），禁止顶部贴边、底部留出不对称大空白。每张 WebP 会自动缩放和逐级调质，超过 150 kB 时任务失败。STAR 截图还会断言程序总览已激活且 `clippedPoints: 0`，因此路线/程序缩放不能过大、过小或越出画面；Calculate 与 FR24 场景会比较 SVG `viewBox` 和实际 client 尺寸的横纵缩放比，非等比轴或文字压缩会直接让任务失败。

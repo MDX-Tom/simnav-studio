@@ -57,16 +57,32 @@ func drawScreenshot(_ image: NSImage, in rect: NSRect, cornerRadius: CGFloat, sh
     NSGraphicsContext.restoreGraphicsState()
 }
 
-// iPad 横屏作为工作台主体，iPhone 竖屏在左前方；日夜主题分别使用对应截图和背景。
+// iPad 横屏作为工作台主体，iPhone 竖屏在左前方；两台设备都在画布中垂直居中。
+// drawScreenshot 会向截图外扩 7pt 白色设备框，因此居中截图矩形也会让最终上下纯色留白严格相等。
+let padSize = NSSize(width: 1100, height: 825)
+let phoneSize = NSSize(width: 340, height: 739)
+let padRect = NSRect(
+    x: 305,
+    y: (canvasSize.height - padSize.height) / 2,
+    width: padSize.width,
+    height: padSize.height
+)
+let phoneRect = NSRect(
+    x: 54,
+    y: (canvasSize.height - phoneSize.height) / 2,
+    width: phoneSize.width,
+    height: phoneSize.height
+)
+
 drawScreenshot(
     padImage,
-    in: NSRect(x: 305, y: 66, width: 1100, height: 825),
+    in: padRect,
     cornerRadius: 26,
     shadowRadius: 24
 )
 drawScreenshot(
     phoneImage,
-    in: NSRect(x: 54, y: 76, width: 340, height: 739),
+    in: phoneRect,
     cornerRadius: 42,
     shadowRadius: 28
 )
