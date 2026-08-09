@@ -218,9 +218,9 @@ Online map cache and offline packages are managed separately. Clearing the onlin
 The architecture is organized around the user-facing core workflow rather than starting from frameworks. Each numbered stage expands as **feature entry → local API → implementation principle → returned payload**, while the shared runtime and local data plane stay visible across the whole path.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/architecture/project-architecture-en-dark.webp" />
-  <source media="(prefers-color-scheme: light)" srcset="docs/architecture/project-architecture-en-light.webp" />
-  <img src="docs/architecture/project-architecture-en-light.webp" alt="NavPlanner architecture: workflow-first system design" />
+  <source media="(prefers-color-scheme: dark)" srcset="Media/architecture/project-architecture-en-dark.webp" />
+  <source media="(prefers-color-scheme: light)" srcset="Media/architecture/project-architecture-en-light.webp" />
+  <img src="Media/architecture/project-architecture-en-light.webp" alt="NavPlanner architecture: workflow-first system design" />
 </picture>
 
 The numbered workflow makes the dependency direction explicit: route planning produces the payload consumed by Airport, Calc, and Query; Procedure selection constrains both profile calculation and track matching; Settings feeds the local database and map stores that every offline path depends on. The arrows also expose the implementation principles:

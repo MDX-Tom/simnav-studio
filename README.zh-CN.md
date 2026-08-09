@@ -218,9 +218,9 @@ App 以 SwiftUI 构建原生外壳，以 WKWebView 承载地图工作区，并�
 架构图以用户可见的核心工作流为主线，而不是从框架分层开始。每个编号步骤按 **功能入口 → 本地 API → 实现原理 → 返回 payload** 展开，同时保留贯穿全流程的运行时与本地数据平面。
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/architecture/project-architecture-zh-dark.webp" />
-  <source media="(prefers-color-scheme: light)" srcset="docs/architecture/project-architecture-zh-light.webp" />
-  <img src="docs/architecture/project-architecture-zh-light.webp" alt="NavPlanner 系统架构图：以核心工作流为主线" />
+  <source media="(prefers-color-scheme: dark)" srcset="Media/architecture/project-architecture-zh-dark.webp" />
+  <source media="(prefers-color-scheme: light)" srcset="Media/architecture/project-architecture-zh-light.webp" />
+  <img src="Media/architecture/project-architecture-zh-light.webp" alt="NavPlanner 系统架构图：以核心工作流为主线" />
 </picture>
 
 编号工作流把依赖方向明确展示出来：航路规划产出的 payload 会被机场、计算和查询复用；Procedure 选择同时约束剖面计算和轨迹拟合；设置页提供所有离线路径依赖的本地数据库与地图存储。箭头同时表达以下实现原理：

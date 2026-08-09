@@ -42,3 +42,8 @@ codex/
 
 docs/Obsolete/
 NavPlanner/Resources/Database
+
+# Local Codex workspace state and editable diagrams (kept locally, never committed)
+.codex/
+*.drawio
+*.drawio.xml
