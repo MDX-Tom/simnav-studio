@@ -17,9 +17,13 @@ final class AppEnvironment: ObservableObject {
 
     init() {
         let dataStore = LocalDataStore()
+        let plannerService = PlannerService(dataStore: dataStore)
         self.dataStore = dataStore
-        self.plannerService = PlannerService(dataStore: dataStore)
+        self.plannerService = plannerService
         self.mapStore = MapStore()
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.35) {
+            plannerService.prewarmAirportIndex()
+        }
     }
 
     func selectSearchResult(_ result: SearchResult) {

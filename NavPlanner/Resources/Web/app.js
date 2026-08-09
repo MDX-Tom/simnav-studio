@@ -589,12 +589,17 @@ const TRANSLATIONS = {
   "query.accessStateChallenge": { "zh-Hans": "需要验证，查询会自动重试", en: "verification required; queries retry automatically" },
   "query.accessStateExpired": { "zh-Hans": "成功记录已过期，等待重新探测", en: "success record expired; awaiting a new probe" },
   "query.accessStateConfigured": { "zh-Hans": "会话已配置，等待验证", en: "session configured; awaiting verification" },
+  "query.accessStateVerifying": { "zh-Hans": "已保存会话，正在验证", en: "session saved; verifying" },
   "query.accessStateUnknown": { "zh-Hans": "尚未探测，可直接查询", en: "not yet probed; direct query available" },
   "query.accessWarmup": { "zh-Hans": "会话正在生效，{seconds}s 后自动查询...", en: "Session is warming up; querying automatically in {seconds}s..." },
   "query.accessConfigured": { "zh-Hans": "已配置", en: "configured" },
   "query.accessMissing": { "zh-Hans": "未配置", en: "missing" },
   "query.accessOpenBrowser": { "zh-Hans": "打开 FR24 验证页", en: "Open FR24 Verification" },
   "query.accessSyncBrowser": { "zh-Hans": "同步内置浏览器会话", en: "Sync Browser Session" },
+  "query.accessProbe": { "zh-Hans": "验证 / 重试", en: "Verify / Retry" },
+  "query.accessVerifying": { "zh-Hans": "已保存 FR24 会话，正在验证是否可用...", en: "FR24 session saved; verifying availability..." },
+  "query.accessVerified": { "zh-Hans": "FR24 会话已验证，可执行在线查询。", en: "FR24 session verified; online queries are available." },
+  "query.accessProbeFailed": { "zh-Hans": "FR24 尚未接受已保存会话；旧结果已保留，请重新验证后重试。", en: "FR24 has not accepted the saved session. Previous results were kept; verify again and retry." },
   "query.accessOpening": { "zh-Hans": "已打开 FR24 验证页；完成验证后点“同步会话”。", en: "FR24 verification opened. Complete verification, then tap Sync Session." },
   "query.accessSyncing": { "zh-Hans": "正在同步内置浏览器中的 FR24 会话...", en: "Syncing the FR24 session from the in-app browser..." },
   "query.accessSynced": { "zh-Hans": "已从内置浏览器同步 FR24 Web 会话。", en: "FR24 Web session synced from the in-app browser." },
@@ -810,6 +815,10 @@ const state = {
   navOverlayZoom: null,
   navOverlayDrawZoom: null,
   navOverlayRetryTimer: 0,
+  navOverlayDeferredUntil: 0,
+  navLabelCollisionLayout: null,
+  navOverlayLabelStats: null,
+  onlineTileTransitionStats: null,
   simulatorDebugHideNavOverlay: false,
   activeRouteAbortController: null,
   activeRouteOperation: "",
@@ -836,6 +845,10 @@ const state = {
   fr24HistoryByKey: new Map(),
   fr24CacheStatus: null,
   fr24AccessStatus: null,
+  fr24AccessProbeController: null,
+  fr24AccessProbePromise: null,
+  fr24AccessProbeVersion: 0,
+  fr24LastProbeStartedAt: 0,
   fr24QueryBusy: false,
   fr24QueryRequestVersion: 0,
   fr24BusyByKey: new Map(),
@@ -906,6 +919,12 @@ const state = {
     otherWaypoints: true,
   },
   currentRouteLayerKind: "route",
+  routeViewportIntent: "none",
+  routeAutoFitLatLngs: [],
+  routeAutoFitTimer: 0,
+  routeAutoFitVersion: 0,
+  recentMapGestureUntil: 0,
+  programmaticMapViewUntil: 0,
   activeDetailTab: "airport",
   activeMobileTab: "plan",
   detailTabInitialized: false,
@@ -1531,6 +1550,7 @@ const baseLayers = {
 };
 
 let onlineBaseLayerSwap = null;
+let onlineTileViewportTransition = null;
 let vectorMap = null;
 let vectorMapContainer = null;
 let vectorMapSyncFrame = 0;
@@ -1712,6 +1732,182 @@ function releaseAsyncCachedTileFallback(tile) {
   tile.classList.remove("planner-parent-fallback");
   delete tile.dataset.plannerCacheState;
   delete tile.dataset.plannerFallbackLevels;
+}
+
+function removeOnlineTileViewportTransition({ immediate = false } = {}) {
+  const transition = onlineTileViewportTransition;
+  if (!transition) {
+    return;
+  }
+  onlineTileViewportTransition = null;
+  transition.timers.forEach((timer) => window.clearTimeout(timer));
+  transition.timers.clear();
+  const remove = () => transition.canvas.remove();
+  if (immediate) {
+    remove();
+    return;
+  }
+  transition.canvas.style.opacity = "0";
+  window.setTimeout(remove, 240);
+}
+
+/**
+ * 功能：把当前可见的在线瓦片合成为固定在地图容器下方的短期快照。
+ * 用途：从全航路视图切换到 STAR 等局部视图时，新瓦片可逐块覆盖快照，
+ * 避免缓存下载期间露出大面积灰色底图；航路、Procedure 和标签始终绘制在其上方。
+ */
+function beginOnlineTileViewportTransition() {
+  removeOnlineTileViewportTransition({ immediate: true });
+  const layer = baseLayers.terrain;
+  if (state.baseMap !== "terrain" || !layer || !map.hasLayer(layer)) {
+    return false;
+  }
+  const container = map.getContainer();
+  const containerRect = container.getBoundingClientRect();
+  if (containerRect.width < 2 || containerRect.height < 2) {
+    return false;
+  }
+  const pixelRatio = Math.min(2, Math.max(1, Number(window.devicePixelRatio) || 1));
+  const canvas = document.createElement("canvas");
+  canvas.className = "online-tile-viewport-transition";
+  canvas.width = Math.max(1, Math.round(containerRect.width * pixelRatio));
+  canvas.height = Math.max(1, Math.round(containerRect.height * pixelRatio));
+  canvas.style.width = `${containerRect.width}px`;
+  canvas.style.height = `${containerRect.height}px`;
+  const terrainStyle = window.getComputedStyle(map.getPane("terrainPane"));
+  canvas.style.filter = terrainStyle.filter;
+  canvas.style.opacity = terrainStyle.opacity;
+  const context = canvas.getContext("2d");
+  context.scale(pixelRatio, pixelRatio);
+  let capturedTiles = 0;
+  Object.values(layer._tiles || {}).forEach((entry) => {
+    const tile = entry?.el;
+    if (!tile || tile._plannerCancelled || tile.width <= 1 || tile.height <= 1) {
+      return;
+    }
+    const rect = tile.getBoundingClientRect();
+    const left = rect.left - containerRect.left;
+    const top = rect.top - containerRect.top;
+    if (left >= containerRect.width || top >= containerRect.height
+      || left + rect.width <= 0 || top + rect.height <= 0) {
+      return;
+    }
+    try {
+      context.drawImage(tile, left, top, rect.width, rect.height);
+      capturedTiles += 1;
+    } catch (_error) {
+      // 单个 Canvas 无法复制时保留其它已就绪瓦片，过渡本身不阻塞地图操作。
+    }
+  });
+  if (!capturedTiles) {
+    return false;
+  }
+  container.appendChild(canvas);
+  onlineTileViewportTransition = {
+    canvas,
+    timers: new Set(),
+    startedAt: performance.now(),
+    capturedTiles,
+  };
+  state.onlineTileTransitionStats = {
+    capturedTiles,
+    visibleTiles: 0,
+    visualReadyTiles: 0,
+    readyRatio: 0,
+    durationMs: 0,
+    reason: "running",
+  };
+  return true;
+}
+
+function onlineTileViewportReadiness() {
+  const containerRect = map.getContainer().getBoundingClientRect();
+  let visibleTiles = 0;
+  let visualReadyTiles = 0;
+  Object.values(baseLayers.terrain?._tiles || {}).forEach((entry) => {
+    const tile = entry?.el;
+    if (!tile || tile._plannerCancelled
+      || tile._plannerDemandGeneration !== onlineTileDemandGeneration) {
+      return;
+    }
+    const rect = tile.getBoundingClientRect();
+    if (rect.left >= containerRect.right || rect.top >= containerRect.bottom
+      || rect.right <= containerRect.left || rect.bottom <= containerRect.top) {
+      return;
+    }
+    visibleTiles += 1;
+    if (tile._plannerDone || tile.dataset.plannerCacheState === "fallback") {
+      visualReadyTiles += 1;
+    }
+  });
+  return {
+    visibleTiles,
+    visualReadyTiles,
+    readyRatio: visibleTiles ? visualReadyTiles / visibleTiles : 0,
+  };
+}
+
+function monitorOnlineTileViewportTransition() {
+  const transition = onlineTileViewportTransition;
+  if (!transition) {
+    return;
+  }
+  const elapsed = performance.now() - transition.startedAt;
+  const readiness = onlineTileViewportReadiness();
+  const enoughTiles = readiness.visibleTiles >= (isPhoneWorkbench() ? 3 : 5);
+  const ready = enoughTiles && readiness.readyRatio >= 0.68;
+  const timedOut = elapsed >= 2600;
+  state.onlineTileTransitionStats = {
+    capturedTiles: transition.capturedTiles,
+    ...readiness,
+    readyRatio: Number(readiness.readyRatio.toFixed(3)),
+    durationMs: Math.round(elapsed),
+    reason: ready ? "visual-ready" : timedOut ? "timeout" : "running",
+  };
+  if (ready || timedOut) {
+    removeOnlineTileViewportTransition();
+    return;
+  }
+  const timer = window.setTimeout(() => {
+    transition.timers.delete(timer);
+    monitorOnlineTileViewportTransition();
+  }, 90);
+  transition.timers.add(timer);
+}
+
+/**
+ * 功能：把 Procedure 目标视口最靠近中心的少量瓦片提前送入原生缓存队列。
+ * 请求不等待完成、不影响本地 Procedure 绘制，且与 Leaflet 使用同一需求代次。
+ */
+function prefetchOnlineTilesForCurrentViewport() {
+  const layer = baseLayers.terrain;
+  if (!onlineTileViewportTransition || !layer || !map.hasLayer(layer)) {
+    return;
+  }
+  const zoom = Number.isFinite(layer._tileZoom) ? layer._tileZoom : Math.round(map.getZoom());
+  const tileSize = layer.getTileSize();
+  const pixelBounds = map.getPixelBounds(map.getCenter(), zoom);
+  const min = pixelBounds.min.unscaleBy(tileSize).floor();
+  const max = pixelBounds.max.unscaleBy(tileSize).floor();
+  const center = min.add(max).divideBy(2);
+  const candidates = [];
+  for (let y = min.y; y <= max.y; y += 1) {
+    for (let x = min.x; x <= max.x; x += 1) {
+      candidates.push({ x, y, z: zoom });
+    }
+  }
+  const limit = isPhoneWorkbench() ? 9 : 12;
+  candidates
+    .sort((left, right) => (
+      L.point(left.x, left.y).distanceTo(center) - L.point(right.x, right.y).distanceTo(center)
+    ))
+    .slice(0, limit)
+    .forEach((coords) => {
+      const url = onlineTileDemandUrl(layer.getTileUrl(coords), onlineTileDemandGeneration);
+      fetch(url, { cache: "no-store" })
+        .then((response) => response.arrayBuffer())
+        .catch(() => {});
+    });
 }
 
 /**
@@ -1971,6 +2167,7 @@ async function loadAsyncCachedTileBuffer(tile, buffer, mimeType, done) {
       return;
     }
     releaseAsyncCachedTileFallback(tile);
+    tile.dataset.plannerCacheState = "ready";
     tile._plannerDone = true;
     done(null, tile);
   } catch (_error) {
@@ -4687,6 +4884,9 @@ function clearRouteDrawingState() {
   state.currentRoutePayload = null;
   state.currentRouteAirports = null;
   state.currentRouteLayerKind = "route";
+  state.routeViewportIntent = "none";
+  state.routeAutoFitLatLngs = [];
+  cancelScheduledRouteAutoFit();
   state.lastRouteWasGenerated = false;
   state.lastGeneratedRouteDisplay = "";
   state.airportMarkers.clear();
@@ -6289,14 +6489,45 @@ function scheduleOfflineMapPoll() {
  * 输出：Promise，解析为函数处理结果。
  */
 async function fetchJson(path, options = {}) {
-  const response = await fetch(path, options);
-  let data = {};
+  const { superseded, ...fetchOptions } = options;
+  const requestWasCancelled = () => (
+    Boolean(fetchOptions.signal?.aborted)
+    || (typeof superseded === "function" && Boolean(superseded()))
+  );
+  const abortError = () => new DOMException("Operation was aborted.", "AbortError");
+  if (requestWasCancelled()) {
+    throw abortError();
+  }
+  const response = await fetch(path, fetchOptions);
+  let rawBody = "";
   try {
-    data = await response.json();
-  } catch (_error) {
-    if (response.ok) {
-      throw new Error(t("error.invalidJson"));
+    rawBody = await response.text();
+  } catch (error) {
+    if (requestWasCancelled()) {
+      throw abortError();
     }
+    throw error;
+  }
+  if (requestWasCancelled()) {
+    throw abortError();
+  }
+  let data = {};
+  if (rawBody.trim()) {
+    try {
+      data = JSON.parse(rawBody);
+    } catch (_error) {
+      if (response.ok) {
+        throw new Error(t("error.invalidJson"));
+      }
+    }
+  } else if (response.ok) {
+    // WKURLSchemeHandler 的取消竞态偶尔会把已被新代次取代的请求表现为
+    // 200 + 空 body。调用方提供 superseded 判定时把它归为取消；真实的
+    // 非空损坏响应仍按 invalid JSON 报错。
+    if (requestWasCancelled()) {
+      throw abortError();
+    }
+    throw new Error(t("error.invalidJson"));
   }
   if (!response.ok) {
     throw new Error(data.error || `Request failed: ${response.status}`);
@@ -6860,6 +7091,79 @@ function clampMobilePanelMapRatio(value) {
   return Math.round(clamped / MOBILE_PANEL_RATIO_STEP) * MOBILE_PANEL_RATIO_STEP;
 }
 
+function cancelScheduledRouteAutoFit() {
+  state.routeAutoFitVersion += 1;
+  if (state.routeAutoFitTimer) {
+    window.clearTimeout(state.routeAutoFitTimer);
+    state.routeAutoFitTimer = 0;
+  }
+}
+
+/**
+ * 功能：记录地图视图已离开“整条航路自动适配”意图。
+ * 输入：intent 为 manual（用户手势）或 focused（机场/程序/轨迹局部视图）。
+ * 输出：后续 banner / resize 不再抢回整条航路视野。
+ */
+function markRouteViewportIntent(intent = "manual") {
+  if (!state.currentRoutePayload && !state.routeAutoFitLatLngs.length) {
+    return;
+  }
+  state.routeViewportIntent = intent;
+  cancelScheduledRouteAutoFit();
+}
+
+function rememberRouteAutoFitLatLngs(points) {
+  state.routeAutoFitLatLngs = (points || []).flatMap((point) => {
+    const lat = Number(point?.lat ?? point?.[0]);
+    const lon = Number(point?.lon ?? point?.lng ?? point?.[1]);
+    return Number.isFinite(lat) && Number.isFinite(lon) ? [[lat, lon]] : [];
+  });
+}
+
+function routeAutoFitPadding() {
+  return isCompactPhoneMap() ? [42, 42] : [36, 36];
+}
+
+function fitRememberedRouteBounds(options = {}) {
+  if (state.routeAutoFitLatLngs.length < 2) {
+    return false;
+  }
+  state.routeViewportIntent = "auto";
+  state.programmaticMapViewUntil = performance.now() + 1200;
+  map.fitBounds(L.latLngBounds(state.routeAutoFitLatLngs), {
+    padding: options.padding || routeAutoFitPadding(),
+    animate: Boolean(options.animate),
+    duration: options.animate ? (options.duration ?? 0.28) : undefined,
+    ...(Number.isFinite(options.maxZoom) ? { maxZoom: options.maxZoom } : {}),
+  });
+  return true;
+}
+
+/**
+ * 功能：在移动 banner / 详情布局稳定后重新适配航路。
+ * 边界：只有仍处于 auto 意图时执行；用户平移、缩放或进入局部预览后静默取消。
+ */
+function scheduleRouteAutoFitAfterLayout(delayMs = 150) {
+  if (state.routeViewportIntent !== "auto" || state.routeAutoFitLatLngs.length < 2) {
+    return;
+  }
+  cancelScheduledRouteAutoFit();
+  const version = state.routeAutoFitVersion;
+  state.routeAutoFitTimer = window.setTimeout(() => {
+    state.routeAutoFitTimer = 0;
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        if (version !== state.routeAutoFitVersion || state.routeViewportIntent !== "auto") {
+          return;
+        }
+        map.invalidateSize({ animate: false, pan: false });
+        fitRememberedRouteBounds({ animate: false });
+        scheduleRouteLabelRender();
+      });
+    });
+  }, Math.max(0, delayMs));
+}
+
 function scheduleMobilePanelMapResize() {
   if (state.mobilePanelResizeFrame) {
     return;
@@ -6868,6 +7172,7 @@ function scheduleMobilePanelMapResize() {
     state.mobilePanelResizeFrame = 0;
     map.invalidateSize({ animate: false, pan: false });
     scheduleVectorMapResizeSync();
+    scheduleRouteAutoFitAfterLayout(120);
   });
 }
 
@@ -7933,6 +8238,7 @@ function refreshDetailTabData(tab) {
     refreshDetailResource("fr24-cache-status", () => refreshFR24CacheStatus())
       .catch((error) => console.warn("FR24 缓存状态刷新失败", error));
     refreshDetailResource("fr24-access-status", () => refreshFR24AccessStatus(), 5_000)
+      .then(() => maybeProbeFR24Access({ announce: false }))
       .catch((error) => console.warn("FR24 访问状态刷新失败", error));
   }
 }
@@ -8063,6 +8369,10 @@ function setRouteControlsBusy(isBusy) {
  */
 function beginRouteOperation(label) {
   state.activeRouteAbortController?.abort();
+  deferNavOverlayWork(2400);
+  state.navOverlayVersion += 1;
+  state.navOverlayAbortController?.abort();
+  state.navOverlayAbortController = null;
   const controller = new AbortController();
   state.activeRouteAbortController = controller;
   state.activeRouteOperation = label;
@@ -8082,6 +8392,8 @@ function endRouteOperation(controller) {
   state.activeRouteAbortController = null;
   state.activeRouteOperation = "";
   setRouteControlsBusy(false);
+  deferNavOverlayWork(480);
+  scheduleNavOverlayRetry(520);
 }
 
 /**
@@ -8099,6 +8411,8 @@ function stopActiveRouteOperation() {
   state.activeRouteAbortController = null;
   state.activeRouteOperation = "";
   setRouteControlsBusy(false);
+  deferNavOverlayWork(320);
+  scheduleNavOverlayRetry(360);
   setStatus(t("route.operationStopped", { label }));
 }
 
@@ -8289,6 +8603,9 @@ async function searchEntities(target, container) {
     container.innerHTML = "";
     return [];
   }
+  // 首次机场/航点检索优先于大批量 nav-overlay 缓存构建，避免两者在
+  // 冷启动窗口争用本地 SQLite 串行读取队列。
+  deferNavOverlayWork(900);
   const payload = await fetchJson(`/api/search?q=${encodeURIComponent(query)}`);
   if (
     performance.now() < state.searchSuppressedUntil
@@ -8462,6 +8779,8 @@ function flyToStablePointMarker(point, zoom = 8, options = {}) {
 
     map.once("moveend", finish);
     state.airportFocusTimers[focusKey] = window.setTimeout(finish, duration * 1000 + 420);
+    markRouteViewportIntent("focused");
+    state.programmaticMapViewUntil = performance.now() + duration * 1000 + 500;
     map.flyTo([point.lat, point.lon], zoom, { duration });
   });
 }
@@ -9592,12 +9911,163 @@ function addTextLabel(lat, lon, text, className, options = {}) {
   return marker;
 }
 
+function navLabelCategory(className) {
+  if (className === "nav-airway-label") return "airway";
+  if (className === "nav-airport-label") return "airport";
+  if (className === "nav-runway-label") return "runway";
+  if (className === "nav-ils-label") return "ils";
+  if (className === "nav-waypoint-label") return "waypoint";
+  return "navaid";
+}
+
+function navLabelGridKeysForRect(layout, rect) {
+  const left = Math.max(0, Math.floor(rect.left / layout.cellWidth));
+  const right = Math.min(layout.columns - 1, Math.floor(rect.right / layout.cellWidth));
+  const top = Math.max(0, Math.floor(rect.top / layout.cellHeight));
+  const bottom = Math.min(layout.rows - 1, Math.floor(rect.bottom / layout.cellHeight));
+  const keys = [];
+  for (let row = top; row <= bottom; row += 1) {
+    for (let column = left; column <= right; column += 1) {
+      keys.push(`${column}:${row}`);
+    }
+  }
+  return keys;
+}
+
+function reserveNavLabelRect(layout, rect) {
+  navLabelGridKeysForRect(layout, rect).forEach((key) => layout.occupied.add(key));
+}
+
+/**
+ * 功能：为 nav-overlay 标签建立当前视口的屏幕网格预算。
+ * 规则：主航路及已有主航路标签先占位；低优先级机场、航路和普通点
+ * 只有在网格无碰撞且类别预算未用完时才显示。
+ */
+function createNavLabelCollisionLayout(zoom) {
+  const mapSize = map.getSize();
+  const compact = isCompactPhoneMap();
+  const cellWidth = compact ? 42 : 52;
+  const cellHeight = compact ? 23 : 28;
+  const columns = Math.max(1, Math.ceil(mapSize.x / cellWidth));
+  const rows = Math.max(1, Math.ceil(mapSize.y / cellHeight));
+  const capacity = Math.round(clampNumber(
+    columns * rows * (zoom >= 9 ? 0.5 : zoom >= 8 ? 0.4 : 0.3),
+    compact ? 14 : 20,
+    zoom >= 9 ? (compact ? 88 : 150) : (compact ? 58 : 96),
+  ));
+  const routePoints = withDisplayLongitudes(state.currentRoutePayload?.points || [])
+    .filter((point) => Number.isFinite(Number(point?.lat)) && Number.isFinite(Number(point?.lon)));
+  const routeIdentifiers = new Set(routePoints
+    .map((point) => String(point.ident || point.identifier || "").trim().toUpperCase())
+    .filter(Boolean));
+  const routeAirways = new Set((state.currentRoutePayload?.legs || [])
+    .filter((leg) => leg?.type === "airway")
+    .map((leg) => String(leg.name || leg.airway || "").trim().toUpperCase())
+    .filter(Boolean));
+  const layout = {
+    width: mapSize.x,
+    height: mapSize.y,
+    cellWidth,
+    cellHeight,
+    columns,
+    rows,
+    occupied: new Set(),
+    routeIdentifiers,
+    routeAirways,
+    total: 0,
+    accepted: 0,
+    rejected: 0,
+    maxTotal: capacity,
+    counts: { airway: 0, airport: 0, runway: 0, ils: 0, waypoint: 0, navaid: 0 },
+    limits: {
+      airway: Math.max(4, Math.round(capacity * 0.22)),
+      airport: Math.max(5, Math.round(capacity * 0.28)),
+      runway: Math.max(8, Math.round(capacity * 0.3)),
+      ils: Math.max(5, Math.round(capacity * 0.2)),
+      waypoint: Math.max(6, Math.round(capacity * 0.34)),
+      navaid: Math.max(5, Math.round(capacity * 0.28)),
+    },
+  };
+
+  // 按屏幕线段采样预留主航路走廊，避免叠加层标签盖住黄色/青色主线、
+  // 航路点和它们自己的标签。视口外点不会占用预算。
+  for (let index = 1; index < routePoints.length; index += 1) {
+    const start = map.latLngToContainerPoint(latLngForPoint(routePoints[index - 1]));
+    const end = map.latLngToContainerPoint(latLngForPoint(routePoints[index]));
+    const distance = start.distanceTo(end);
+    const steps = Math.max(1, Math.ceil(distance / 20));
+    for (let step = 0; step <= steps; step += 1) {
+      const ratio = step / steps;
+      const x = start.x + (end.x - start.x) * ratio;
+      const y = start.y + (end.y - start.y) * ratio;
+      if (x < -24 || y < -24 || x > mapSize.x + 24 || y > mapSize.y + 24) {
+        continue;
+      }
+      reserveNavLabelRect(layout, {
+        left: x - 16,
+        right: x + 16,
+        top: y - 13,
+        bottom: y + 13,
+      });
+    }
+  }
+  return layout;
+}
+
+function navLabelFitsCollisionLayout(layout, lat, lon, text, className) {
+  if (!layout) {
+    return true;
+  }
+  const normalizedText = String(text || "").trim().toUpperCase();
+  const category = navLabelCategory(className);
+  if (
+    (category === "airway" && layout.routeAirways.has(normalizedText))
+    || (category !== "airway" && layout.routeIdentifiers.has(normalizedText))
+  ) {
+    layout.rejected += 1;
+    return false;
+  }
+  if (layout.total >= layout.maxTotal || layout.counts[category] >= layout.limits[category]) {
+    layout.rejected += 1;
+    return false;
+  }
+  const point = map.latLngToContainerPoint([lat, lon]);
+  if (point.x < 4 || point.y < 4 || point.x > layout.width - 4 || point.y > layout.height - 4) {
+    layout.rejected += 1;
+    return false;
+  }
+  const compact = isCompactPhoneMap();
+  const width = category === "airway"
+    ? clampNumber(normalizedText.length * (compact ? 4.2 : 5.5) + 10, compact ? 24 : 30, compact ? 42 : 58)
+    : clampNumber(normalizedText.length * (compact ? 4.8 : 6.1) + 10, compact ? 24 : 30, compact ? 62 : 84);
+  const height = category === "airway" ? (compact ? 12 : 19) : (compact ? 14 : 20);
+  const keys = navLabelGridKeysForRect(layout, {
+    left: point.x - width / 2 - 3,
+    right: point.x + width / 2 + 3,
+    top: point.y - height / 2 - 3,
+    bottom: point.y + height / 2 + 3,
+  });
+  if (!keys.length || keys.some((key) => layout.occupied.has(key))) {
+    layout.rejected += 1;
+    return false;
+  }
+  keys.forEach((key) => layout.occupied.add(key));
+  layout.counts[category] += 1;
+  layout.total += 1;
+  layout.accepted += 1;
+  return true;
+}
+
 /**
  * 功能：添加 `addNavLabel` 对应的业务逻辑。
  * 输入：lat、lon、text、className、options。
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
 function addNavLabel(lat, lon, text, className, options = {}) {
+  const collisionLayout = options.collisionLayout || state.navLabelCollisionLayout;
+  if (!navLabelFitsCollisionLayout(collisionLayout, lat, lon, text, className)) {
+    return null;
+  }
   const isAirwayLabel = className === "nav-airway-label";
   const compact = isCompactPhoneMap();
   const airwayWidth = isAirwayLabel
@@ -10471,6 +10941,7 @@ function drawNavOverlay(payload) {
   const navaids = payload.navaids || EMPTY_LIST;
   const waypoints = payload.waypoints || EMPTY_LIST;
   const navaidIdents = new Set(navaids.map((item) => String(item.ident || "").toUpperCase()));
+  state.navLabelCollisionLayout = createNavLabelCollisionLayout(zoom);
 
   if (zoom < NAV_AIRWAY_INTERACTIVE_MIN_ZOOM) {
     const batchedAirwayPaths = [];
@@ -10676,6 +11147,14 @@ function drawNavOverlay(payload) {
   if (selectedAirway) {
     setNavAirwayHighlight(selectedAirway, true);
   }
+  state.navOverlayLabelStats = {
+    accepted: state.navLabelCollisionLayout?.accepted || 0,
+    rejected: state.navLabelCollisionLayout?.rejected || 0,
+    capacity: state.navLabelCollisionLayout?.maxTotal || 0,
+    counts: { ...(state.navLabelCollisionLayout?.counts || {}) },
+    zoom,
+  };
+  state.navLabelCollisionLayout = null;
   state.navOverlayDrawZoom = roundedZoom;
   applyMapOverlayVisibility();
   [
@@ -10708,6 +11187,7 @@ function drawNavOverlay(payload) {
     navPointLabelLayerGroup = previousNavPointLabelLayerGroup;
     state.navAirwayLayers = previousNavAirwayLayers;
     state.navAirwayLabels = previousNavAirwayLabels;
+    state.navLabelCollisionLayout = null;
     throw error;
   }
 }
@@ -10723,6 +11203,13 @@ function scheduleNavOverlayRetry(delayMs = 650) {
     state.navOverlayRetryTimer = 0;
     refreshNavOverlay().catch((error) => console.warn("Nav overlay retry failed", error));
   }, delayMs);
+}
+
+function deferNavOverlayWork(delayMs = 900) {
+  state.navOverlayDeferredUntil = Math.max(
+    state.navOverlayDeferredUntil,
+    performance.now() + Math.max(0, delayMs),
+  );
 }
 
 /**
@@ -10745,6 +11232,12 @@ async function refreshNavOverlay() {
     navTerminalLabelLayerGroup.clearLayers();
     navPointLayerGroup.clearLayers();
     navPointLabelLayerGroup.clearLayers();
+    return;
+  }
+  const deferredFor = Math.max(0, state.navOverlayDeferredUntil - performance.now());
+  if (state.activeRouteAbortController || deferredFor > 0) {
+    const retryDelay = deferredFor > 0 ? deferredFor + 40 : 420;
+    scheduleNavOverlayRetry(Math.max(120, Math.min(1200, retryDelay)));
     return;
   }
   if (
@@ -10784,10 +11277,17 @@ async function refreshNavOverlay() {
     north: bounds.north.toFixed(4),
     east: bounds.east.toFixed(4),
     zoom: String(zoom),
+    generation: String(version),
   });
   try {
-    const payload = await fetchJson(`/api/nav-overlay?${params.toString()}`, { signal: controller.signal });
+    const payload = await fetchJson(`/api/nav-overlay?${params.toString()}`, {
+      signal: controller.signal,
+      superseded: () => version !== state.navOverlayVersion,
+    });
     if (version !== state.navOverlayVersion) {
+      return;
+    }
+    if (Number(payload.generation || version) !== version) {
       return;
     }
     state.navOverlayPayload = payload;
@@ -10796,7 +11296,7 @@ async function refreshNavOverlay() {
     state.navOverlayZoom = zoom;
     drawNavOverlay(payload);
   } catch (error) {
-    if (error.name === "AbortError") {
+    if (error.name === "AbortError" || version !== state.navOverlayVersion) {
       return;
     }
     console.warn("Nav overlay failed", error);
@@ -10817,7 +11317,24 @@ const clearZoomingClassDebounced = debounce(() => {
   }
   map.getContainer().classList.remove("is-smooth-zooming");
 }, MAP_ZOOM.wheelIdleDelay);
-map.on("zoomstart", () => {
+const armRecentMapGesture = () => {
+  state.recentMapGestureUntil = performance.now() + 1200;
+};
+map.getContainer().addEventListener("pointerdown", armRecentMapGesture, { passive: true });
+map.getContainer().addEventListener("touchstart", armRecentMapGesture, { passive: true });
+map.getContainer().addEventListener("wheel", () => {
+  armRecentMapGesture();
+  markRouteViewportIntent("manual");
+}, { passive: true });
+map.getContainer().addEventListener("dblclick", () => markRouteViewportIntent("manual"), { passive: true });
+
+map.on("zoomstart", (event) => {
+  if (
+    performance.now() >= state.programmaticMapViewUntil
+    && (event?.originalEvent || performance.now() < state.recentMapGestureUntil)
+  ) {
+    markRouteViewportIntent("manual");
+  }
   activateNavLabelSnapshot("zoom");
   map.getContainer().classList.add("is-smooth-zooming");
   finishVectorMapPanMirror();
@@ -10839,6 +11356,7 @@ map.on("movestart", () => {
   map.getContainer().classList.add("is-map-moving");
 });
 map.on("dragstart", () => {
+  markRouteViewportIntent("manual");
   activateNavLabelSnapshot();
   beginVectorMapPanMirror();
 });
@@ -10877,6 +11395,7 @@ map.on("viewreset", () => {
 map.on("resize", () => {
   scheduleVectorMapResizeSync();
   scheduleNavLabelSnapshot();
+  scheduleRouteAutoFitAfterLayout(140);
 });
 map.on("moveend zoomend", refreshNavOverlayDebounced);
 map.on("moveend zoomend", scheduleRouteLabelRender);
@@ -11222,7 +11741,7 @@ function setProcedureHighlight(type, hovered) {
  * 输入：points、payload、routeAssociations、longitudeOffset、fitBoundsLatLngs。
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
-function drawRouteCopy(points, payload, routeAssociations, longitudeOffset, fitBoundsLatLngs) {
+function drawRouteCopy(points, payload, routeAssociations, longitudeOffset) {
   const routeStyle = routeStyleForKind(state.currentRouteLayerKind);
   const copyKey = String(longitudeOffset);
   const enroutePoints = points.slice(1, -1);
@@ -11265,9 +11784,6 @@ function drawRouteCopy(points, payload, routeAssociations, longitudeOffset, fitB
           lineCap: "round",
           lineJoin: "round",
         }).addTo(routeLayerGroup);
-        if (!longitudeOffset) {
-          fitBoundsLatLngs.push(...visibleLayer.getLatLngs());
-        }
         const hitLayer = L.polyline(latlngs, {
           pane: "routeHitPane",
           color: "#ffffff",
@@ -11352,19 +11868,20 @@ function drawRoute(payload, options = {}) {
   state.hoveredAirwayKey = null;
 
   const routeAssociations = buildRoutePointAssociations(basePoints, payload.legs || []);
-  const fitBoundsLatLngs = [];
   ROUTE_WORLD_COPY_OFFSETS.forEach((longitudeOffset) => {
     drawRouteCopy(
       routeWorldCopy(basePoints, longitudeOffset),
       payload,
       routeAssociations,
       longitudeOffset,
-      fitBoundsLatLngs,
     );
   });
 
-  const fallbackBounds = basePoints.map(latLngForPoint);
-  const boundsPolyline = L.polyline(fitBoundsLatLngs.length ? fitBoundsLatLngs : fallbackBounds, {
+  // 自动适配必须覆盖完整航路点集；只使用 airway/direct 图层会漏掉位于
+  // 主干两端之外的 SID / STAR / APPROACH 点，面板尺寸变化后尤为明显。
+  const completeRouteBounds = basePoints.map(latLngForPoint);
+  rememberRouteAutoFitLatLngs(completeRouteBounds);
+  const boundsPolyline = L.polyline(completeRouteBounds, {
     pane: "routePane",
     color: "#000000",
     weight: 0,
@@ -11372,7 +11889,9 @@ function drawRoute(payload, options = {}) {
     interactive: false,
   }).addTo(routeLayerGroup);
   if (options.fitBounds !== false) {
-    map.fitBounds(boundsPolyline.getBounds(), { padding: [36, 36] });
+    state.routeViewportIntent = "auto";
+    state.programmaticMapViewUntil = performance.now() + 1200;
+    map.fitBounds(boundsPolyline.getBounds(), { padding: routeAutoFitPadding() });
   }
   applyMapOverlayVisibility();
   scheduleRouteLabelRender();
@@ -11930,10 +12449,24 @@ function renderProcedureList(container, items, type, airportIdent, slot) {
       group.appendChild(chipList);
       container.appendChild(group);
       let groupToggleReady = false;
+      let groupToggleRequestedByUser = false;
+      let groupToggleRequestTimer = 0;
+      summary.addEventListener("click", () => {
+        groupToggleRequestedByUser = true;
+        window.clearTimeout(groupToggleRequestTimer);
+        groupToggleRequestTimer = window.setTimeout(() => {
+          groupToggleRequestedByUser = false;
+        }, 600);
+      });
       group.addEventListener("toggle", () => {
-        if (!groupToggleReady) {
+        // 重新渲染跑道/程序列表会通过 `group.open = ...` 触发延迟 toggle。
+        // 只有用户实际点击 summary 才改变地图总览范围，避免旧的自动选中分组
+        // 在 STAR 全类总览完成后又把地图抢回单组预览。
+        if (!groupToggleReady || !groupToggleRequestedByUser) {
           return;
         }
+        groupToggleRequestedByUser = false;
+        window.clearTimeout(groupToggleRequestTimer);
         handleProcedureOverviewGroupToggle({
           slot,
           type,
@@ -12449,12 +12982,22 @@ function drawProcedureOverview() {
     addProcedureOverviewLabel(groupIdentifier, labelData, focused);
   });
   if (bounds.isValid()) {
-    map.fitBounds(bounds.pad(focused ? 0.12 : 0.08), {
+    markRouteViewportIntent("focused");
+    state.programmaticMapViewUntil = performance.now() + 1400;
+    const paddedBounds = bounds.pad(focused ? 0.12 : 0.08);
+    const hasTileTransition = beginOnlineTileViewportTransition();
+    map.fitBounds(paddedBounds, {
       animate: true,
       duration: 0.42,
       padding: compactPhoneSize(focused ? [30, 30] : [24, 24]),
       maxZoom: focused ? 10 : 9,
     });
+    if (hasTileTransition) {
+      window.requestAnimationFrame(() => {
+        prefetchOnlineTilesForCurrentViewport();
+        monitorOnlineTileViewportTransition();
+      });
+    }
   }
   syncProcedureOverviewHeadings();
   syncProcedureOverviewGroupState();
@@ -12719,6 +13262,22 @@ async function applyRoutePayload(payload, departure, arrival, options = {}) {
   clearProcedureOverview({ announce: false });
   state.selectedRunways.departure = payload.selected_runways?.departure || state.selectedRunways.departure || "ALL";
   state.selectedRunways.arrival = payload.selected_runways?.arrival || state.selectedRunways.arrival || "ALL";
+  // 路由解析完成后先呈现本地主航路；机场详情、Procedure 与在线增强
+  // 随后补齐，避免冷启动时用户在数秒数据库/叠加层工作期间看不到结果。
+  const routeLayerKind = normalizeRouteLayerKind(options.routeLayerKind || inferRouteLayerKind(payload));
+  if (options.recordHistory !== false) {
+    pushDrawingUndoState();
+  }
+  drawRoute(payload, { routeLayerKind });
+  renderLegs(payload.legs || []);
+  elements.routeInput.value = routeStringFromPayload(payload);
+  state.lastRouteWasGenerated = Boolean(payload.generated);
+  state.lastGeneratedRouteDisplay = payload.generated ? routeStringFromPayload(payload).toUpperCase() : "";
+  state.currentRoutePayload = cloneJSON(payload);
+  state.currentRouteAirports = { departure, arrival };
+  state.currentRouteLayerKind = routeLayerKind;
+  scheduleCalculateRender();
+
   await Promise.all([
     loadAirportIntoPanel(departure, "departure", { signal: options.signal }),
     loadAirportIntoPanel(arrival, "arrival", { signal: options.signal }),
@@ -12733,21 +13292,9 @@ async function applyRoutePayload(payload, departure, arrival, options = {}) {
   if (state.arrivalAirport) {
     rerenderProcedureLists("arrival", state.arrivalAirport.airport_identifier);
   }
-  const routeLayerKind = normalizeRouteLayerKind(options.routeLayerKind || inferRouteLayerKind(payload));
-  if (options.recordHistory !== false) {
-    pushDrawingUndoState();
-  }
-  drawRoute(payload, { routeLayerKind });
-  renderLegs(payload.legs || []);
-  elements.routeInput.value = routeStringFromPayload(payload);
-  state.lastRouteWasGenerated = Boolean(payload.generated);
-  state.lastGeneratedRouteDisplay = payload.generated ? routeStringFromPayload(payload).toUpperCase() : "";
-  state.currentRoutePayload = cloneJSON(payload);
-  state.currentRouteAirports = { departure, arrival };
-  state.currentRouteLayerKind = routeLayerKind;
   await applyAutoSelectedProcedures(payload.selected_procedures || {}, { signal: options.signal });
+  scheduleRouteAutoFitAfterLayout(180);
   updateTrackHistoryControlState();
-  scheduleCalculateRender();
 }
 
 /**
@@ -13314,13 +13861,15 @@ function updateFR24AccessSummary(payload) {
     return;
   }
   const accessState = String(payload?.access_state || "unknown");
-  const labelKey = {
+  const labelKey = payload?.probe_in_progress
+    ? "query.accessStateVerifying"
+    : ({
     available: "query.accessStateAvailable",
     challenge: "query.accessStateChallenge",
     expired: "query.accessStateExpired",
     configured: "query.accessStateConfigured",
     unknown: "query.accessStateUnknown",
-  }[accessState] || "query.accessStateUnknown";
+  }[accessState] || "query.accessStateUnknown");
   elements.fr24AccessSummary.textContent = t("query.accessSummary", {
     state: t(labelKey),
   });
@@ -13390,6 +13939,13 @@ function handleNativeFR24SessionUpdated(payload = {}) {
   updateFR24AccessSummary(payload);
   const message = fr24NativeSessionMessage(payload);
   setFR24QueryStatus(message, Boolean(payload.error));
+  if (!payload.error) {
+    probeFR24Access({ announce: true, force: true }).catch((error) => {
+      if (!isAbortError(error)) {
+        console.warn("FR24 会话验证失败", error);
+      }
+    });
+  }
 }
 
 function handleNativeFR24CacheDirectoryOpened(payload = {}) {
@@ -13452,6 +14008,92 @@ async function refreshFR24AccessStatus() {
   return payload;
 }
 
+function fr24SessionIsConfigured(payload = state.fr24AccessStatus) {
+  return Boolean(
+    payload?.cookie_configured
+    || payload?.frpl_configured
+    || payload?.browser_cookie_detected
+  );
+}
+
+async function probeFR24Access(options = {}) {
+  const force = Boolean(options.force);
+  if (!fr24SessionIsConfigured()) {
+    return state.fr24AccessStatus;
+  }
+  if (!force && state.fr24AccessProbePromise) {
+    return state.fr24AccessProbePromise;
+  }
+  if (!force && Date.now() - state.fr24LastProbeStartedAt < 60_000) {
+    return state.fr24AccessStatus;
+  }
+
+  state.fr24AccessProbeController?.abort();
+  const controller = new AbortController();
+  const version = ++state.fr24AccessProbeVersion;
+  state.fr24AccessProbeController = controller;
+  state.fr24LastProbeStartedAt = Date.now();
+  updateFR24AccessSummary({
+    ...(state.fr24AccessStatus || {}),
+    probe_in_progress: true,
+  });
+  if (options.announce !== false) {
+    setFR24QueryStatus(t("query.accessVerifying"));
+  }
+
+  const promise = (async () => {
+    try {
+      const payload = await fetchJson("/api/fr24/access/probe", {
+        method: "POST",
+        signal: controller.signal,
+        superseded: () => version !== state.fr24AccessProbeVersion,
+      });
+      if (version !== state.fr24AccessProbeVersion) {
+        return null;
+      }
+      updateFR24AccessSummary(payload);
+      if (payload.verified) {
+        if (options.announce !== false) {
+          setFR24QueryStatus(t("query.accessVerified"));
+        }
+      } else if (options.announce !== false) {
+        setFR24QueryStatus(t("query.accessProbeFailed"), true);
+      }
+      return payload;
+    } catch (error) {
+      if (isAbortError(error) || version !== state.fr24AccessProbeVersion) {
+        return null;
+      }
+      const payload = await refreshFR24AccessStatus().catch(() => state.fr24AccessStatus);
+      if (options.announce !== false) {
+        setFR24QueryStatus(t("query.accessProbeFailed"), true);
+      }
+      return payload;
+    } finally {
+      if (version === state.fr24AccessProbeVersion) {
+        state.fr24AccessProbeController = null;
+        state.fr24AccessProbePromise = null;
+      }
+    }
+  })();
+  state.fr24AccessProbePromise = promise;
+  return promise;
+}
+
+function maybeProbeFR24Access(options = {}) {
+  const payload = state.fr24AccessStatus;
+  if (!fr24SessionIsConfigured(payload) || state.fr24AccessProbePromise) {
+    return state.fr24AccessProbePromise || Promise.resolve(payload);
+  }
+  const lastProbeAt = Number(payload?.last_probe_at || 0) * 1000;
+  const accessState = String(payload?.access_state || "unknown");
+  const probeIsStale = !lastProbeAt || Date.now() - lastProbeAt > 5 * 60_000;
+  if (accessState === "available" && !probeIsStale) {
+    return Promise.resolve(payload);
+  }
+  return probeFR24Access({ announce: options.announce ?? false });
+}
+
 function clearFR24AccessInputs() {
   if (elements.fr24CookieInput) {
     elements.fr24CookieInput.value = "";
@@ -13473,9 +14115,14 @@ async function saveFR24Access() {
   clearFR24AccessInputs();
   updateFR24AccessSummary(payload);
   setFR24QueryStatus(t("query.accessSaved"));
+  await probeFR24Access({ announce: true, force: true });
 }
 
 async function clearFR24Access() {
+  state.fr24AccessProbeVersion += 1;
+  state.fr24AccessProbeController?.abort();
+  state.fr24AccessProbeController = null;
+  state.fr24AccessProbePromise = null;
   const payload = await fetchJson("/api/fr24/access/clear", { method: "POST" });
   clearFR24AccessInputs();
   updateFR24AccessSummary(payload);
@@ -13494,6 +14141,14 @@ async function searchFR24Flights() {
   try {
     if (!state.fr24AccessStatus) {
       await refreshFR24AccessStatus();
+    }
+    await maybeProbeFR24Access({ announce: true });
+    if (requestVersion !== state.fr24QueryRequestVersion) {
+      return;
+    }
+    if (String(state.fr24AccessStatus?.access_state || "") === "challenge") {
+      setFR24QueryStatus(t("query.accessProbeFailed"), true, requestVersion);
+      return;
     }
     if (!await waitForFR24SessionWarmup(requestVersion)) {
       return;
@@ -13519,7 +14174,8 @@ async function searchFR24Flights() {
     if (requestVersion !== state.fr24QueryRequestVersion) {
       return;
     }
-    renderFR24Flights([]);
+    // 在线会话或网络失败不清空最近一次成功结果；用户可以直接打开验证页
+    // 或点击“验证 / 重试”，本地规划与已下载轨迹继续可用。
     const message = localizedErrorMessage(error.message);
     setFR24QueryStatus(message, true, requestVersion);
     refreshFR24AccessStatus().catch((statusError) => {
@@ -14144,6 +14800,8 @@ function renderFR24TrackPayload(payload, { fitBounds = false } = {}) {
       opacity: 0,
       interactive: false,
     }).addTo(fr24TrackLayerGroup).getBounds();
+    markRouteViewportIntent("focused");
+    state.programmaticMapViewUntil = performance.now() + 1200;
     map.fitBounds(bounds, { padding: [36, 36] });
   }
   updateFR24ProfilePanel();
@@ -14526,6 +15184,7 @@ registerQueryPage({
   saveFR24Access,
   clearFR24Access,
   refreshFR24AccessStatus,
+  probeFR24Access,
   updateFR24ProfileCursor,
   handleFR24ProfilePointer,
   ensureFR24ProfileResizeObserver,
@@ -15419,11 +16078,22 @@ async function runSimulatorWorkflowStress(options = {}) {
   }
   longTaskObserver?.disconnect();
   const airportFailures = cycles.flatMap((cycle) => cycle.airportSelections).filter((item) => !item.passed);
+  const chartTolerance = 0.02;
   const result = {
     repeatCount,
     passed: airportFailures.length === 0
       && cycles.every((cycle) => cycle.routePointCount >= 2)
-      && cycles.every((cycle) => cycle.horizontalOverflowPx === 0),
+      && cycles.every((cycle) => cycle.horizontalOverflowPx === 0)
+      && cycles.every((cycle) => (
+        cycle.routeAfterPlan.clippedPoints === 0 && cycle.routeAfterPlan.clippedLabels === 0
+      ))
+      && cycles.every((cycle) => cycle.bannerSamples.every((sample) => (
+        sample.routeViewport.clippedPoints === 0 && sample.routeViewport.clippedLabels === 0
+      )))
+      && cycles.every((cycle) => (
+        Math.abs(cycle.weatherChart.axisScaleRatio - 1) <= chartTolerance
+        && Math.abs(cycle.speedChart.axisScaleRatio - 1) <= chartTolerance
+      )),
     airportFailureCount: airportFailures.length,
     frames: simulatorDebugFrameSummary(frameDeltas),
     longTasks: {
@@ -15448,6 +16118,11 @@ async function runSimulatorWorkflowStress(options = {}) {
       maxBannerClippedPoints: Math.max(0, ...result.cycles.flatMap((item) => (
         item.bannerSamples.map((sample) => sample.routeViewport.clippedPoints)
       ))),
+      maxBannerClippedLabels: Math.max(0, ...result.cycles.flatMap((item) => (
+        item.bannerSamples.map((sample) => sample.routeViewport.clippedLabels)
+      ))),
+      weatherAxisScaleRatios: result.cycles.map((item) => item.weatherChart.axisScaleRatio),
+      speedAxisScaleRatios: result.cycles.map((item) => item.speedChart.axisScaleRatio),
     })}`,
   });
   return result;
@@ -16056,9 +16731,27 @@ async function applySimulatorDebugLaunch() {
       await simulatorDebugNextPaint(3);
     }
   }
+  if (config.waitForNavOverlay === true) {
+    await simulatorDebugWaitFor(
+      () => Boolean(state.navOverlayLabelStats),
+      Math.max(1000, Number(config.waitForNavOverlayTimeoutMs) || 30_000),
+      100,
+    );
+    await simulatorDebugNextPaint(3);
+  }
   if (config.reportReady === true) {
     await new Promise((resolve) => window.setTimeout(resolve, 520));
     await simulatorDebugNextPaint(4);
+    const calculateWeatherChart = simulatorDebugSvgMetrics(elements.calcWeatherProfileSvg);
+    const calculateSpeedChart = simulatorDebugSvgMetrics(elements.calcSpeedProfileSvg);
+    const fr24ProfileChart = simulatorDebugSvgMetrics(elements.fr24ProfileSvg);
+    const chartAxisPassed = (metrics) => (
+      metrics.clientWidth > 0
+      && metrics.clientHeight > 0
+      && metrics.viewBoxWidth === metrics.clientWidth
+      && metrics.viewBoxHeight === metrics.clientHeight
+      && Math.abs(metrics.axisScaleRatio - 1) <= 0.02
+    );
     postNativeEvent("runtimeDiagnostic", {
       level: "warning",
       message: `NavPlanner screenshot ready ${JSON.stringify({
@@ -16073,6 +16766,13 @@ async function applySimulatorDebugLaunch() {
         routePoints: state.currentRoutePayload?.points?.length || 0,
         routeViewport: simulatorDebugRouteViewportSnapshot(),
         procedureOverviewViewport: simulatorDebugProcedureOverviewViewportSnapshot(),
+        navOverlayLabelStats: cloneJSON(state.navOverlayLabelStats),
+        onlineTileTransitionStats: cloneJSON(state.onlineTileTransitionStats),
+        profileCharts: {
+          calculateWeather: { ...calculateWeatherChart, passed: chartAxisPassed(calculateWeatherChart) },
+          calculateSpeed: { ...calculateSpeedChart, passed: chartAxisPassed(calculateSpeedChart) },
+          fr24: { ...fr24ProfileChart, passed: chartAxisPassed(fr24ProfileChart) },
+        },
       })}`,
     });
   }
@@ -16101,7 +16801,10 @@ async function init() {
     renderRunwayButtons("arrival");
     renderRunwayButtons("manual");
     updateAirportPanelVisibility();
-    refreshNavOverlay();
+    // 先让 header、机场输入和本地规划可交互，再在短暂空闲窗口加载
+    // 大体量导航叠加层；在线底图与 nav-overlay 不阻塞本地核心流程。
+    deferNavOverlayWork(1100);
+    scheduleNavOverlayRetry(1140);
     refreshOfflineMapStatus().catch((error) => console.warn("离线地图状态刷新失败", error));
     refreshMapCacheStatus().catch((error) => console.warn("在线地图缓存状态刷新失败", error));
     await applySimulatorDebugLaunch();

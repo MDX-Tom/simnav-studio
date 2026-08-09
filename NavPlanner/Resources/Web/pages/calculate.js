@@ -1936,8 +1936,13 @@ export function createCalculatePage(context) {
     const colors = calculateChartColors();
     const chartElement = svg.parentElement || svg;
     const rect = chartElement.getBoundingClientRect();
-    const width = Math.round(Math.max(340, rect.width || svg.clientWidth || 760));
-    const height = Math.round(Math.max(340, rect.height || svg.clientHeight || 390));
+    // 外部 viewBox 必须和 SVG 的布局视口保持同一比例。iPad 横屏右侧栏
+    // 只有约 262px 可见宽度；旧的 340px 宽度下限配合
+    // preserveAspectRatio="none" 会把坐标轴与文字横向挤窄。
+    // clientWidth/clientHeight 是 CSS zoom 前的布局尺寸，外层缩放会继续
+    // 对两轴使用相同倍率；最小绘图区只应由下方 plot margin 控制。
+    const width = Math.max(1, Math.round(svg.clientWidth || chartElement.clientWidth || rect.width || 760));
+    const height = Math.max(1, Math.round(svg.clientHeight || chartElement.clientHeight || rect.height || 390));
     svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
 
     const lowerReserved = Math.round(clampNumber(height * 0.38, 140, 176));
@@ -2327,8 +2332,8 @@ export function createCalculatePage(context) {
     const colors = calculateChartColors();
     const chartElement = svg.parentElement || svg;
     const rect = chartElement.getBoundingClientRect();
-    const width = Math.round(Math.max(340, rect.width || svg.clientWidth || 760));
-    const height = Math.round(Math.max(150, rect.height || svg.clientHeight || 250));
+    const width = Math.max(1, Math.round(svg.clientWidth || chartElement.clientWidth || rect.width || 760));
+    const height = Math.max(1, Math.round(svg.clientHeight || chartElement.clientHeight || rect.height || 250));
     svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
     const plot = {
       left: Math.round(clampNumber(width * 0.085, 45, 64)),

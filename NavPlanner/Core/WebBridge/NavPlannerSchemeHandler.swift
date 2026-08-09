@@ -7,6 +7,7 @@ enum FR24SessionStore {
     static let lastSuccessKey = "navplanner.fr24.lastSuccessAt"
     static let lastChallengeKey = "navplanner.fr24.lastChallengeAt"
     static let browserSyncKey = "navplanner.fr24.browserSyncAt"
+    static let lastProbeKey = "navplanner.fr24.lastProbeAt"
     private static let availableWindow: TimeInterval = 12 * 60 * 60
     private static let challengeWindow: TimeInterval = 30 * 60
     private static let browserWarmupWindow: TimeInterval = 6
@@ -21,6 +22,7 @@ enum FR24SessionStore {
         let lastSuccess = userDefaults.double(forKey: lastSuccessKey)
         let lastChallenge = userDefaults.double(forKey: lastChallengeKey)
         let browserSync = userDefaults.double(forKey: browserSyncKey)
+        let lastProbe = userDefaults.double(forKey: lastProbeKey)
         let successAge = lastSuccess > 0 ? max(0, nowTimestamp - lastSuccess) : .infinity
         let challengeIsCurrent = lastChallenge > max(lastSuccess, browserSync)
             && nowTimestamp - lastChallenge <= challengeWindow
@@ -61,6 +63,7 @@ enum FR24SessionStore {
             "last_success_at": lastSuccess > 0 ? lastSuccess : NSNull(),
             "last_challenge_at": lastChallenge > 0 ? lastChallenge : NSNull(),
             "browser_sync_at": browserSync > 0 ? browserSync : NSNull(),
+            "last_probe_at": lastProbe > 0 ? lastProbe : NSNull(),
             "warmup_until": warmupUntil > 0 ? warmupUntil : NSNull(),
             "warmup_remaining_seconds": warmupRemaining,
             "message": message
@@ -80,6 +83,10 @@ enum FR24SessionStore {
         userDefaults.set(now.timeIntervalSince1970, forKey: browserSyncKey)
     }
 
+    static func recordProbeAttempt(userDefaults: UserDefaults = .standard, now: Date = Date()) {
+        userDefaults.set(now.timeIntervalSince1970, forKey: lastProbeKey)
+    }
+
     static func updateAccessPayload(
         webCookie: String?,
         frPl: String?,
@@ -87,6 +94,10 @@ enum FR24SessionStore {
     ) -> [String: Any] {
         let cookie = sanitizedHeaderSecret(webCookie)
         let token = sanitizedHeaderSecret(frPl)
+        // 新保存的会话尚未经过 FR24 接受性验证，不能沿用旧会话的成功/挑战结论。
+        userDefaults.removeObject(forKey: lastSuccessKey)
+        userDefaults.removeObject(forKey: lastChallengeKey)
+        userDefaults.removeObject(forKey: lastProbeKey)
         setSecret(cookie, forKey: webCookieKey, userDefaults: userDefaults)
         if !token.isEmpty {
             setSecret(token, forKey: frPlKey, userDefaults: userDefaults)
@@ -101,6 +112,10 @@ enum FR24SessionStore {
     static func clearAccessPayload(userDefaults: UserDefaults = .standard) -> [String: Any] {
         userDefaults.removeObject(forKey: webCookieKey)
         userDefaults.removeObject(forKey: frPlKey)
+        userDefaults.removeObject(forKey: lastSuccessKey)
+        userDefaults.removeObject(forKey: lastChallengeKey)
+        userDefaults.removeObject(forKey: browserSyncKey)
+        userDefaults.removeObject(forKey: lastProbeKey)
         var payload = accessStatusPayload(userDefaults: userDefaults)
         payload["message"] = "已清除 FR24 Web 会话配置。"
         return payload
@@ -317,13 +332,27 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
             return jsonResponse(plannerService.airwayPayload(airway: airway))
         }
         if path == "/nav-overlay" {
-            return jsonResponse(plannerService.navOverlayPayload(
+            let generation = Int(queryValue("generation", "0")) ?? 0
+            let cancelled = { [weak self] in
+                guard let self, let taskID else { return false }
+                return self.isStoppedTask(taskID)
+            }
+            if cancelled() {
+                return jsonResponse(["cancelled": true, "generation": generation])
+            }
+            var payload = plannerService.navOverlayPayload(
                 south: Double(queryValue("south", "0")) ?? 0,
                 west: Double(queryValue("west", "0")) ?? 0,
                 north: Double(queryValue("north", "0")) ?? 0,
                 east: Double(queryValue("east", "0")) ?? 0,
-                zoom: Int(Double(queryValue("zoom", "4")) ?? 4)
-            ))
+                zoom: Int(Double(queryValue("zoom", "4")) ?? 4),
+                shouldCancel: cancelled
+            )
+            if cancelled() {
+                return jsonResponse(["cancelled": true, "generation": generation])
+            }
+            payload["generation"] = generation
+            return jsonResponse(payload)
         }
         if path == "/route/resolve" {
             let payload = plannerService.routeResolvePayload(
@@ -794,6 +823,11 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
         if path == "/fr24/access/status" {
             return jsonResponse(fr24Service.accessStatusPayload())
         }
+        if path == "/fr24/access/probe", request.httpMethod == "POST" {
+            // 探测失败仍返回结构化 200，让 Web UI 保留旧航班结果并显示
+            // “已保存”与“已验证”的真实差异，而不是把它误作本地核心错误。
+            return jsonResponse(fr24Service.probeAccessPayload())
+        }
         if path == "/fr24/access/update", request.httpMethod == "POST" {
             let body = jsonBody(from: request)
             return jsonResponse(fr24Service.updateAccessPayload(
@@ -1119,6 +1153,7 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
     }
 
     static let shared = FR24BrowserFetch()
+    private let requestLock = NSLock()
     private var webView: WKWebView?
     private var idleReleaseWorkItem: DispatchWorkItem?
     private struct PageResponse {
@@ -1128,6 +1163,9 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
     }
     private var pendingPageCompletion: ((Result<PageResponse, Error>) -> Void)?
     private var pendingPageURL: URL?
+    private var pendingPageNavigation: WKNavigation?
+    private var pendingPageRequestID: UInt64 = 0
+    private var nextPageRequestID: UInt64 = 0
     private var pendingPageStatus = 0
     private var pendingPageContentType = ""
     private var pendingPageReadScript = ""
@@ -1140,6 +1178,8 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
     private var pendingPageStableReadCount = 0
 
     func performJSONRequest(path: String, params: [(String, String)]) throws -> [String: Any] {
+        requestLock.lock()
+        defer { requestLock.unlock() }
         guard var components = URLComponents(string: "https://api.flightradar24.com\(path)") else {
             throw BrowserError(message: "FR24 web request failed.")
         }
@@ -1177,6 +1217,8 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
     }
 
     func performFlightHistoryPageRequest(flightToken: String) throws -> [String: Any] {
+        requestLock.lock()
+        defer { requestLock.unlock() }
         let token = flightToken.lowercased().filter { $0.isLetter || $0.isNumber }
         guard !token.isEmpty,
               let url = URL(string: "https://www.flightradar24.com/data/flights/\(token)") else {
@@ -1240,8 +1282,14 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
             return
         }
         let webView = ensureWebView()
+        nextPageRequestID &+= 1
+        if nextPageRequestID == 0 {
+            nextPageRequestID = 1
+        }
+        let requestID = nextPageRequestID
         pendingPageCompletion = completion
         pendingPageURL = url
+        pendingPageRequestID = requestID
         pendingPageStatus = 0
         pendingPageContentType = ""
         pendingPageReadScript = readScript
@@ -1262,14 +1310,18 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
         request.setValue("https://www.flightradar24.com/", forHTTPHeaderField: "Referer")
         request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
         request.setValue("no-cache", forHTTPHeaderField: "Pragma")
-        webView.load(request)
+        pendingPageNavigation = webView.load(request)
         DispatchQueue.main.asyncAfter(deadline: .now() + pageTimeout) { [weak self] in
             guard let self,
                   self.pendingPageCompletion != nil,
-                  self.pendingPageURL == url else {
+                  self.pendingPageURL == url,
+                  self.pendingPageRequestID == requestID else {
                 return
             }
-            self.finishPendingPage(.failure(BrowserError(message: "FR24 web request timed out.")))
+            self.finishPendingPage(
+                .failure(BrowserError(message: "FR24 web request timed out.")),
+                requestID: requestID
+            )
         }
     }
 
@@ -1482,23 +1534,36 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        guard pendingPageCompletion != nil, pendingPageReadStartedAt == nil else { return }
+        guard pendingPageCompletion != nil,
+              pendingPageReadStartedAt == nil,
+              isCurrentPendingNavigation(navigation) else { return }
+        let requestID = pendingPageRequestID
         pendingPageReadStartedAt = Date()
-        readPendingPage(from: webView, after: pendingPageReadDelay)
+        readPendingPage(from: webView, after: pendingPageReadDelay, requestID: requestID)
     }
 
-    private func readPendingPage(from webView: WKWebView, after delay: TimeInterval) {
+    private func readPendingPage(from webView: WKWebView, after delay: TimeInterval, requestID: UInt64) {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak webView] in
-            guard let self, self.pendingPageCompletion != nil else { return }
+            guard let self,
+                  self.pendingPageCompletion != nil,
+                  self.pendingPageRequestID == requestID else { return }
             guard let webView else {
-                self.finishPendingPage(.failure(BrowserError(message: "FR24 web request failed.")))
+                self.finishPendingPage(
+                    .failure(BrowserError(message: "FR24 web request failed.")),
+                    requestID: requestID
+                )
                 return
             }
             let script = self.pendingPageReadScript
             webView.evaluateJavaScript(script) { [weak self, weak webView] result, error in
-                guard let self, self.pendingPageCompletion != nil else { return }
+                guard let self,
+                      self.pendingPageCompletion != nil,
+                      self.pendingPageRequestID == requestID else { return }
                 if let error {
-                    self.finishPendingPage(.failure(BrowserError(message: "FR24 web response could not be read: \(error.localizedDescription)")))
+                    self.finishPendingPage(
+                        .failure(BrowserError(message: "FR24 web response could not be read: \(error.localizedDescription)")),
+                        requestID: requestID
+                    )
                     return
                 }
                 let text = result as? String ?? ""
@@ -1507,7 +1572,7 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
                         status: self.pendingPageStatus,
                         contentType: self.pendingPageContentType,
                         text: text
-                    )))
+                    )), requestID: requestID)
                     return
                 }
 
@@ -1530,14 +1595,17 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
                         status: self.pendingPageStatus,
                         contentType: self.pendingPageContentType,
                         text: self.pendingPageBestText.isEmpty ? text : self.pendingPageBestText
-                    )))
+                    )), requestID: requestID)
                     return
                 }
                 guard let webView else {
-                    self.finishPendingPage(.failure(BrowserError(message: "FR24 web request failed.")))
+                    self.finishPendingPage(
+                        .failure(BrowserError(message: "FR24 web request failed.")),
+                        requestID: requestID
+                    )
                     return
                 }
-                self.readPendingPage(from: webView, after: 0.45)
+                self.readPendingPage(from: webView, after: 0.45, requestID: requestID)
             }
         }
     }
@@ -1555,21 +1623,43 @@ private final class FR24BrowserFetch: NSObject, WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        if pendingPageCompletion != nil {
-            finishPendingPage(.failure(BrowserError(message: "FR24 web request failed: \(error.localizedDescription)")))
-        }
+        finishPendingNavigationFailure(navigation: navigation, error: error)
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        if pendingPageCompletion != nil {
-            finishPendingPage(.failure(BrowserError(message: "FR24 web request failed: \(error.localizedDescription)")))
-        }
+        finishPendingNavigationFailure(navigation: navigation, error: error)
     }
 
-    private func finishPendingPage(_ result: Result<PageResponse, Error>) {
+    private func isCurrentPendingNavigation(_ navigation: WKNavigation?) -> Bool {
+        guard pendingPageCompletion != nil else { return false }
+        guard let pendingPageNavigation, let navigation else { return true }
+        return pendingPageNavigation === navigation
+    }
+
+    private func finishPendingNavigationFailure(navigation: WKNavigation?, error: Error) {
+        guard isCurrentPendingNavigation(navigation) else {
+            return
+        }
+        let requestID = pendingPageRequestID
+        if (error as NSError).code == NSURLErrorCancelled {
+            finishPendingPage(.failure(URLError(.cancelled)), requestID: requestID)
+            return
+        }
+        finishPendingPage(
+            .failure(BrowserError(message: "FR24 web request failed: \(error.localizedDescription)")),
+            requestID: requestID
+        )
+    }
+
+    private func finishPendingPage(_ result: Result<PageResponse, Error>, requestID: UInt64? = nil) {
+        if let requestID, requestID != pendingPageRequestID {
+            return
+        }
         let completion = pendingPageCompletion
         pendingPageCompletion = nil
         pendingPageURL = nil
+        pendingPageNavigation = nil
+        pendingPageRequestID = 0
         pendingPageStatus = 0
         pendingPageContentType = ""
         pendingPageReadScript = ""
@@ -1713,6 +1803,50 @@ private final class FR24Service {
 
     func clearAccessPayload() -> [String: Any] {
         FR24SessionStore.clearAccessPayload(userDefaults: userDefaults)
+    }
+
+    func probeAccessPayload() -> [String: Any] {
+        FR24SessionStore.recordProbeAttempt(userDefaults: userDefaults)
+        let configured = !FR24SessionStore.storedWebCookie(userDefaults: userDefaults).isEmpty
+            || !FR24SessionStore.storedFRPl(userDefaults: userDefaults).isEmpty
+        guard configured else {
+            var payload = accessStatusPayload()
+            payload["verified"] = false
+            payload["probe_result"] = "missing_session"
+            payload["error"] = "FR24 Web 会话尚未保存。"
+            payload["message"] = "请先打开 FR24 验证页并同步会话。"
+            return payload
+        }
+
+        do {
+            _ = try webGet(
+                path: "/common/v1/airport.json",
+                params: [
+                    ("code", "ATH"),
+                    ("plugin[]", "schedule"),
+                    ("plugin-setting[schedule][mode]", "departures"),
+                    ("page", "1"),
+                    ("limit", "1")
+                ],
+                useBrowser: false,
+                retryChallenge: false
+            )
+            var payload = accessStatusPayload()
+            payload["verified"] = true
+            payload["probe_result"] = "available"
+            payload["message"] = "FR24 会话已验证，可执行在线查询。"
+            return payload
+        } catch {
+            if Self.isChallengeLikeRequestError(error.localizedDescription) {
+                FR24SessionStore.recordChallenge(userDefaults: userDefaults)
+            }
+            var payload = accessStatusPayload()
+            payload["verified"] = false
+            payload["probe_result"] = "failed"
+            payload["error"] = error.localizedDescription
+            payload["message"] = "FR24 尚未接受已保存会话，请重新验证后重试。"
+            return payload
+        }
     }
 
     func clearCachePayload(includeFavorites: Bool = false) -> [String: Any] {
@@ -2662,7 +2796,7 @@ private final class FR24Service {
         for offsetHours in stride(from: 0, through: max(1, lookbackHours), by: stepHours) {
             let timestamp = Int(now.addingTimeInterval(TimeInterval(-offsetHours * 3600)).timeIntervalSince1970)
             var offsetHadSuccess = false
-            var offsetHadHTTP400 = false
+            var offsetHTTP400Count = 0
             for modeInfo in [
                 (mode: "departures", airportCode: departureScheduleCode),
                 (mode: "arrivals", airportCode: arrivalScheduleCode)
@@ -2680,11 +2814,15 @@ private final class FR24Service {
                 }
                 let payload: [String: Any]
                 do {
-                    payload = try webGet(path: "/common/v1/airport.json", params: params)
+                    payload = try webGet(
+                        path: "/common/v1/airport.json",
+                        params: params,
+                        expectedPaginationHTTP400: offsetHours > 0
+                    )
                     offsetHadSuccess = true
                 } catch {
                     if error.localizedDescription.contains("HTTP 400") {
-                        offsetHadHTTP400 = true
+                        offsetHTTP400Count += 1
                     }
                     if offsetHours == 0, flights.isEmpty {
                         throw error
@@ -2756,10 +2894,11 @@ private final class FR24Service {
                     flights.count
                 )
             }
-            if offsetHours > 0, !offsetHadSuccess, offsetHadHTTP400 {
+            if offsetHours > 0, !offsetHadSuccess, offsetHTTP400Count == 2 {
                 NSLog(
-                    "NavPlanner FR24 schedule stop offset=%d reason=http400 total=%d",
+                    "NavPlanner FR24 schedule pagination_end offset=%d responses=%d total=%d",
                     offsetHours,
+                    offsetHTTP400Count,
                     flights.count
                 )
                 break
@@ -3019,35 +3158,50 @@ private final class FR24Service {
             && !arrivalCodes.intersection(destCodes).isEmpty
     }
 
-    private func webGet(path: String, params: [(String, String)]) throws -> [String: Any] {
+    private func webGet(
+        path: String,
+        params: [(String, String)],
+        expectedPaginationHTTP400: Bool = false,
+        useBrowser: Bool = true,
+        retryChallenge: Bool = true
+    ) throws -> [String: Any] {
         let retryDelays: [TimeInterval] = [0.7, 1.5]
-        for attempt in 0...retryDelays.count {
-            do {
-                let payload = try FR24BrowserFetch.shared.performJSONRequest(path: path, params: params)
-                FR24SessionStore.recordSuccessfulAccess(userDefaults: userDefaults)
-                return payload
-            } catch {
-                let message = error.localizedDescription
-                let retryable = Self.isChallengeLikeRequestError(message)
-                NSLog(
-                    "NavPlanner FR24 browser request error path=%@ attempt=%d retryable=%@ error=%@",
-                    path,
-                    attempt + 1,
-                    retryable ? "yes" : "no",
-                    message
-                )
-                if retryable {
-                    FR24SessionStore.recordChallenge(userDefaults: userDefaults)
-                    if attempt < retryDelays.count {
-                        let jitter = Double.random(in: 0.05...0.25)
-                        Thread.sleep(forTimeInterval: retryDelays[attempt] + jitter)
-                        continue
+        if useBrowser {
+            for attempt in 0...retryDelays.count {
+                do {
+                    let payload = try FR24BrowserFetch.shared.performJSONRequest(path: path, params: params)
+                    FR24SessionStore.recordSuccessfulAccess(userDefaults: userDefaults)
+                    return payload
+                } catch {
+                    let message = error.localizedDescription
+                    let retryable = Self.isChallengeLikeRequestError(message)
+                    let cancelled = Self.isCancelledRequestError(message)
+                    let expectedPaginationEnd = expectedPaginationHTTP400 && message.contains("HTTP 400")
+                    if !cancelled && !expectedPaginationEnd {
+                        NSLog(
+                            "NavPlanner FR24 browser request error path=%@ attempt=%d retryable=%@ error=%@",
+                            path,
+                            attempt + 1,
+                            retryable ? "yes" : "no",
+                            message
+                        )
                     }
+                    if retryable {
+                        FR24SessionStore.recordChallenge(userDefaults: userDefaults)
+                        if retryChallenge, attempt < retryDelays.count {
+                            let jitter = Double.random(in: 0.05...0.25)
+                            Thread.sleep(forTimeInterval: retryDelays[attempt] + jitter)
+                            continue
+                        }
+                    }
+                    if cancelled {
+                        break
+                    }
+                    if Self.shouldSurfaceBrowserRequestError(message) {
+                        throw serviceError(message)
+                    }
+                    break
                 }
-                if Self.shouldSurfaceBrowserRequestError(message) {
-                    throw serviceError(message)
-                }
-                break
             }
         }
 
@@ -3088,6 +3242,13 @@ private final class FR24Service {
             || lowercased.contains("html response")
             || lowercased.contains("http 429")
             || lowercased.contains("too many requests")
+    }
+
+    private static func isCancelledRequestError(_ message: String) -> Bool {
+        let lowercased = message.lowercased()
+        return lowercased.contains("cancelled")
+            || lowercased.contains("canceled")
+            || lowercased.contains("-999")
     }
 
     private static func shouldSurfaceBrowserRequestError(_ message: String) -> Bool {

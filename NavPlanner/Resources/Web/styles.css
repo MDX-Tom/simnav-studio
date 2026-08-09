@@ -3519,6 +3519,20 @@ html[data-theme="day"] .selection-leg-turn {
   z-index: 210;
 }
 
+/* Procedure 局部视图加载在线瓦片时，旧视口快照只作为底层短期兜底；
+   新瓦片、航路、STAR 和标签均在它上方逐步出现。 */
+.online-tile-viewport-transition {
+  position: absolute;
+  inset: 0;
+  z-index: 205;
+  display: block;
+  max-width: none;
+  max-height: none;
+  pointer-events: none;
+  transform: translateZ(0);
+  transition: opacity 0.22s ease-out;
+}
+
 #map.is-smooth-zooming .terrain-pane {
   will-change: transform;
 }

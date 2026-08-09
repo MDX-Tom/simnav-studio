@@ -63,7 +63,7 @@ workflow_config() {
       printf '%s' '{"mobileTab":"calculate","detailTab":"calculate","mobilePanelMapRatio":27,"calculateManufacturer":"Airbus","calculateAircraft":"A320-200","zfwKg":62500,"fuelKg":9100,"cruiseAltitudeFt":37000,"cruiseMach":0.78,"descentRateFpm":1700,"profileZoom":1.2,"profilePan":0.55,"detailScrollTarget":".calculate-profile-card","detailScrollOffset":18}'
       ;;
     fr24)
-      printf '%s' '{"mobileTab":"query","detailTab":"query","mobilePanelMapRatio":27,"syntheticFR24Track":{"pointCount":480,"fitBounds":false},"detailScrollTarget":"#fr24ProfileCard","detailScrollOffset":18}'
+      printf '%s' '{"mobileTab":"query","detailTab":"query","mobilePanelMapRatio":27,"syntheticFR24Track":{"pointCount":480,"fitBounds":false,"reportMetrics":true},"detailScrollTarget":"#fr24ProfileCard","detailScrollOffset":18}'
       ;;
     settings)
       printf '%s' '{"mobileTab":"settings","detailTab":"settings","mobilePanelMapRatio":27,"settingsMapSource":"offline","detailScrollTarget":".map-selection-card","detailScrollOffset":18}'
@@ -203,6 +203,16 @@ capture_one() {
     fi
   elif ! rg -q '\"routeViewport\":\{[^}]*\"clippedPoints\":0[^}]*\"clippedLabels\":0' "$log_path"; then
     printf '\n完整航路或可见标签未落入地图可见区域：%s。\n' "$key" >&2
+    tail -80 "$log_path" >&2
+    return 1
+  fi
+  if [[ "$workflow" == "calculate" ]] && ! rg -q '\"calculateWeather\":\{[^}]*\"passed\":true\},\"calculateSpeed\":\{[^}]*\"passed\":true' "$log_path"; then
+    printf '\nCalculate 剖面坐标轴未保持等比：%s。\n' "$key" >&2
+    tail -80 "$log_path" >&2
+    return 1
+  fi
+  if [[ "$workflow" == "fr24" ]] && ! rg -q '\"fr24\":\{[^}]*\"passed\":true' "$log_path"; then
+    printf '\nFR24 剖面坐标轴未保持等比：%s。\n' "$key" >&2
     tail -80 "$log_path" >&2
     return 1
   fi

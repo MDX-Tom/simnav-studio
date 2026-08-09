@@ -652,7 +652,7 @@ struct MapWebView: UIViewRepresentable {
                     payload["local_status"] = "synced_from_browser"
                     payload["cookie_count"] = fr24Cookies.count
                     payload["browser_cookie_count"] = browserCookieNames.count
-                    payload["message"] = "已从内置浏览器同步 FR24 Web 会话。"
+                    payload["message"] = "已保存内置浏览器 FR24 会话，返回 App 后将立即验证。"
                 }
                 payload["debug"] = [
                     "url": navString(browserDiagnostics["url"]),

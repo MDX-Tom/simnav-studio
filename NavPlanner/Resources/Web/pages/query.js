@@ -21,6 +21,7 @@ export function registerQueryPage(context) {
     saveFR24Access,
     clearFR24Access,
     refreshFR24AccessStatus,
+    probeFR24Access,
     updateFR24ProfileCursor,
     handleFR24ProfilePointer,
     ensureFR24ProfileResizeObserver,
@@ -77,7 +78,7 @@ export function registerQueryPage(context) {
   });
   elements.fr24RefreshAccessButton?.addEventListener("click", () => {
     refreshFR24AccessStatus()
-      .then(() => setFR24QueryStatus(elements.fr24AccessSummary?.textContent || t("query.accessInitial")))
+      .then(() => probeFR24Access({ announce: true, force: true }))
       .catch(setErrorStatus);
   });
   elements.fr24ProfileSlider?.addEventListener("input", (event) => {

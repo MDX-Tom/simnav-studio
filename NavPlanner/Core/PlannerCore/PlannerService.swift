@@ -1,6 +1,11 @@
 import Foundation
+import os.signpost
 
 final class PlannerService: @unchecked Sendable {
+    private static let performanceLog = OSLog(
+        subsystem: Bundle.main.bundleIdentifier ?? "NavPlanner",
+        category: "PlannerPerformance"
+    )
     private let dataStore: LocalDataStore
     private let planningCacheLock = NSLock()
     private var planningCacheDatabaseKey: String?
@@ -27,6 +32,36 @@ final class PlannerService: @unchecked Sendable {
 
     init(dataStore: LocalDataStore) {
         self.dataStore = dataStore
+    }
+
+    private func beginPerformanceSignpost(_ name: StaticString) -> OSSignpostID {
+        let signpostID = OSSignpostID(log: Self.performanceLog)
+        os_signpost(.begin, log: Self.performanceLog, name: name, signpostID: signpostID)
+        return signpostID
+    }
+
+    private func endPerformanceSignpost(_ name: StaticString, signpostID: OSSignpostID) {
+        os_signpost(.end, log: Self.performanceLog, name: name, signpostID: signpostID)
+    }
+
+    /// 在用户首次输入前以低优先级打开 SQLite 并触碰机场主索引。
+    /// 查询固定为少量行，不构建航路图或 nav-overlay 全量缓存。
+    func prewarmAirportIndex() {
+        let signpostID = beginPerformanceSignpost("AirportIndexPrewarm")
+        defer { endPerformanceSignpost("AirportIndexPrewarm", signpostID: signpostID) }
+        _ = dataStore.read(fallback: false) { database in
+            _ = try database.rows(
+                sql: """
+                select airport_identifier, iata_ata_designator,
+                       airport_ref_latitude, airport_ref_longitude
+                from tbl_airports
+                where airport_identifier >= 'A'
+                order by airport_identifier
+                limit 32
+                """
+            )
+            return true
+        }
     }
 
     private struct ProcedureGroupKey: Hashable, Comparable {
@@ -109,6 +144,8 @@ final class PlannerService: @unchecked Sendable {
     }
 
     func search(query: String, limit: Int = 8) -> [SearchResult] {
+        let signpostID = beginPerformanceSignpost("Search")
+        defer { endPerformanceSignpost("Search", signpostID: signpostID) }
         let token = query.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard !token.isEmpty else { return [] }
         let clampedLimit = max(1, min(limit, 50))
@@ -220,7 +257,9 @@ final class PlannerService: @unchecked Sendable {
     }
 
     func airportPayload(ident: String) -> [String: Any]? {
-        dataStore.read(fallback: nil as [String: Any]?) { database in
+        let signpostID = beginPerformanceSignpost("AirportPayload")
+        defer { endPerformanceSignpost("AirportPayload", signpostID: signpostID) }
+        return dataStore.read(fallback: nil as [String: Any]?) { database in
             guard let airportIdent = try resolveAirportIdentifier(ident, database: database),
                   let airport = try database.first(
                     sql: """
@@ -415,7 +454,19 @@ final class PlannerService: @unchecked Sendable {
         }
     }
 
-    func navOverlayPayload(south: Double, west: Double, north: Double, east: Double, zoom: Int) -> [String: Any] {
+    func navOverlayPayload(
+        south: Double,
+        west: Double,
+        north: Double,
+        east: Double,
+        zoom: Int,
+        shouldCancel: () -> Bool = { false }
+    ) -> [String: Any] {
+        let signpostID = beginPerformanceSignpost("NavOverlayPayload")
+        defer { endPerformanceSignpost("NavOverlayPayload", signpostID: signpostID) }
+        if shouldCancel() {
+            return emptyOverlayPayload()
+        }
         let southBound = min(south, north)
         let northBound = max(south, north)
         var westBound = west
@@ -431,7 +482,13 @@ final class PlannerService: @unchecked Sendable {
         let worldOffsets = worldCopyOffsetsForBounds(west: westBound, east: eastBound)
 
         return dataStore.read(fallback: emptyOverlayPayload()) { database in
+            if shouldCancel() {
+                return emptyOverlayPayload()
+            }
             let cache = try navOverlayData(database: database)
+            if shouldCancel() {
+                return emptyOverlayPayload()
+            }
 
             let airports: [[String: Any]]
             if zoom >= 7 {
@@ -451,6 +508,9 @@ final class PlannerService: @unchecked Sendable {
 
             var airwayCandidates = cache["airways", default: []]
                 .filter { segmentIntersectsBounds($0, south: requestSouth, west: westBound, north: requestNorth, east: eastBound, worldOffsets: worldOffsets) }
+            if shouldCancel() {
+                return emptyOverlayPayload()
+            }
             if let maxAirways = zoom >= 8 ? 18000 : zoom >= 6 ? 9000 : nil,
                airwayCandidates.count > maxAirways {
                 airwayCandidates = spatiallyDistributeSegments(
@@ -503,6 +563,10 @@ final class PlannerService: @unchecked Sendable {
                 waypoints.append(contentsOf: terminalWaypoints)
             }
 
+            if shouldCancel() {
+                return emptyOverlayPayload()
+            }
+
             var navaids: [[String: Any]] = []
             if zoom >= 5 {
                 let maxNavaids = zoom >= 8 ? 700 : 260
@@ -543,6 +607,8 @@ final class PlannerService: @unchecked Sendable {
         departureRunway: String = "ALL",
         arrivalRunway: String = "ALL"
     ) -> [String: Any] {
+        let signpostID = beginPerformanceSignpost("RouteResolvePayload")
+        defer { endPerformanceSignpost("RouteResolvePayload", signpostID: signpostID) }
         let departureToken = departure.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         let arrivalToken = arrival.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         let routeText = route.trimmingCharacters(in: .whitespacesAndNewlines)
