@@ -69,14 +69,14 @@ App 以 SwiftUI 构建原生外壳，以 WKWebView 承载地图工作区，并�
 
 ## 界面展示 🖥️
 
-<table>
+<table align="center" width="80%">
   <tr>
-    <td align="center"><strong>亮色 · iPhone 17 Pro 竖屏</strong><br /><img alt="iPhone 亮色主题下预览按跑道筛选的 EDDM STAR 总览" src="Media/workflows/zh-Hans/day/02-procedure-iphone.webp" height="340" /></td>
-    <td align="center"><strong>亮色 · iPad Pro 13 英寸横屏</strong><br /><img alt="iPad 亮色主题下预览按跑道筛选的 EDDM STAR 总览" src="Media/workflows/zh-Hans/day/02-procedure-ipad.webp" height="340" /></td>
+    <td align="center"><strong>亮色 · iPhone 17 Pro 竖屏</strong><br /><img alt="iPhone 亮色主题下预览按跑道筛选的 EDDM STAR 总览" src="Media/workflows/zh-Hans/day/02-procedure-iphone.webp" height="272" /></td>
+    <td align="center"><strong>亮色 · iPad Pro 13 英寸横屏</strong><br /><img alt="iPad 亮色主题下预览按跑道筛选的 EDDM STAR 总览" src="Media/workflows/zh-Hans/day/02-procedure-ipad.webp" height="272" /></td>
   </tr>
   <tr>
-    <td align="center"><strong>暗色 · iPhone 17 Pro 竖屏</strong><br /><img alt="iPhone 暗色主题下预览按跑道筛选的 EDDM STAR 总览" src="Media/workflows/zh-Hans/night/02-procedure-iphone.webp" height="340" /></td>
-    <td align="center"><strong>暗色 · iPad Pro 13 英寸横屏</strong><br /><img alt="iPad 暗色主题下预览按跑道筛选的 EDDM STAR 总览" src="Media/workflows/zh-Hans/night/02-procedure-ipad.webp" height="340" /></td>
+    <td align="center"><strong>暗色 · iPhone 17 Pro 竖屏</strong><br /><img alt="iPhone 暗色主题下预览按跑道筛选的 EDDM STAR 总览" src="Media/workflows/zh-Hans/night/02-procedure-iphone.webp" height="272" /></td>
+    <td align="center"><strong>暗色 · iPad Pro 13 英寸横屏</strong><br /><img alt="iPad 暗色主题下预览按跑道筛选的 EDDM STAR 总览" src="Media/workflows/zh-Hans/night/02-procedure-ipad.webp" height="272" /></td>
   </tr>
 </table>
 

@@ -69,14 +69,14 @@ A SwiftUI shell surrounds a WKWebView map workspace and an in-app Swift service 
 
 ## Interface Showcase 🖥️
 
-<table>
+<table align="center" width="80%">
   <tr>
-    <td align="center"><strong>Light · iPhone 17 Pro portrait</strong><br /><img alt="NavPlanner light theme on iPhone previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/day/02-procedure-iphone.webp" height="340" /></td>
-    <td align="center"><strong>Light · iPad Pro 13-inch landscape</strong><br /><img alt="NavPlanner light theme on iPad previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/day/02-procedure-ipad.webp" height="340" /></td>
+    <td align="center"><strong>Light · iPhone 17 Pro portrait</strong><br /><img alt="NavPlanner light theme on iPhone previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/day/02-procedure-iphone.webp" height="272" /></td>
+    <td align="center"><strong>Light · iPad Pro 13-inch landscape</strong><br /><img alt="NavPlanner light theme on iPad previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/day/02-procedure-ipad.webp" height="272" /></td>
   </tr>
   <tr>
-    <td align="center"><strong>Dark · iPhone 17 Pro portrait</strong><br /><img alt="NavPlanner dark theme on iPhone previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/night/02-procedure-iphone.webp" height="340" /></td>
-    <td align="center"><strong>Dark · iPad Pro 13-inch landscape</strong><br /><img alt="NavPlanner dark theme on iPad previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/night/02-procedure-ipad.webp" height="340" /></td>
+    <td align="center"><strong>Dark · iPhone 17 Pro portrait</strong><br /><img alt="NavPlanner dark theme on iPhone previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/night/02-procedure-iphone.webp" height="272" /></td>
+    <td align="center"><strong>Dark · iPad Pro 13-inch landscape</strong><br /><img alt="NavPlanner dark theme on iPad previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/night/02-procedure-ipad.webp" height="272" /></td>
   </tr>
 </table>
 
