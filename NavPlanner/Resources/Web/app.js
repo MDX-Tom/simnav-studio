@@ -13702,6 +13702,15 @@ function isFR24PlannedFlight(flight) {
     && Boolean(scheduledDeparture && scheduledDeparture >= Math.floor(Date.now() / 1000) - 6 * 3600);
 }
 
+/**
+ * 功能：识别 FR24 明确标记为取消的航班，仅用于卡片视觉状态。
+ * 边界：取消航班不等同于未起飞计划航班，不改变下载、绘制或拟合分支。
+ */
+function isFR24CancelledFlight(flight) {
+  const status = String(flight?.status || "").trim();
+  return /(?:\bcancel(?:led|ed)?\b|取消)/i.test(status);
+}
+
 function getFR24FlightByKey(key) {
   return state.fr24Flights.get(key) || state.fr24CacheFlights.get(key) || null;
 }
@@ -13769,6 +13778,7 @@ function renderFR24CacheActions(flight, key) {
 
 function renderFR24FlightCard(flight, key, { history = false, cacheItem = false } = {}) {
   const planned = !cacheItem && isFR24PlannedFlight(flight);
+  const cancelled = isFR24CancelledFlight(flight);
   const route = `${flightAirportCode(flight, "origin")} → ${flightAirportCode(flight, "dest")}`;
   const airline = flight.airline || t("query.airlineUnknown");
   const aircraft = [flight.aircraft, flight.aircraft_registration].filter(Boolean).join(" / ") || t("query.aircraftUnknown");
@@ -13798,7 +13808,7 @@ function renderFR24FlightCard(flight, key, { history = false, cacheItem = false 
     ? `<div class="query-flight-planned-hint">${escapeHtml(t("query.plannedHint"))}</div>`
     : "";
   return `
-    <article class="query-flight-card ${history ? "is-history" : ""} ${cacheItem ? "is-cache" : ""} ${planned ? "is-planned" : ""} ${isCurrentDrawn ? "is-current-drawn" : ""}" data-fr24-card-key="${escapeHtml(key)}">
+    <article class="query-flight-card ${history ? "is-history" : ""} ${cacheItem ? "is-cache" : ""} ${planned ? "is-planned" : ""} ${cancelled ? "is-cancelled" : ""} ${isCurrentDrawn ? "is-current-drawn" : ""}" data-fr24-card-key="${escapeHtml(key)}">
       <div class="query-flight-head">
         <div>
           <div class="query-flight-number">${escapeHtml(flightPrimaryLabel(flight))}</div>

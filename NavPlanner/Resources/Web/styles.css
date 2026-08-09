@@ -1985,22 +1985,29 @@ body.left-panel-expanded .selection-table {
 
 .query-flight-card.is-planned,
 .query-flight-card.is-planned.is-history,
-.query-flight-card.is-planned.is-current-drawn {
+.query-flight-card.is-planned.is-current-drawn,
+.query-flight-card.is-cancelled,
+.query-flight-card.is-cancelled.is-history,
+.query-flight-card.is-cancelled.is-current-drawn {
   border-color: rgba(160, 174, 189, 0.34);
   background: linear-gradient(155deg, rgba(51, 60, 70, 0.97), rgba(29, 35, 43, 0.98));
   box-shadow: 0 10px 24px rgba(7, 11, 17, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.045);
 }
 
-.query-flight-card.is-planned .query-flight-number {
+.query-flight-card.is-planned .query-flight-number,
+.query-flight-card.is-cancelled .query-flight-number {
   color: rgba(242, 246, 250, 0.96);
 }
 
 .query-flight-card.is-planned .query-flight-route,
-.query-flight-card.is-planned .query-flight-actual-route {
+.query-flight-card.is-planned .query-flight-actual-route,
+.query-flight-card.is-cancelled .query-flight-route,
+.query-flight-card.is-cancelled .query-flight-actual-route {
   color: rgba(210, 219, 228, 0.9);
 }
 
-.query-flight-card.is-planned .query-flight-meta {
+.query-flight-card.is-planned .query-flight-meta,
+.query-flight-card.is-cancelled .query-flight-meta {
   color: rgba(195, 205, 215, 0.82);
 }
 
@@ -2019,13 +2026,15 @@ body.left-panel-expanded .selection-table {
   line-height: 1.3;
 }
 
-.query-flight-card.is-planned .ghost-button {
+.query-flight-card.is-planned .ghost-button,
+.query-flight-card.is-cancelled .ghost-button {
   border-color: rgba(190, 202, 214, 0.28);
   background: rgba(238, 244, 249, 0.07);
   color: rgba(237, 242, 247, 0.92);
 }
 
-.query-flight-card.is-planned .ghost-button:hover:not(:disabled) {
+.query-flight-card.is-planned .ghost-button:hover:not(:disabled),
+.query-flight-card.is-cancelled .ghost-button:hover:not(:disabled) {
   border-color: rgba(205, 216, 227, 0.46);
   background: rgba(238, 244, 249, 0.13);
 }
@@ -3486,13 +3495,17 @@ html[data-theme="day"] .query-flight-badge-current {
 
 html[data-theme="day"] .query-flight-card.is-planned,
 html[data-theme="day"] .query-flight-card.is-planned.is-history,
-html[data-theme="day"] .query-flight-card.is-planned.is-current-drawn {
+html[data-theme="day"] .query-flight-card.is-planned.is-current-drawn,
+html[data-theme="day"] .query-flight-card.is-cancelled,
+html[data-theme="day"] .query-flight-card.is-cancelled.is-history,
+html[data-theme="day"] .query-flight-card.is-cancelled.is-current-drawn {
   border-color: rgba(63, 75, 88, 0.52);
   background: linear-gradient(155deg, #46515d, #303842);
   box-shadow: 0 10px 24px rgba(22, 31, 40, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-html[data-theme="day"] .query-flight-card.is-planned .ghost-button {
+html[data-theme="day"] .query-flight-card.is-planned .ghost-button,
+html[data-theme="day"] .query-flight-card.is-cancelled .ghost-button {
   border-color: rgba(215, 225, 234, 0.32);
   background: rgba(255, 255, 255, 0.09);
   color: rgba(247, 250, 252, 0.96);
