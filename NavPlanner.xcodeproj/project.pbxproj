@@ -68,7 +68,6 @@
 		F00000000000000000000103 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		F00000000000000000000104 /* Web */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Web; sourceTree = "<group>"; };
 		F00000000000000000000105 /* Database */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Database; sourceTree = "<group>"; };
-		F00000000000000000000106 /* SampleMaps */ = {isa = PBXFileReference; lastKnownFileType = folder; path = SampleMaps; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -112,7 +111,6 @@
 			children = (
 				F00000000000000000000104 /* Web */,
 				F00000000000000000000105 /* Database */,
-				F00000000000000000000106 /* SampleMaps */,
 			);
 			path = Resources;
 			sourceTree = "<group>";

@@ -386,7 +386,6 @@ const TRANSLATIONS = {
   "map.aero.title": { "zh-Hans": "简洁航空矢量底图", en: "Clean aviation vector base map" },
   "map.offline.label": { "zh-Hans": "离线地形", en: "Offline Terrain" },
   "map.offline.title": { "zh-Hans": "本地 map_offline 资源", en: "Local map_offline resources" },
-  "map.offlineControl": { "zh-Hans": "管理离线地形地图", en: "Manage offline terrain maps" },
   "map.overlay.base": { "zh-Hans": "地图层", en: "Base map layer" },
   "map.overlay.route": { "zh-Hans": "航路绘制", en: "Route drawing" },
   "map.overlay.manualRoute": { "zh-Hans": "人工绘制航路", en: "Manual route drawing" },
@@ -1602,7 +1601,6 @@ let terrainDemSource = null;
 let pmtilesProtocol = null;
 let mapOverlayControlContainer = null;
 let trackHistoryControlContainer = null;
-let offlineMapControlContainer = null;
 let offlineMapModalElement = null;
 let offlineBoundsMiniMap = null;
 let offlineBoundsMiniMapContainer = null;
@@ -4228,15 +4226,6 @@ function setRasterBaseLayer(type) {
 }
 
 /**
- * 功能：更新离线地图管理按钮的显隐状态。
- * 输入：无。
- * 输出：无返回值；仅修改地图控件样式。
- */
-function updateOfflineMapControlVisibility() {
-  offlineMapControlContainer?.classList.toggle("hidden", state.baseMap !== "offline");
-}
-
-/**
  * 功能：刷新离线底图瓦片 URL，避免切换资源后浏览器复用旧图块。
  * 输入：无。
  * 输出：无返回值；更新离线图层 URL 并重绘。
@@ -4380,13 +4369,6 @@ function updateMapTypeOptionLabels() {
   });
 }
 
-function updateOfflineMapControlLabel() {
-  document.querySelectorAll(".offline-map-toggle").forEach((button) => {
-    button.title = t("map.offlineControl");
-    button.setAttribute("aria-label", t("map.offlineControl"));
-  });
-}
-
 /**
  * 功能：兼容无 attributionControl 的地图实例，彻底隐藏底图版权水印时避免调用报错。
  * 输入：text 为版权文本。
@@ -4421,7 +4403,6 @@ function handleOfflineTerrainUnavailable({ openManager = false, preserveSettings
     removeMapAttribution(VECTOR_ATTRIBUTION);
     removeMapAttribution(OFFLINE_VECTOR_ATTRIBUTION);
     setRasterBaseLayer("terrain");
-    updateOfflineMapControlVisibility();
     updateMapTypeOptionState();
     map.invalidateSize({ pan: false });
     scheduleNavLabelSnapshot();
@@ -4479,7 +4460,6 @@ function setBaseMap(type, { preserveSettingsMode = false, openManagerWhenUnavail
       refreshOfflineMapStatus().catch(setErrorStatus);
     }
   }
-  updateOfflineMapControlVisibility();
   updateMapTypeOptionState();
   map.invalidateSize({ pan: false });
   scheduleNavLabelSnapshot();
@@ -5132,35 +5112,6 @@ function createTrackHistoryControl() {
 }
 
 /**
- * 功能：创建离线地图管理入口按钮。
- * 输入：无。
- * 输出：Leaflet 控件实例；仅在离线地形底图启用时显示。
- */
-function createOfflineMapControl() {
-  const control = L.control({ position: "bottomright" });
-  control.onAdd = () => {
-    const container = L.DomUtil.create("div", "leaflet-control offline-map-control hidden");
-    offlineMapControlContainer = container;
-    const button = L.DomUtil.create("button", "offline-map-toggle", container);
-    button.type = "button";
-    button.title = t("map.offlineControl");
-    button.setAttribute("aria-label", t("map.offlineControl"));
-    button.innerHTML = `
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <ellipse cx="12" cy="5.5" rx="7" ry="3" />
-        <path d="M5 5.5v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" />
-        <path d="M5 11.5v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" />
-      </svg>
-    `;
-    button.addEventListener("click", () => openOfflineMapManager());
-    L.DomEvent.disableClickPropagation(container);
-    L.DomEvent.disableScrollPropagation(container);
-    return container;
-  };
-  return control;
-}
-
-/**
  * 功能：确保离线地图管理弹窗 DOM 已创建。
  * 输入：无。
  * 输出：离线地图管理弹窗根节点。
@@ -5409,7 +5360,6 @@ async function resetAllSettingsAndCaches() {
     removeMapAttribution(VECTOR_ATTRIBUTION);
     removeMapAttribution(OFFLINE_VECTOR_ATTRIBUTION);
     setRasterBaseLayer("terrain");
-    updateOfflineMapControlVisibility();
     updateMapTypeOptionState();
     refreshOnlineBaseLayer({ bumpVersion: true });
     map.invalidateSize({ pan: false });
@@ -8017,7 +7967,6 @@ function refreshLocalizedDynamicText() {
   updateMapOverlayControlLabels();
   updateTrackHistoryControlLabels();
   syncProcedureOverviewHeadings();
-  updateOfflineMapControlLabel();
   if (state.databaseStatus) {
     updateDatabaseStatus(state.databaseStatus);
   }
@@ -13973,10 +13922,6 @@ function updateFR24CacheSummary(payload) {
   const count = formatCount(payload?.file_count || 0);
   elements.fr24CacheTitle.textContent = t("query.cacheSummary", { size, count });
   elements.fr24CacheSummary.textContent = payload?.root || t("query.cacheInitial");
-}
-
-function formatFR24AccessFlag(value) {
-  return value ? t("query.accessConfigured") : t("query.accessMissing");
 }
 
 function updateFR24AccessSummary(payload) {

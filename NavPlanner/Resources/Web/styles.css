@@ -753,11 +753,6 @@ textarea:focus-visible {
   border-color: rgba(84, 189, 255, 0.38);
 }
 
-.route-option-group .choice-button {
-  min-width: 116px;
-  justify-content: center;
-}
-
 .helper-text,
 .status {
   font-size: calc(11px - var(--device-font-size-reduction));
@@ -3952,55 +3947,6 @@ html[data-theme="day"] .selection-leg-turn {
   stroke-dasharray: 2 2;
 }
 
-.offline-map-control {
-  margin-bottom: 8px !important;
-  border: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-.offline-map-toggle {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border: 1px solid rgba(72, 213, 151, 0.32);
-  border-radius: 12px;
-  background:
-    radial-gradient(circle at 28% 18%, rgba(72, 213, 151, 0.2), transparent 44%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(229, 246, 240, 0.92));
-  color: #173550;
-  cursor: pointer;
-  box-shadow:
-    0 14px 28px rgba(9, 18, 31, 0.24),
-    inset 0 1px 0 rgba(255, 255, 255, 0.78);
-  transition:
-    transform 0.16s ease,
-    border-color 0.16s ease,
-    box-shadow 0.16s ease,
-    color 0.16s ease;
-}
-
-.offline-map-toggle svg {
-  width: 20px;
-  height: 20px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.offline-map-toggle:hover {
-  transform: translateY(-1px);
-  border-color: rgba(72, 213, 151, 0.62);
-  color: #08755f;
-  box-shadow:
-    0 18px 34px rgba(9, 18, 31, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.88);
-}
-
 .offline-map-modal {
   position: fixed;
   inset: 0;
@@ -6872,8 +6818,7 @@ html[data-theme="day"] .offline-progress {
   html[data-mobile-layout="true"] .leaflet-control-zoom a,
   html[data-mobile-layout="true"] .track-history-button,
   html[data-mobile-layout="true"] .map-type-toggle,
-  html[data-mobile-layout="true"] .map-overlay-toggle,
-  html[data-mobile-layout="true"] .offline-map-toggle {
+  html[data-mobile-layout="true"] .map-overlay-toggle {
     width: 26px !important;
     height: 26px !important;
     line-height: 24px !important;

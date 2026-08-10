@@ -3867,12 +3867,6 @@ private final class FR24Service {
         return single.isEmpty ? [] : [single]
     }
 
-    private static func urlPathComponent(_ value: String) -> String {
-        var allowed = CharacterSet.alphanumerics
-        allowed.insert(charactersIn: "-._~")
-        return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
-    }
-
     private static func stringValue(_ value: Any?) -> String {
         switch value {
         case let value as String:
