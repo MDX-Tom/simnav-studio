@@ -249,7 +249,7 @@ App 以 SwiftUI 构建原生外壳，以 WKWebView 承载地图工作区，并�
 
 - macOS 与 Xcode
 - iOS 17.0 及以上部署目标
-- iPhone / iPad Simulator 或真机
+- 目标可选 iPhone / iPad Simulator / macOS 或真机
 - 私有构建可选用本地导航数据库
 
 ### 快速开始
@@ -277,52 +277,6 @@ Apple Development 证书。
 
 私有构建可把本地数据库放在 `NavPlanner/Resources/Database/navdata.sqlite`，也可在 App 启动后从 Settings 导入。公开分发时，不应包含尚未确认再分发权利的导航数据。
 
-### 签名与公开发布工件
-
-GitHub 公开发布的 IPA 必须是用于侧载的未签名包，不得包含维护者证书、
-Team ID、provisioning profile、账号邮箱、私钥、App Store Connect 密钥、
-xcarchive 或原始构建日志。安装者应通过 AltStore、SideStore、Sideloadly
-或其他可信签名流程，使用自己的账号重新签名。
-
-本机 Apple Development 配置只能写入已被 Git 忽略的
-`Config/CodeSigning.local.xcconfig`。受跟踪的
-`Config/CodeSigning.xcconfig` 会可选加载该文件，因此 Xcode GUI 可以在本机
-正常签名，而新克隆和公开 unsigned 构建不包含个人身份。没有私有 CI 凭据时，
-Mac 工件只做 ad-hoc 签名且不进行 notarization；如未来需要 Developer ID /
-App Store 签名，只能在受保护 CI 中从 Secret 临时导入。详见
-[公开发布封包说明](Tools/Release/README.md)。
-
-<details>
-<summary><strong>在 iPhone、iPad 与 Mac 上安装</strong></summary>
-
-#### iPhone 与 iPad
-
-GitHub 提供的 IPA 未签名，不能直接安装；其中刻意不包含维护者证书或
-provisioning profile。
-
-1. 下载带 `-unsigned.ipa` 后缀的 IPA 与 `SHA256SUMS.txt`，先复验校验和。
-2. 将 IPA 导入 AltStore、SideStore、Sideloadly 或其他可信签名工具。
-3. 由工具使用安装者自己的 Apple Account 重新签名并安装。
-4. 按工具与设备提示信任本地签名；仅在 iOS/iPadOS 明确要求时启用
-   Developer Mode。
-
-如需直接通过本机 Xcode 安装，先运行
-`Tools/Signing/setup_local_signing.sh`，连接设备，在 NavPlanner scheme 中选择
-该设备并点击 Run。生成的签名配置只留在当前 Mac，且始终被 Git 忽略。
-
-#### Mac
-
-1. 下载带 `-catalyst-adhoc-not-notarized.dmg` 后缀的 DMG，并复验 SHA-256。
-2. 打开 DMG，将 `NavPlanner.app` 拖入“应用程序”。
-3. 首次启动时按住 Control 点击 App 并选择“打开”；如果 macOS 仍拦截，只有在
-   已核实校验和与下载来源后，才使用“系统设置 → 隐私与安全性 → 仍要打开”。
-
-当前 Mac 版本是 arm64/x86_64 universal Mac Catalyst App。它只有 ad-hoc
-签名且未 notarize，因此不具备 Developer ID/Gatekeeper 公开分发信任；它也不是
-原生 AppKit App 或 Designed-for-iPad Wrapper。
-
-</details>
-
 <details>
 <summary><strong>命令行构建</strong></summary>
 
@@ -346,6 +300,59 @@ xcodebuild -project NavPlanner.xcodeproj \
   -derivedDataPath /private/tmp/NavPlannerDerived \
   build
 ```
+
+</details>
+
+### 安装 Releases 中的 IPA 与 DMG
+
+<details>
+<summary><strong>查看原因</strong></summary>
+
+GitHub 公开发布的 IPA 必须是用于侧载的未签名包，不得包含维护者证书、
+Team ID、provisioning profile、账号邮箱、私钥、App Store Connect 密钥、
+xcarchive 或原始构建日志。
+
+本机 Apple Development 配置只能写入已被 Git 忽略的
+`Config/CodeSigning.local.xcconfig`。受跟踪的
+`Config/CodeSigning.xcconfig` 会可选加载该文件，因此 Xcode GUI 可以在本机
+正常签名，而新克隆和公开 unsigned 构建不包含个人身份。没有私有 CI 凭据时，
+Mac 工件只做 ad-hoc 签名且不进行 notarization；如未来需要 Developer ID /
+App Store 签名，只能在受保护 CI 中从 Secret 临时导入。详见
+[公开发布封包说明](Tools/Release/README.md)。
+
+</details>
+
+**安装 iPhone App 需通过 AltStore、SideStore、Sideloadly
+或其他可信签名流程，使用自己的账号重新签名。**
+
+<details open>
+<summary><strong>在 iPhone、iPad 与 Mac 上安装</strong></summary>
+
+#### iPhone 与 iPad
+
+GitHub 提供的 IPA 未签名，不包含维护者证书或
+provisioning profile，不能直接安装。
+
+1. 下载带 `-unsigned.ipa` 后缀的 IPA 与 `SHA256SUMS.txt`，先复验校验和。
+2. 将 IPA 导入 AltStore、SideStore、Sideloadly 或其他可信签名工具。
+3. 由工具使用安装者自己的 Apple Account 重新签名并安装。
+4. 按工具与设备提示信任本地签名；仅在 iOS/iPadOS 明确要求时启用
+   Developer Mode。
+
+此外，也可以直接通过本机 Xcode 安装，先运行
+`Tools/Signing/setup_local_signing.sh`，连接设备，在 NavPlanner scheme 中选择
+该设备并点击 Run。生成的签名配置只留在当前 Mac，且始终被 Git 忽略。
+
+#### Mac
+
+1. 下载带 `-catalyst-adhoc-not-notarized.dmg` 后缀的 DMG，并复验 SHA-256。
+2. 打开 DMG，将 `NavPlanner.app` 拖入“应用程序”。
+3. 首次启动时按住 Control 点击 App 并选择“打开”；如果 macOS 仍拦截，只有在
+   已核实校验和与下载来源后，才使用“系统设置 → 隐私与安全性 → 仍要打开”。
+
+当前 Mac 版本是 arm64/x86_64 universal Mac Catalyst App。它只有 ad-hoc
+签名且未 notarize，因此不具备 Developer ID/Gatekeeper 公开分发信任；它也不是
+原生 AppKit App 或 Designed-for-iPad Wrapper。
 
 </details>
 

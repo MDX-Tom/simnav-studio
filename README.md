@@ -249,7 +249,7 @@ The numbered workflow makes the dependency direction explicit: route planning pr
 
 - macOS with Xcode
 - iOS 17.0 or later deployment target
-- iPhone / iPad Simulator or a physical device
+- iPhone / iPad Simulator, macOS, or a physical device
 - Optional local navigation database for private builds
 
 ### Quick start
@@ -279,58 +279,6 @@ local configuration; it does not write the Team ID into the tracked project.
 
 For private builds, place a local database at `NavPlanner/Resources/Database/navdata.sqlite`, or import one from Settings after launch. Public distributions should not include navigation data without confirmed redistribution rights.
 
-### Signing and public release assets
-
-Public GitHub IPA assets must be unsigned sideload packages. They must not
-contain a maintainer certificate, Team ID, provisioning profile, account email,
-private key, App Store Connect key, xcarchive, or raw build log. Installers
-re-sign the IPA with their own account through AltStore, SideStore, Sideloadly,
-or another trusted signing workflow.
-
-Local Apple Development settings belong only in the Git-ignored
-`Config/CodeSigning.local.xcconfig`. The tracked
-`Config/CodeSigning.xcconfig` optionally includes that file, so Xcode GUI builds
-work locally while a fresh clone and public unsigned builds contain no private
-identity. A Mac artifact without private CI credentials is ad-hoc signed and
-not notarized; Developer ID/App Store signing, if ever used, must import
-credentials only from protected CI secrets. See
-[public release packaging](Tools/Release/README.md).
-
-<details>
-<summary><strong>Install on iPhone, iPad, and Mac</strong></summary>
-
-#### iPhone and iPad
-
-The GitHub IPA is unsigned and cannot be installed directly. It intentionally
-contains no maintainer certificate or provisioning profile.
-
-1. Download the `-unsigned.ipa` and `SHA256SUMS.txt`, then verify the checksum.
-2. Import the IPA into AltStore, SideStore, Sideloadly, or another signing tool
-   you trust.
-3. Let that tool re-sign the IPA with your own Apple Account and install it.
-4. Follow the tool and device prompts to trust the resulting local signature;
-   enable Developer Mode only when iOS/iPadOS requests it.
-
-For a direct local Xcode installation, run
-`Tools/Signing/setup_local_signing.sh`, connect the device, select it as the
-NavPlanner destination, and press Run. The generated signing file remains only
-on that Mac and is ignored by Git.
-
-#### Mac
-
-1. Download the `-catalyst-adhoc-not-notarized.dmg` and verify its SHA-256.
-2. Open the DMG and drag `NavPlanner.app` to Applications.
-3. On first launch, Control-click the app and choose **Open**. If macOS still
-   blocks it, use **System Settings → Privacy & Security → Open Anyway** only
-   after verifying the checksum and download source.
-
-The current Mac build is a universal arm64/x86_64 Mac Catalyst app. It is
-ad-hoc signed and not notarized, so it does not have Developer ID/Gatekeeper
-public-distribution trust; it is not a native AppKit app or a Designed-for-iPad
-wrapper.
-
-</details>
-
 <details>
 <summary><strong>Command-line build</strong></summary>
 
@@ -354,6 +302,64 @@ xcodebuild -project NavPlanner.xcodeproj \
   -derivedDataPath /private/tmp/NavPlannerDerived \
   build
 ```
+
+</details>
+
+### Install the IPA and DMG from Releases
+
+<details>
+<summary><strong>Why this matters</strong></summary>
+
+Public GitHub IPA assets must be unsigned sideload packages. They must not
+contain a maintainer certificate, Team ID, provisioning profile, account email,
+private key, App Store Connect key, xcarchive, or raw build log.
+
+Local Apple Development settings belong only in the Git-ignored
+`Config/CodeSigning.local.xcconfig`. The tracked
+`Config/CodeSigning.xcconfig` optionally includes that file, so Xcode GUI builds
+work locally while a fresh clone and public unsigned builds contain no private
+identity. A Mac artifact without private CI credentials is ad-hoc signed and
+not notarized; Developer ID/App Store signing, if ever used, must import
+credentials only from protected CI secrets. See
+[public release packaging](Tools/Release/README.md).
+
+</details>
+
+**Installing the iPhone app requires AltStore, SideStore, Sideloadly, or another
+trusted signing workflow that re-signs it with your own account.**
+
+<details open>
+<summary><strong>Install on iPhone, iPad, and Mac</strong></summary>
+
+#### iPhone and iPad
+
+The GitHub IPA is unsigned, contains no maintainer certificate or provisioning
+profile, and cannot be installed directly.
+
+1. Download the `-unsigned.ipa` and `SHA256SUMS.txt`, then verify the checksum.
+2. Import the IPA into AltStore, SideStore, Sideloadly, or another signing tool
+   you trust.
+3. Let that tool re-sign the IPA with your own Apple Account and install it.
+4. Follow the tool and device prompts to trust the resulting local signature;
+   enable Developer Mode only when iOS/iPadOS requests it.
+
+Alternatively, you can install directly from local Xcode by running
+`Tools/Signing/setup_local_signing.sh`, connecting the device, selecting it as
+the NavPlanner destination, and pressing Run. The generated signing file remains
+only on that Mac and is ignored by Git.
+
+#### Mac
+
+1. Download the `-catalyst-adhoc-not-notarized.dmg` and verify its SHA-256.
+2. Open the DMG and drag `NavPlanner.app` to Applications.
+3. On first launch, Control-click the app and choose **Open**. If macOS still
+   blocks it, use **System Settings → Privacy & Security → Open Anyway** only
+   after verifying the checksum and download source.
+
+The current Mac build is a universal arm64/x86_64 Mac Catalyst app. It is
+ad-hoc signed and not notarized, so it does not have Developer ID/Gatekeeper
+public-distribution trust; it is not a native AppKit app or a Designed-for-iPad
+wrapper.
 
 </details>
 
