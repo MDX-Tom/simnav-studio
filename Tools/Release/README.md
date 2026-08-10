@@ -49,8 +49,13 @@ Keychain，不能写入 xcconfig、脚本或日志。
 Tools/Release/build_public_release.sh
 ```
 
-脚本拒绝覆盖既有目录，并把原始日志和 DerivedData 单独保存在被忽略的
-`target/public-build-work-VERSION/`。公开候选只包含：
+根目录 `releases/` 被 Git 忽略，并且只允许长期保留一个
+`release-VERSION/` 候选目录。脚本拒绝覆盖既有候选；原始日志、DerivedData、
+DMG staging 和其他构建中间产物只写入 `releases/.navplanner-build-*` 临时目录，
+正常结束、失败或收到可捕获的中断信号时都会自动删除。不得在仓库中重新创建或保留 `target/`，
+也不得在 `releases/` 下保存旧候选、失败尝试、调试 App、截图或原始日志。
+
+最终公开候选只包含：
 
 - unsigned Universal IPA；
 - ad-hoc Catalyst App 与未 notarize DMG；
@@ -64,7 +69,7 @@ Tools/Release/build_public_release.sh
 也可独立复跑审计：
 
 ```bash
-Tools/Release/audit_public_release.sh target/release-0.1.0
+Tools/Release/audit_public_release.sh releases/release-0.1.0
 ```
 
 审计遇到以下情况会失败：已跟踪或未跟踪但未忽略的公开源码含 signing

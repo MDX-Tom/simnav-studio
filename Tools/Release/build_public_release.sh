@@ -18,24 +18,49 @@ if [ -z "$BUNDLE_IDENTIFIER" ]; then
   exit 2
 fi
 
-OUTPUT_DIR="${1:-$PROJECT_ROOT/target/release-$VERSION}"
-WORK_DIR="${2:-$PROJECT_ROOT/target/public-build-work-$VERSION}"
-
-case "$OUTPUT_DIR" in
-  "$PROJECT_ROOT"/target/*) ;;
-  *) echo "Refusing output path outside project target/: $OUTPUT_DIR" >&2; exit 2 ;;
-esac
-case "$WORK_DIR" in
-  "$PROJECT_ROOT"/target/*) ;;
-  *) echo "Refusing work path outside project target/: $WORK_DIR" >&2; exit 2 ;;
-esac
-
-if [ -e "$OUTPUT_DIR" ] || [ -e "$WORK_DIR" ]; then
-  echo "Output/work path already exists; move it aside explicitly before rebuilding." >&2
-  echo "OUTPUT_DIR=$OUTPUT_DIR" >&2
-  echo "WORK_DIR=$WORK_DIR" >&2
+if [ "$#" -gt 1 ]; then
+  echo "usage: $0 [/path/to/project/releases/release-$VERSION]" >&2
   exit 2
 fi
+
+RELEASES_ROOT="$PROJECT_ROOT/releases"
+FINAL_OUTPUT_DIR="${1:-$RELEASES_ROOT/release-$VERSION}"
+
+case "$FINAL_OUTPUT_DIR" in
+  "$RELEASES_ROOT"/release-*) ;;
+  *) echo "Refusing output path outside project releases/: $FINAL_OUTPUT_DIR" >&2; exit 2 ;;
+esac
+if [ "$(dirname "$FINAL_OUTPUT_DIR")" != "$RELEASES_ROOT" ]; then
+  echo "Release output must be an immediate child of project releases/." >&2
+  exit 2
+fi
+if [ "$(basename "$FINAL_OUTPUT_DIR")" != "release-$VERSION" ]; then
+  echo "Release output must be named release-$VERSION." >&2
+  exit 2
+fi
+
+mkdir -p "$RELEASES_ROOT"
+if [ -e "$FINAL_OUTPUT_DIR" ]; then
+  echo "Release output already exists; move it aside explicitly before rebuilding." >&2
+  echo "OUTPUT_DIR=$FINAL_OUTPUT_DIR" >&2
+  exit 2
+fi
+EXTRA_RELEASE_ENTRY="$(
+  find "$RELEASES_ROOT" -mindepth 1 -maxdepth 1 \
+    ! -name "$(basename "$FINAL_OUTPUT_DIR")" -print -quit
+)"
+if [ -n "$EXTRA_RELEASE_ENTRY" ]; then
+  echo "releases/ may retain only the current release directory: $EXTRA_RELEASE_ENTRY" >&2
+  exit 2
+fi
+
+WORK_DIR="$(mktemp -d "$RELEASES_ROOT/.navplanner-build-$VERSION.XXXXXX")"
+OUTPUT_DIR="$WORK_DIR/release-$VERSION"
+cleanup() {
+  rm -rf -- "$WORK_DIR"
+}
+trap cleanup EXIT
+trap 'exit 130' HUP INT TERM
 
 TASK_DEVELOPER_DIR="${DEVELOPER_DIR:-}"
 if [ -z "$TASK_DEVELOPER_DIR" ]; then
@@ -228,7 +253,7 @@ manifest = {
             "sha256_scope": "sha256-of-sorted-relative-file-sha256-list",
             "signing_identity_type": "ad-hoc",
             "signing": "ad-hoc; no certificate authority and no TeamIdentifier",
-            "export_method": "unsigned Release Catalyst build copied to target and ad-hoc signed with codesign --sign -",
+            "export_method": "unsigned Release Catalyst build copied to the public release candidate and ad-hoc signed with codesign --sign -",
             "installation": "Local testing only; not Developer ID signed and not notarized.",
         },
         {
@@ -323,7 +348,8 @@ PY
 
 "$SCRIPT_DIR/audit_public_release.sh" "$OUTPUT_DIR"
 
+mv "$OUTPUT_DIR" "$FINAL_OUTPUT_DIR"
+
 echo "Public-safe release candidate created:"
-echo "$OUTPUT_DIR"
-echo "Private build logs/intermediates:"
-echo "$WORK_DIR"
+echo "$FINAL_OUTPUT_DIR"
+echo "Temporary build logs and intermediates were removed."

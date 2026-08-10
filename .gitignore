@@ -13,7 +13,7 @@ xcuserdata/
 .build/
 .swiftpm/
 build/
-/target/
+/releases/
 *.dSYM
 *.dSYM.zip
 *.ipa

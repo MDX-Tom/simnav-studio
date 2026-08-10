@@ -21,8 +21,8 @@ fi
 RELEASE_DIR="$(cd "$RELEASE_DIR" && pwd)"
 
 case "$RELEASE_DIR" in
-  "$PROJECT_ROOT"/target/*) ;;
-  *) echo "Refusing to audit a release path outside project target/." >&2; exit 2 ;;
+  "$PROJECT_ROOT"/releases/*) ;;
+  *) echo "Refusing to audit a release path outside project releases/." >&2; exit 2 ;;
 esac
 
 SENSITIVE_PUBLIC_SOURCE="$(
@@ -184,6 +184,7 @@ UNWANTED_PUBLIC_CONTENT="$(
         -iname '*.p12' -o -iname '*.pfx' -o -iname '*.cer' -o -iname '*.crt' -o \
         -iname '*.der' -o -iname '*.pem' -o -iname '*.key' -o -iname '*.p8' -o \
         -iname '*.mobileprovision' -o -iname '*.provisionprofile' -o -iname '*.log' \
+        -o -iname '.DS_Store' \
       \) \) -o \
       \( -type d \( -iname '*.xcarchive' -o -iname 'DerivedData*' -o -iname 'logs' \) \) \
     \) \
