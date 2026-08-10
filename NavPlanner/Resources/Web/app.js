@@ -1508,7 +1508,7 @@ const map = L.map("map", {
   scrollWheelZoom: false,
   doubleClickZoom: false,
   zoomAnimation: true,
-  markerZoomAnimation: false,
+  markerZoomAnimation: true,
   preferCanvas: true,
   worldCopyJump: true,
 }).setView([28.6, 104.0], 4);
@@ -2506,9 +2506,34 @@ function navLabelSnapshotDrawAirwayDirection(context, element, x, y, width, heig
   }
 }
 
-function navLabelSnapshotItem(label, element, mapRect, canvasLeft, canvasTop, canvasRight, canvasBottom) {
+/**
+ * 功能：把 WebKit `body { zoom }` 缩放后的屏幕坐标还原成 Leaflet 使用的逻辑 CSS 像素。
+ * 输入：无。
+ * 输出：地图视口、逻辑尺寸，以及屏幕像素到逻辑像素的缩放比例。
+ */
+function mapViewportMetrics() {
+  const mapRect = map.getContainer().getBoundingClientRect();
+  const mapSize = map.getSize();
+  const scaleX = mapSize.x > 0 && mapRect.width > 0 ? mapRect.width / mapSize.x : 1;
+  const scaleY = mapSize.y > 0 && mapRect.height > 0 ? mapRect.height / mapSize.y : 1;
+  return {
+    mapRect,
+    mapSize,
+    scaleX: Number.isFinite(scaleX) && scaleX > 0 ? scaleX : 1,
+    scaleY: Number.isFinite(scaleY) && scaleY > 0 ? scaleY : 1,
+  };
+}
+
+function navLabelSnapshotItem(label, element, metrics, buffer) {
   const rect = element.getBoundingClientRect();
-  if (!rect.width || !rect.height || rect.right < canvasLeft || rect.left > canvasRight || rect.bottom < canvasTop || rect.top > canvasBottom) {
+  const { mapRect, mapSize, scaleX, scaleY } = metrics;
+  const left = (rect.left - mapRect.left) / scaleX;
+  const top = (rect.top - mapRect.top) / scaleY;
+  const width = rect.width / scaleX;
+  const height = rect.height / scaleY;
+  if (!width || !height
+    || left + width < -buffer || left > mapSize.x + buffer
+    || top + height < -buffer || top > mapSize.y + buffer) {
     return null;
   }
   const style = window.getComputedStyle(element);
@@ -2527,12 +2552,12 @@ function navLabelSnapshotItem(label, element, mapRect, canvasLeft, canvasTop, ca
     text: navLabelSnapshotText(style, element.textContent),
     isAirwayBadge: element.classList.contains("nav-airway-badge"),
     latlng: L.latLng(latlng.lat, latlng.lng),
-    width: rect.width,
-    height: rect.height,
-    initialX: rect.left - canvasLeft,
-    initialY: rect.top - canvasTop,
-    offsetX: rect.left - mapRect.left - markerPoint.x,
-    offsetY: rect.top - mapRect.top - markerPoint.y,
+    width,
+    height,
+    initialX: left + buffer,
+    initialY: top + buffer,
+    offsetX: left - markerPoint.x,
+    offsetY: top - markerPoint.y,
   };
 }
 
@@ -2674,9 +2699,16 @@ function navSymbolSnapshotImage(url) {
   return image;
 }
 
-function navSymbolSnapshotItem(element, mapRect, canvasLeft, canvasTop, canvasRight, canvasBottom) {
+function navSymbolSnapshotItem(element, metrics, buffer) {
   const rect = element.getBoundingClientRect();
-  if (!rect.width || !rect.height || rect.right < canvasLeft || rect.left > canvasRight || rect.bottom < canvasTop || rect.top > canvasBottom) {
+  const { mapRect, mapSize, scaleX, scaleY } = metrics;
+  const left = (rect.left - mapRect.left) / scaleX;
+  const top = (rect.top - mapRect.top) / scaleY;
+  const width = rect.width / scaleX;
+  const height = rect.height / scaleY;
+  if (!width || !height
+    || left + width < -buffer || left > mapSize.x + buffer
+    || top + height < -buffer || top > mapSize.y + buffer) {
     return null;
   }
   const marker = element._plannerNavSymbolMarker;
@@ -2711,12 +2743,12 @@ function navSymbolSnapshotItem(element, mapRect, canvasLeft, canvasTop, canvasRi
     kind,
     image,
     latlng: L.latLng(latlng.lat, latlng.lng),
-    width: rect.width,
-    height: rect.height,
-    initialX: rect.left - canvasLeft,
-    initialY: rect.top - canvasTop,
-    offsetX: rect.left - mapRect.left - markerPoint.x,
-    offsetY: rect.top - mapRect.top - markerPoint.y,
+    width,
+    height,
+    initialX: left + buffer,
+    initialY: top + buffer,
+    offsetX: left - markerPoint.x,
+    offsetY: top - markerPoint.y,
   };
 }
 
@@ -2835,7 +2867,7 @@ function ensureNavSymbolSnapshotCanvas() {
   return navSymbolSnapshotCanvas;
 }
 
-function renderNavSymbolSnapshot({ mapRect, canvasLeft, canvasTop, cssWidth, cssHeight, pixelRatio, mapPanePosition }) {
+function renderNavSymbolSnapshot({ metrics, cssWidth, cssHeight, pixelRatio, mapPanePosition }) {
   navSymbolSnapshotItems.forEach((item) => item.element.classList.remove("is-nav-symbol-snapshotted"));
   const livePane = map.getPane("navPane");
   const snapshotPane = map.getPane("navSymbolSnapshotPane");
@@ -2864,14 +2896,7 @@ function renderNavSymbolSnapshot({ mapRect, canvasLeft, canvasTop, cssWidth, css
   context.imageSmoothingEnabled = true;
   const items = [];
   Array.from(livePane.querySelectorAll(".nav-symbol")).forEach((element) => {
-    const item = navSymbolSnapshotItem(
-      element,
-      mapRect,
-      canvasLeft,
-      canvasTop,
-      canvasLeft + cssWidth,
-      canvasTop + cssHeight,
-    );
+    const item = navSymbolSnapshotItem(element, metrics, NAV_LABEL_SNAPSHOT_BUFFER_PX);
     if (item) {
       items.push(item);
     }
@@ -2952,12 +2977,11 @@ function renderNavLabelSnapshot({ force = false } = {}) {
     return false;
   }
 
-  const mapRect = map.getContainer().getBoundingClientRect();
+  const metrics = mapViewportMetrics();
+  const { mapSize } = metrics;
   const buffer = NAV_LABEL_SNAPSHOT_BUFFER_PX;
-  const canvasLeft = mapRect.left - buffer;
-  const canvasTop = mapRect.top - buffer;
-  const cssWidth = Math.max(1, Math.ceil(mapRect.width + buffer * 2));
-  const cssHeight = Math.max(1, Math.ceil(mapRect.height + buffer * 2));
+  const cssWidth = Math.max(1, Math.ceil(mapSize.x + buffer * 2));
+  const cssHeight = Math.max(1, Math.ceil(mapSize.y + buffer * 2));
   navLabelSnapshotCssWidth = cssWidth;
   navLabelSnapshotCssHeight = cssHeight;
   const pixelRatio = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
@@ -2985,15 +3009,7 @@ function renderNavLabelSnapshot({ force = false } = {}) {
   const items = [];
   labels.forEach((label) => {
     const visual = label.querySelector(".nav-airway-badge, span");
-    const item = visual ? navLabelSnapshotItem(
-      label,
-      visual,
-      mapRect,
-      canvasLeft,
-      canvasTop,
-      canvasLeft + cssWidth,
-      canvasTop + cssHeight,
-    ) : null;
+    const item = visual ? navLabelSnapshotItem(label, visual, metrics, buffer) : null;
     if (item?.text) {
       items.push(item);
     }
@@ -3006,9 +3022,7 @@ function renderNavLabelSnapshot({ force = false } = {}) {
     }
   });
   renderNavSymbolSnapshot({
-    mapRect,
-    canvasLeft,
-    canvasTop,
+    metrics,
     cssWidth,
     cssHeight,
     pixelRatio,
@@ -6589,7 +6603,13 @@ function clampZoom(mapInstance, zoom) {
 function mapContainerPointFromEvent(mapInstance, event) {
   const container = mapInstance.getContainer();
   const bounds = container.getBoundingClientRect();
-  return L.point(event.clientX - bounds.left, event.clientY - bounds.top);
+  const mapSize = mapInstance.getSize();
+  const scaleX = mapSize.x > 0 && bounds.width > 0 ? bounds.width / mapSize.x : 1;
+  const scaleY = mapSize.y > 0 && bounds.height > 0 ? bounds.height / mapSize.y : 1;
+  return L.point(
+    (event.clientX - bounds.left) / scaleX,
+    (event.clientY - bounds.top) / scaleY,
+  );
 }
 
 /**
@@ -15910,6 +15930,208 @@ async function runSimulatorAirportMapStress(sequence) {
   };
 }
 
+function simulatorDebugAlignmentSummary(errors) {
+  const values = errors
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value));
+  return {
+    samples: values.length,
+    meanPx: values.length
+      ? Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2))
+      : 0,
+    p95Px: Number(simulatorDebugPercentile(values, 0.95).toFixed(2)),
+    maxPx: Number(Math.max(0, ...values).toFixed(2)),
+  };
+}
+
+/**
+ * 功能：量测交互进行中瓦片、live DOM 与导航快照相对同一 Leaflet 投影的像素误差。
+ * 输入：label 为量测阶段名称。
+ * 输出：各渲染层的误差摘要；仅由 DEBUG 启动配置调用。
+ */
+function simulatorDebugMapAlignmentSnapshot(label = "") {
+  const metrics = mapViewportMetrics();
+  const { mapRect, scaleX, scaleY } = metrics;
+  const mapPanePosition = map._getMapPanePos?.() || L.point(0, 0);
+  const tileErrors = [];
+  Object.values(baseLayers.terrain?._tiles || {}).forEach((entry) => {
+    const tile = entry?.el;
+    const coords = entry?.coords;
+    if (!tile || !coords || tile._plannerCancelled) {
+      return;
+    }
+    const rect = tile.getBoundingClientRect();
+    if (!rect.width || !rect.height
+      || rect.left >= mapRect.right || rect.top >= mapRect.bottom
+      || rect.right <= mapRect.left || rect.bottom <= mapRect.top) {
+      return;
+    }
+    const tileSize = baseLayers.terrain.getTileSize();
+    const tileTopLeft = L.point(coords.x * tileSize.x, coords.y * tileSize.y);
+    const latlng = map.unproject(tileTopLeft, coords.z);
+    const expected = map.latLngToContainerPoint(latlng);
+    tileErrors.push(Math.hypot(
+      rect.left - mapRect.left - expected.x * scaleX,
+      rect.top - mapRect.top - expected.y * scaleY,
+    ));
+  });
+
+  const liveLabelErrors = [];
+  Array.from(map.getPane("navLabelPane")?.querySelectorAll(".nav-label") || []).forEach((labelElement) => {
+    const marker = labelElement._plannerNavLabelMarker;
+    const visual = labelElement.querySelector(".nav-airway-badge, span");
+    if (!marker?.getLatLng || !visual?.isConnected) {
+      return;
+    }
+    const rect = visual.getBoundingClientRect();
+    if (!rect.width || !rect.height) {
+      return;
+    }
+    const point = map.latLngToContainerPoint(marker.getLatLng());
+    const item = navLabelSnapshotItems.find((candidate) => candidate.element === visual);
+    const localLeft = (rect.left - mapRect.left) / scaleX;
+    const localTop = (rect.top - mapRect.top) / scaleY;
+    const offsetX = item?.offsetX ?? (localLeft - point.x);
+    const offsetY = item?.offsetY ?? (localTop - point.y);
+    liveLabelErrors.push(Math.hypot(
+      (localLeft - point.x - offsetX) * scaleX,
+      (localTop - point.y - offsetY) * scaleY,
+    ));
+  });
+
+  const snapshotLabelErrors = [];
+  const labelCanvasRect = navLabelSnapshotCanvas?.getBoundingClientRect();
+  if (labelCanvasRect?.width && labelCanvasRect?.height) {
+    navLabelSnapshotItems.forEach((item) => {
+      const point = map.latLngToContainerPoint(item.latlng);
+      const actualX = navLabelSnapshotMode === "zoom"
+        ? labelCanvasRect.left + (NAV_LABEL_SNAPSHOT_BUFFER_PX + point.x + item.offsetX) * scaleX
+        : labelCanvasRect.left + item.initialX * scaleX;
+      const actualY = navLabelSnapshotMode === "zoom"
+        ? labelCanvasRect.top + (NAV_LABEL_SNAPSHOT_BUFFER_PX + point.y + item.offsetY) * scaleY
+        : labelCanvasRect.top + item.initialY * scaleY;
+      snapshotLabelErrors.push(Math.hypot(
+        actualX - mapRect.left - (point.x + item.offsetX) * scaleX,
+        actualY - mapRect.top - (point.y + item.offsetY) * scaleY,
+      ));
+    });
+  }
+
+  const snapshotSymbolErrors = [];
+  const symbolCanvasRect = navSymbolSnapshotCanvas?.getBoundingClientRect();
+  if (symbolCanvasRect?.width && symbolCanvasRect?.height) {
+    navSymbolSnapshotItems.forEach((item) => {
+      const point = map.latLngToContainerPoint(item.latlng);
+      const actualX = navLabelSnapshotMode === "zoom"
+        ? symbolCanvasRect.left + (NAV_LABEL_SNAPSHOT_BUFFER_PX + point.x + item.offsetX) * scaleX
+        : symbolCanvasRect.left + item.initialX * scaleX;
+      const actualY = navLabelSnapshotMode === "zoom"
+        ? symbolCanvasRect.top + (NAV_LABEL_SNAPSHOT_BUFFER_PX + point.y + item.offsetY) * scaleY
+        : symbolCanvasRect.top + item.initialY * scaleY;
+      snapshotSymbolErrors.push(Math.hypot(
+        actualX - mapRect.left - (point.x + item.offsetX) * scaleX,
+        actualY - mapRect.top - (point.y + item.offsetY) * scaleY,
+      ));
+    });
+  }
+
+  return {
+    label,
+    zoom: Number(map.getZoom().toFixed(4)),
+    center: map.getCenter(),
+    screenScale: {
+      x: Number(scaleX.toFixed(4)),
+      y: Number(scaleY.toFixed(4)),
+    },
+    mapPanePosition: { x: mapPanePosition.x, y: mapPanePosition.y },
+    moving: map.getContainer().classList.contains("is-map-moving"),
+    smoothZooming: map.getContainer().classList.contains("is-smooth-zooming"),
+    snapshotMode: navLabelSnapshotMode,
+    tiles: simulatorDebugAlignmentSummary(tileErrors),
+    liveLabels: simulatorDebugAlignmentSummary(liveLabelErrors),
+    snapshotLabels: simulatorDebugAlignmentSummary(snapshotLabelErrors),
+    snapshotSymbols: simulatorDebugAlignmentSummary(snapshotSymbolErrors),
+  };
+}
+
+/**
+ * 功能：保留 pan / zoom 的中间态，覆盖 flyTo / panBy 无法触发的按住交互阶段。
+ * 输入：options.type 为 pan 或 zoom，可指定移动量、缩放倍率和保持时间。
+ * 输出：按下前、保持中和释放后的坐标误差摘要。
+ */
+async function runSimulatorHeldMapInteractionProbe(options = {}) {
+  const prepareZoom = Number(options.prepareZoom);
+  if (Number.isFinite(prepareZoom)) {
+    await new Promise((resolve) => window.setTimeout(resolve, 600));
+    map.setZoom(clampZoom(map, prepareZoom), { animate: false });
+    await refreshNavOverlay();
+  }
+  await simulatorDebugWaitFor(
+    () => map.getPane("navLabelPane")?.querySelectorAll(".nav-label").length > 0,
+    Math.max(1000, Number(options.waitForLabelsMs) || 12_000),
+    80,
+  );
+  await simulatorDebugNextPaint(4);
+  const before = simulatorDebugMapAlignmentSnapshot("before");
+  const type = options.type === "zoom" ? "zoom" : "pan";
+  let panStartPosition = null;
+  try {
+    if (type === "zoom") {
+      map._moveStart(true, false);
+      const startZoom = map.getZoom();
+      for (const scale of [1.08, 1.16, 1.25, Number(options.scale) || 1.34]) {
+        map._move(
+          map.getCenter(),
+          clampZoom(map, startZoom + Math.log2(Math.max(0.05, scale))),
+          { pinch: true, round: false },
+        );
+        await simulatorDebugNextPaint(1);
+      }
+    } else {
+      map._stop();
+      panStartPosition = map._getMapPanePos?.().clone() || L.point(0, 0);
+      map.fire("movestart").fire("dragstart");
+      const deltaX = Number(options.deltaX) || 180;
+      const deltaY = Number(options.deltaY) || 96;
+      for (const ratio of [0.2, 0.4, 0.6, 0.8, 1]) {
+        L.DomUtil.setPosition(map._mapPane, panStartPosition.add([
+          deltaX * ratio,
+          deltaY * ratio,
+        ]));
+        map.fire("move").fire("drag");
+        await simulatorDebugNextPaint(1);
+      }
+    }
+    await simulatorDebugNextPaint(3);
+    const held = simulatorDebugMapAlignmentSnapshot("held");
+    postNativeEvent("runtimeDiagnostic", {
+      level: "warning",
+      message: `NavPlanner held map interaction ready ${JSON.stringify({ type, held })}`,
+    });
+    await new Promise((resolve) => window.setTimeout(resolve, Math.max(300, Number(options.holdMs) || 2400)));
+    const passed = held.tiles.samples > 0
+      && held.tiles.maxPx <= 2
+      && held.snapshotLabels.samples > 0
+      && held.snapshotLabels.maxPx <= 1
+      && held.snapshotSymbols.samples > 0
+      && held.snapshotSymbols.maxPx <= 1;
+    return { type, passed, before, held };
+  } finally {
+    if (type === "zoom") {
+      map._moveEnd(true);
+    } else {
+      if (panStartPosition) {
+        L.DomUtil.setPosition(map._mapPane, panStartPosition);
+      }
+      map.fire("dragend").fire("moveend");
+    }
+    await simulatorDebugNextPaint(4);
+    if (type === "zoom") {
+      await new Promise((resolve) => window.setTimeout(resolve, MAP_ZOOM.wheelIdleDelay + 80));
+    }
+  }
+}
+
 /**
  * 功能：为模拟器回归与文档截图生成一条确定性的 FR24 航迹。
  * 输入：options 可指定点数、起始时间、是否缩放地图及是否把图表量测写入调试日志。
@@ -16275,6 +16497,9 @@ async function runSimulatorWorkflowStress(options = {}) {
       tabElapsedMs,
       calculateElapsedMs,
       calculateStatus: elements.calcStatusText?.textContent || "",
+      calculateProfileSampleCount: state.calculateProfileData?.samples?.length || 0,
+      selectedProcedures: cloneJSON(state.selectedProcedures),
+      mapSourceMode: currentMapSourceMode(),
       weatherChart: simulatorDebugSvgMetrics(elements.calcWeatherProfileSvg),
       speedChart: simulatorDebugSvgMetrics(elements.calcSpeedProfileSvg),
       routeLabels: simulatorDebugRouteLabelSnapshot(`workflow-${iteration + 1}`),
@@ -16314,6 +16539,8 @@ async function runSimulatorWorkflowStress(options = {}) {
     repeatCount,
     passed: airportFailures.length === 0
       && cycles.every((cycle) => cycle.routePointCount >= 2)
+      && cycles.every((cycle) => cycle.calculateProfileSampleCount >= 2)
+      && cycles.every((cycle) => Boolean(cycle.selectedProcedures?.star))
       && cycles.every((cycle) => cycle.horizontalOverflowPx === 0)
       && cycles.every((cycle) => (
         cycle.routeAfterPlan.clippedPoints === 0 && cycle.routeAfterPlan.clippedLabels === 0
@@ -16346,6 +16573,14 @@ async function runSimulatorWorkflowStress(options = {}) {
       cycleElapsedMs: result.cycles.map((item) => item.elapsedMs),
       planElapsedMs: result.cycles.map((item) => item.planElapsedMs),
       calculateElapsedMs: result.cycles.map((item) => item.calculateElapsedMs),
+      calculateProfileSampleCounts: result.cycles.map((item) => item.calculateProfileSampleCount),
+      selectedProcedureTypes: result.cycles.map((item) => (
+        Object.entries(item.selectedProcedures || {})
+          .filter(([, value]) => Boolean(value))
+          .map(([type]) => type)
+      )),
+      calculateStatuses: result.cycles.map((item) => item.calculateStatus),
+      mapSourceModes: result.cycles.map((item) => item.mapSourceMode),
       maxBannerClippedPoints: Math.max(0, ...result.cycles.flatMap((item) => (
         item.bannerSamples.map((sample) => sample.routeViewport.clippedPoints)
       ))),
@@ -16357,6 +16592,85 @@ async function runSimulatorWorkflowStress(options = {}) {
     })}`,
   });
   return result;
+}
+
+/**
+ * 功能：在 DEBUG 回归中阻断在线天气与 FR24 请求，验证本地规划和剖面降级仍可继续使用。
+ * 输入：options 可指定等待超时。
+ * 输出：被阻断请求、剖面状态、FR24 错误状态和核心本地数据保留情况。
+ */
+async function runSimulatorOnlineFailureFallbackProbe(options = {}) {
+  if (!state.currentRoutePayload?.points?.length) {
+    await buildRoute({ forceAuto: true });
+  }
+  // 自动规划会触发一次真实天气请求；先等它收敛，避免旧请求晚到后覆盖本轮故障注入。
+  setMobileBottomTab("calculate");
+  scheduleCalculateRender();
+  await simulatorDebugWaitFor(() => (
+    Boolean(state.calculateOnlineWeatherSignature) && !state.calculateOnlineWeatherPending
+  ), Math.max(1500, Number(options.timeoutMs) || 8000), 60);
+  const originalFetch = window.fetch;
+  const blockedUrls = [];
+  window.fetch = (input, init) => {
+    const url = String(input?.url || input || "");
+    if (url.includes("/api/weather/open-meteo") || url.includes("/api/fr24/")) {
+      blockedUrls.push(url);
+      return Promise.reject(new TypeError("simulated offline"));
+    }
+    return originalFetch.call(window, input, init);
+  };
+
+  try {
+    state.calculateOnlineWeather = null;
+    state.calculateOnlineWeatherSignature = "";
+    state.calculateOnlineWeatherPending = false;
+    state.calculateOnlineWeatherError = "";
+    scheduleCalculateRender();
+    await simulatorDebugWaitFor(() => (
+      blockedUrls.some((url) => url.includes("/api/weather/open-meteo"))
+      && !state.calculateOnlineWeatherPending
+      && Boolean(state.calculateOnlineWeatherError)
+    ), Math.max(1500, Number(options.timeoutMs) || 8000), 60);
+    await simulatorDebugNextPaint(3);
+
+    setMobileBottomTab("query");
+    await searchFR24Flights();
+    await new Promise((resolve) => window.setTimeout(resolve, 180));
+
+    const routePointCount = state.currentRoutePayload?.points?.length || 0;
+    const profileSampleCount = state.calculateProfileData?.samples?.length || 0;
+    const selectedProcedureTypes = Object.entries(state.selectedProcedures || {})
+      .filter(([, value]) => Boolean(value))
+      .map(([type]) => type);
+    const result = {
+      passed: blockedUrls.some((url) => url.includes("/api/weather/open-meteo"))
+        && blockedUrls.some((url) => url.includes("/api/fr24/"))
+        && routePointCount >= 2
+        && profileSampleCount >= 2
+        && !state.calculateProfileData?.weatherOnline
+        && Boolean(state.calculateOnlineWeatherError),
+      blockedRequestCount: blockedUrls.length,
+      blockedKinds: {
+        weather: blockedUrls.filter((url) => url.includes("/api/weather/open-meteo")).length,
+        fr24: blockedUrls.filter((url) => url.includes("/api/fr24/")).length,
+      },
+      routePointCount,
+      profileSampleCount,
+      selectedProcedureTypes,
+      weatherOnline: Boolean(state.calculateProfileData?.weatherOnline),
+      weatherError: state.calculateOnlineWeatherError,
+      calculateStatus: elements.calcStatusText?.textContent || "",
+      fr24Status: elements.fr24QueryStatus?.textContent || "",
+    };
+    writeLocalStorageValue("navplannerDebugOnlineFailureFallbackResult", JSON.stringify(result));
+    postNativeEvent("runtimeDiagnostic", {
+      level: result.passed ? "warning" : "error",
+      message: `NavPlanner online failure fallback result ${JSON.stringify(result)}`,
+    });
+    return result;
+  } finally {
+    window.fetch = originalFetch;
+  }
 }
 
 async function runSimulatorFR24Stress(options = {}) {
@@ -16783,8 +17097,20 @@ async function applySimulatorDebugLaunch() {
     const result = await runSimulatorAirportMapStress(config.airportMapStressSequence);
     writeLocalStorageValue("navplannerDebugAirportMapStressResult", JSON.stringify(result));
   }
+  if (config.heldMapInteraction && typeof config.heldMapInteraction === "object") {
+    const result = await runSimulatorHeldMapInteractionProbe(config.heldMapInteraction);
+    result.after = simulatorDebugMapAlignmentSnapshot("after");
+    writeLocalStorageValue("navplannerDebugHeldMapInteractionResult", JSON.stringify(result));
+    postNativeEvent("runtimeDiagnostic", {
+      level: "warning",
+      message: `NavPlanner held map interaction result ${JSON.stringify(result)}`,
+    });
+  }
   if (config.workflowStress && typeof config.workflowStress === "object") {
     await runSimulatorWorkflowStress(config.workflowStress);
+  }
+  if (config.onlineFailureFallbackProbe && typeof config.onlineFailureFallbackProbe === "object") {
+    await runSimulatorOnlineFailureFallbackProbe(config.onlineFailureFallbackProbe);
   }
   if (config.fr24Stress && typeof config.fr24Stress === "object") {
     await runSimulatorFR24Stress(config.fr24Stress);

@@ -328,7 +328,7 @@ credentials only from protected CI secrets. See
 **Installing the iPhone app requires AltStore, SideStore, Sideloadly, or another
 trusted signing workflow that re-signs it with your own account.**
 
-<details open>
+<details>
 <summary><strong>Install on iPhone, iPad, and Mac</strong></summary>
 
 #### iPhone and iPad

@@ -325,7 +325,7 @@ App Store 签名，只能在受保护 CI 中从 Secret 临时导入。详见
 **安装 iPhone App 需通过 AltStore、SideStore、Sideloadly
 或其他可信签名流程，使用自己的账号重新签名。**
 
-<details open>
+<details>
 <summary><strong>在 iPhone、iPad 与 Mac 上安装</strong></summary>
 
 #### iPhone 与 iPad
