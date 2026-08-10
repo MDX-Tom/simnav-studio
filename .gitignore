@@ -37,6 +37,21 @@ NavPlanner-web/map_offline/
 # Local private configuration
 .env
 .env.*
+/Config/CodeSigning.local.xcconfig
+
+# Apple signing credentials and provisioning material
+*.p12
+*.pfx
+*.cer
+*.crt
+*.der
+*.pem
+*.key
+*.p8
+*.mobileprovision
+*.provisionprofile
+ExportOptions.local.plist
+AuthKey_*.p8
 
 # Local Codex handoff notes and long-form implementation logs.
 codex/

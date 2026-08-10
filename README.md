@@ -257,12 +257,79 @@ The numbered workflow makes the dependency direction explicit: route planning pr
 ```bash
 git clone https://github.com/MDX-Tom/NavPlanner-App.git
 cd NavPlanner-App
+Tools/Signing/setup_local_signing.sh
 open NavPlanner.xcodeproj
 ```
 
-In Xcode, select the **NavPlanner** scheme, choose an iPhone or iPad destination, configure the signing team and Bundle Identifier for your account, and run the app.
+The signing helper reads the Team ID from a valid Apple Development certificate
+and writes it only to the Git-ignored
+`Config/CodeSigning.local.xcconfig`. If your account cannot provision the public
+Bundle Identifier, pass a private override such as
+`--bundle-id com.example.NavPlanner`. Simulator builds do not require signing.
+For a physical device, first add your Apple Account and create an Apple
+Development certificate in Xcode if the helper reports that no identity exists.
+If Xcode later reports that no profile is available or that a profile expired,
+open **Xcode → Settings → Accounts**, refresh the Apple Account and certificates,
+then rerun the helper. Account credentials remain in Xcode and Keychain and must
+never be copied into this repository.
+
+In Xcode, select the **NavPlanner** scheme, choose an iPhone, iPad, or Mac
+Catalyst destination, and run the app. Xcode automatically reads the ignored
+local configuration; it does not write the Team ID into the tracked project.
 
 For private builds, place a local database at `NavPlanner/Resources/Database/navdata.sqlite`, or import one from Settings after launch. Public distributions should not include navigation data without confirmed redistribution rights.
+
+### Signing and public release assets
+
+Public GitHub IPA assets must be unsigned sideload packages. They must not
+contain a maintainer certificate, Team ID, provisioning profile, account email,
+private key, App Store Connect key, xcarchive, or raw build log. Installers
+re-sign the IPA with their own account through AltStore, SideStore, Sideloadly,
+or another trusted signing workflow.
+
+Local Apple Development settings belong only in the Git-ignored
+`Config/CodeSigning.local.xcconfig`. The tracked
+`Config/CodeSigning.xcconfig` optionally includes that file, so Xcode GUI builds
+work locally while a fresh clone and public unsigned builds contain no private
+identity. A Mac artifact without private CI credentials is ad-hoc signed and
+not notarized; Developer ID/App Store signing, if ever used, must import
+credentials only from protected CI secrets. See
+[public release packaging](Tools/Release/README.md).
+
+<details>
+<summary><strong>Install on iPhone, iPad, and Mac</strong></summary>
+
+#### iPhone and iPad
+
+The GitHub IPA is unsigned and cannot be installed directly. It intentionally
+contains no maintainer certificate or provisioning profile.
+
+1. Download the `-unsigned.ipa` and `SHA256SUMS.txt`, then verify the checksum.
+2. Import the IPA into AltStore, SideStore, Sideloadly, or another signing tool
+   you trust.
+3. Let that tool re-sign the IPA with your own Apple Account and install it.
+4. Follow the tool and device prompts to trust the resulting local signature;
+   enable Developer Mode only when iOS/iPadOS requests it.
+
+For a direct local Xcode installation, run
+`Tools/Signing/setup_local_signing.sh`, connect the device, select it as the
+NavPlanner destination, and press Run. The generated signing file remains only
+on that Mac and is ignored by Git.
+
+#### Mac
+
+1. Download the `-catalyst-adhoc-not-notarized.dmg` and verify its SHA-256.
+2. Open the DMG and drag `NavPlanner.app` to Applications.
+3. On first launch, Control-click the app and choose **Open**. If macOS still
+   blocks it, use **System Settings → Privacy & Security → Open Anyway** only
+   after verifying the checksum and download source.
+
+The current Mac build is a universal arm64/x86_64 Mac Catalyst app. It is
+ad-hoc signed and not notarized, so it does not have Developer ID/Gatekeeper
+public-distribution trust; it is not a native AppKit app or a Designed-for-iPad
+wrapper.
+
+</details>
 
 <details>
 <summary><strong>Command-line build</strong></summary>

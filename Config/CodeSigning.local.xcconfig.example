@@ -1,0 +1,15 @@
+// 推荐运行 Tools/Signing/setup_local_signing.sh 自动创建本机文件；也可手工复制。
+// Prefer Tools/Signing/setup_local_signing.sh; manual copying is also supported.
+// 本机私有构建时复制为 CodeSigning.local.xcconfig；该目标文件已被 Git 忽略。
+// Copy this file to CodeSigning.local.xcconfig for a private local build.
+// 不得提交真实 Team ID、证书名、profile、账号邮箱或秘密。
+// Never commit real Team IDs, certificate names, profile identifiers,
+// account email addresses or secrets.
+
+DEVELOPMENT_TEAM = YOUR_TEAM_ID
+CODE_SIGN_STYLE = Automatic
+CODE_SIGN_IDENTITY = Apple Development
+
+// 无法使用仓库 Bundle ID 时，可只在本机覆盖；公开配置会在此文件之前加载。
+// Developers who cannot use the repository Bundle ID may override it locally.
+// PRODUCT_BUNDLE_IDENTIFIER = com.example.NavPlanner
