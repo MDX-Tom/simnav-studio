@@ -1,7 +1,9 @@
 import AppKit
+import CoreImage
 import Foundation
 
 struct IconVariant {
+    let style: Int
     let assetName: String
     let filePrefix: String
     let webPreviewName: String
@@ -15,6 +17,17 @@ let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
 let assetsRoot = root.appendingPathComponent("NavPlanner/Support/Assets.xcassets", isDirectory: true)
 let webIconRoot = root.appendingPathComponent("NavPlanner/Resources/Web/app-icons", isDirectory: true)
 let sourceURL = root.appendingPathComponent("Tools/Icon/navplanner-terrain-liquid-glass-source.png")
+let systemMaskURL = root.appendingPathComponent("Tools/Icon/Sources/ios27-app-icon-system-mask.png")
+let styleMasterURLs: [Int: [Bool: URL]] = [
+    1: [
+        false: root.appendingPathComponent("Tools/Icon/Sources/style1-day-appstore-master.png"),
+        true: root.appendingPathComponent("Tools/Icon/Sources/style1-night-appstore-master.png")
+    ],
+    2: [
+        false: root.appendingPathComponent("Tools/Icon/Sources/style2-day-appstore-master.png"),
+        true: root.appendingPathComponent("Tools/Icon/Sources/style2-night-appstore-master.png")
+    ]
+]
 
 let iconEntries: [(idiom: String, size: String, scale: String, pixels: Int)] = [
     ("iphone", "20x20", "2x", 40),
@@ -37,18 +50,45 @@ let iconEntries: [(idiom: String, size: String, scale: String, pixels: Int)] = [
     ("ios-marketing", "1024x1024", "1x", 1024)
 ]
 
-// 默认主图标使用日间均衡档；高饱和档不再作为默认，但仍不额外增加源图饱和度。
-let variants: [IconVariant] = [
-    IconVariant(assetName: "AppIconDayHigh", filePrefix: "day-high", webPreviewName: "day-high", saturation: 1.00, contrast: 1.00, brightness: 0.00, nightStyle: false),
-    IconVariant(assetName: "AppIcon", filePrefix: "day-medium", webPreviewName: "day-medium", saturation: 0.58, contrast: 0.90, brightness: 0.020, nightStyle: false),
-    IconVariant(assetName: "AppIconDaySoft", filePrefix: "day-soft", webPreviewName: "day-soft", saturation: 0.30, contrast: 0.80, brightness: 0.040, nightStyle: false),
-    IconVariant(assetName: "AppIconNightHigh", filePrefix: "night-high", webPreviewName: "night-high", saturation: 1.00, contrast: 1.08, brightness: -0.010, nightStyle: true),
-    IconVariant(assetName: "AppIconNightMedium", filePrefix: "night-medium", webPreviewName: "night-medium", saturation: 0.56, contrast: 0.92, brightness: 0.004, nightStyle: true),
-    IconVariant(assetName: "AppIconNightSoft", filePrefix: "night-soft", webPreviewName: "night-soft", saturation: 0.28, contrast: 0.80, brightness: 0.018, nightStyle: true)
+func generatedStyleVariants(style: Int) -> [IconVariant] {
+    [
+        IconVariant(style: style, assetName: "AppIconStyle\(style)DayHigh", filePrefix: "style\(style)-day-high", webPreviewName: "style\(style)-day-high", saturation: 1.12, contrast: 1.03, brightness: -0.002, nightStyle: false),
+        IconVariant(style: style, assetName: "AppIconStyle\(style)DayMedium", filePrefix: "style\(style)-day-medium", webPreviewName: "style\(style)-day-medium", saturation: 1.00, contrast: 1.00, brightness: 0.000, nightStyle: false),
+        IconVariant(style: style, assetName: "AppIconStyle\(style)DaySoft", filePrefix: "style\(style)-day-soft", webPreviewName: "style\(style)-day-soft", saturation: 0.78, contrast: 0.93, brightness: 0.020, nightStyle: false),
+        IconVariant(style: style, assetName: "AppIconStyle\(style)NightHigh", filePrefix: "style\(style)-night-high", webPreviewName: "style\(style)-night-high", saturation: 1.10, contrast: 1.04, brightness: -0.004, nightStyle: true),
+        IconVariant(style: style, assetName: "AppIconStyle\(style)NightMedium", filePrefix: "style\(style)-night-medium", webPreviewName: "style\(style)-night-medium", saturation: 1.00, contrast: 1.00, brightness: 0.000, nightStyle: true),
+        IconVariant(style: style, assetName: "AppIconStyle\(style)NightSoft", filePrefix: "style\(style)-night-soft", webPreviewName: "style\(style)-night-soft", saturation: 0.78, contrast: 0.92, brightness: 0.015, nightStyle: true)
+    ]
+}
+
+// 风格 1、2 使用确认后的六联源图；风格 3 保留现有图标，并继续以日间均衡档作为主图标。
+let variants: [IconVariant] = generatedStyleVariants(style: 1) + generatedStyleVariants(style: 2) + [
+    IconVariant(style: 3, assetName: "AppIconDayHigh", filePrefix: "day-high", webPreviewName: "style3-day-high", saturation: 1.00, contrast: 1.00, brightness: 0.00, nightStyle: false),
+    IconVariant(style: 3, assetName: "AppIcon", filePrefix: "day-medium", webPreviewName: "style3-day-medium", saturation: 0.58, contrast: 0.90, brightness: 0.020, nightStyle: false),
+    IconVariant(style: 3, assetName: "AppIconDaySoft", filePrefix: "day-soft", webPreviewName: "style3-day-soft", saturation: 0.30, contrast: 0.80, brightness: 0.040, nightStyle: false),
+    IconVariant(style: 3, assetName: "AppIconNightHigh", filePrefix: "night-high", webPreviewName: "style3-night-high", saturation: 1.00, contrast: 1.08, brightness: -0.010, nightStyle: true),
+    IconVariant(style: 3, assetName: "AppIconNightMedium", filePrefix: "night-medium", webPreviewName: "style3-night-medium", saturation: 0.56, contrast: 0.92, brightness: 0.004, nightStyle: true),
+    IconVariant(style: 3, assetName: "AppIconNightSoft", filePrefix: "night-soft", webPreviewName: "style3-night-soft", saturation: 0.28, contrast: 0.80, brightness: 0.018, nightStyle: true)
 ]
 
 guard let sourceImage = NSImage(contentsOf: sourceURL) else {
     fatalError("无法读取 App 图标源图：\(sourceURL.path)")
+}
+
+var styleMasterImages: [Int: [Bool: NSImage]] = [:]
+for (style, urls) in styleMasterURLs {
+    var images: [Bool: NSImage] = [:]
+    for (nightStyle, url) in urls {
+        guard let image = NSImage(contentsOf: url) else {
+            fatalError("无法读取风格 \(style) 图标母版：\(url.path)")
+        }
+        images[nightStyle] = image
+    }
+    styleMasterImages[style] = images
+}
+
+guard let systemMaskImage = CIImage(contentsOf: systemMaskURL) else {
+    fatalError("无法读取 iOS 27 App Icon 系统遮罩：\(systemMaskURL.path)")
 }
 
 var processedSourceCache: [String: NSImage] = [:]
@@ -82,7 +122,15 @@ func processedSourceImage(for variant: IconVariant) -> NSImage {
     }
 
     let image: NSImage
-    if variant.nightStyle {
+    if variant.style != 3 {
+        guard let master = styleMasterImages[variant.style]?[variant.nightStyle] else {
+            fatalError("缺少风格 \(variant.style) 的图标母版")
+        }
+        image = toneAdjustedImage(
+            from: paletteMatchedImage(from: master, nightStyle: variant.nightStyle),
+            variant: variant
+        )
+    } else if variant.nightStyle {
         image = toneAdjustedImage(from: nightImage(from: sourceImage), variant: variant)
     } else if variant.assetName == "AppIconDayHigh" {
         image = sourceImage
@@ -92,6 +140,74 @@ func processedSourceImage(for variant: IconVariant) -> NSImage {
 
     processedSourceCache[variant.filePrefix] = image
     return image
+}
+
+// 将重建后的全出血母版锁回原方案 B/C 的配色：背景强降饱和，蓝/橙航路单独保留辨识度。
+func paletteMatchedImage(from image: NSImage, nightStyle: Bool) -> NSImage {
+    guard let tiff = image.tiffRepresentation,
+          let sourceRep = NSBitmapImageRep(data: tiff) else {
+        return image
+    }
+
+    let width = sourceRep.pixelsWide
+    let height = sourceRep.pixelsHigh
+    guard let rep = NSBitmapImageRep(
+        bitmapDataPlanes: nil,
+        pixelsWide: width,
+        pixelsHigh: height,
+        bitsPerSample: 8,
+        samplesPerPixel: 4,
+        hasAlpha: true,
+        isPlanar: false,
+        colorSpaceName: .deviceRGB,
+        bitmapFormat: .alphaNonpremultiplied,
+        bytesPerRow: 0,
+        bitsPerPixel: 0
+    ) else {
+        return image
+    }
+
+    for y in 0..<height {
+        for x in 0..<width {
+            guard let color = sourceRep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else {
+                continue
+            }
+            let r = CGFloat(color.redComponent)
+            let g = CGFloat(color.greenComponent)
+            let b = CGFloat(color.blueComponent)
+            let alpha = CGFloat(color.alphaComponent)
+            let luma = 0.2126 * r + 0.7152 * g + 0.0722 * b
+            let isRoute = nightStyle
+                ? (r > 0.45 && r > g * 1.30 && r - b > 0.20)
+                : (b > 0.45 && b > r * 1.18 && b > g * 1.25 && b - r > 0.15)
+            let saturation: CGFloat
+            let contrast: CGFloat
+            let brightness: CGFloat
+            if nightStyle {
+                saturation = isRoute ? 0.72 : 0.92
+                contrast = isRoute ? 0.98 : 0.96
+                brightness = isRoute ? 0.018 : 0.045
+            } else {
+                saturation = isRoute ? 0.72 : 0.30
+                contrast = isRoute ? 0.98 : 0.94
+                brightness = isRoute ? 0.050 : 0.080
+            }
+            let adjusted = (
+                r: clamp(((luma + (r - luma) * saturation) - 0.5) * contrast + 0.5 + brightness),
+                g: clamp(((luma + (g - luma) * saturation) - 0.5) * contrast + 0.5 + brightness),
+                b: clamp(((luma + (b - luma) * saturation) - 0.5) * contrast + 0.5 + brightness)
+            )
+            rep.setColor(
+                NSColor(deviceRed: adjusted.r, green: adjusted.g, blue: adjusted.b, alpha: alpha),
+                atX: x,
+                y: y
+            )
+        }
+    }
+
+    let output = NSImage(size: NSSize(width: width, height: height))
+    output.addRepresentation(rep)
+    return output
 }
 
 func toneAdjustedImage(from image: NSImage, variant: IconVariant) -> NSImage {
@@ -431,27 +547,145 @@ func drawLiquidGlassFinish(size: CGFloat, nightStyle: Bool) {
     }
 }
 
-func renderIcon(size: Int, variant: IconVariant) -> NSImage {
-    let outputSize = NSSize(width: size, height: size)
-    let image = NSImage(size: outputSize)
-    image.lockFocus()
-    guard let context = NSGraphicsContext.current?.cgContext else {
-        fatalError("无法创建 App 图标绘图上下文")
+func renderBitmapImage(size: Int, drawing: (NSRect) -> Void) -> NSImage {
+    guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+          let context = CGContext(
+              data: nil,
+              width: size,
+              height: size,
+              bitsPerComponent: 8,
+              bytesPerRow: size * 4,
+              space: colorSpace,
+              bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.noneSkipLast.rawValue
+          ) else {
+        fatalError("无法创建 App 图标位图上下文")
     }
+
+    let outputSize = NSSize(width: size, height: size)
+    let bounds = NSRect(origin: .zero, size: outputSize)
+    let graphicsContext = NSGraphicsContext(cgContext: context, flipped: false)
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = graphicsContext
     context.setShouldAntialias(true)
     NSGraphicsContext.current?.imageInterpolation = .high
+    drawing(bounds)
+    NSGraphicsContext.restoreGraphicsState()
 
-    let bounds = NSRect(origin: .zero, size: outputSize)
-    drawSourceImage(processedSourceImage(for: variant), into: bounds)
-    drawLiquidGlassFinish(size: CGFloat(size), nightStyle: variant.nightStyle)
-
-    image.unlockFocus()
+    guard let cgImage = context.makeImage() else {
+        fatalError("无法导出 App 图标位图")
+    }
+    let bitmap = NSBitmapImageRep(cgImage: cgImage)
+    let image = NSImage(size: outputSize)
+    image.addRepresentation(bitmap)
     return image
 }
 
+let iconColorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+let iconCIContext = CIContext(options: [.workingColorSpace: iconColorSpace])
+var liquidGlassFrameCache: [String: NSImage] = [:]
+
+struct FrameBand {
+    let distance: CGFloat
+    let width: CGFloat
+    let color: CIColor
+}
+
+func systemMaskBand(distance: CGFloat, width: CGFloat, extent: CGRect) -> CIImage {
+    let alphaVector = CIVector(x: 0, y: 0, z: 0, w: 1)
+    let mask = systemMaskImage
+        .cropped(to: extent)
+        .applyingFilter("CIColorMatrix", parameters: [
+            "inputRVector": alphaVector,
+            "inputGVector": alphaVector,
+            "inputBVector": alphaVector,
+            "inputAVector": alphaVector
+        ])
+        .cropped(to: extent)
+    let outer = mask
+        .applyingFilter("CIMorphologyMinimum", parameters: ["inputRadius": distance - width / 2])
+        .cropped(to: extent)
+    let inner = mask
+        .applyingFilter("CIMorphologyMinimum", parameters: ["inputRadius": distance + width / 2])
+        .cropped(to: extent)
+    return outer
+        .applyingFilter("CISubtractBlendMode", parameters: [kCIInputBackgroundImageKey: inner])
+        .cropped(to: extent)
+        .applyingFilter("CIColorMatrix", parameters: [
+            "inputAVector": CIVector(x: 1, y: 0, z: 0, w: 0)
+        ])
+        .cropped(to: extent)
+}
+
+func liquidGlassFrameImage(style: Int, nightStyle: Bool) -> NSImage {
+    let cacheKey = "\(style)-\(nightStyle ? "night" : "day")"
+    if let cached = liquidGlassFrameCache[cacheKey] {
+        return cached
+    }
+
+    let extent = CGRect(x: 0, y: 0, width: 1024, height: 1024)
+    let bands: [FrameBand]
+    if style == 1 {
+        bands = nightStyle ? [
+            FrameBand(distance: 23, width: 13, color: CIColor(red: 0.34, green: 0.61, blue: 1.00, alpha: 0.22)),
+            FrameBand(distance: 26, width: 3, color: CIColor(red: 0.76, green: 0.88, blue: 1.00, alpha: 0.68)),
+            FrameBand(distance: 42, width: 9, color: CIColor(red: 0.44, green: 0.67, blue: 1.00, alpha: 0.13)),
+            FrameBand(distance: 44, width: 2.5, color: CIColor(red: 0.78, green: 0.89, blue: 1.00, alpha: 0.45)),
+            FrameBand(distance: 52, width: 3, color: CIColor(red: 0.01, green: 0.04, blue: 0.10, alpha: 0.32))
+        ] : [
+            FrameBand(distance: 23, width: 13, color: CIColor(red: 0.78, green: 0.90, blue: 1.00, alpha: 0.20)),
+            FrameBand(distance: 26, width: 3, color: CIColor(red: 0.97, green: 0.99, blue: 1.00, alpha: 0.72)),
+            FrameBand(distance: 42, width: 9, color: CIColor(red: 0.86, green: 0.94, blue: 1.00, alpha: 0.13)),
+            FrameBand(distance: 44, width: 2.5, color: CIColor(red: 1.00, green: 1.00, blue: 1.00, alpha: 0.48)),
+            FrameBand(distance: 52, width: 3, color: CIColor(red: 0.03, green: 0.07, blue: 0.10, alpha: 0.22))
+        ]
+    } else {
+        bands = nightStyle ? [
+            FrameBand(distance: 31, width: 10, color: CIColor(red: 0.47, green: 0.69, blue: 0.94, alpha: 0.14)),
+            FrameBand(distance: 33, width: 2.5, color: CIColor(red: 0.74, green: 0.85, blue: 0.98, alpha: 0.54)),
+            FrameBand(distance: 43, width: 2.5, color: CIColor(red: 0.01, green: 0.04, blue: 0.09, alpha: 0.28))
+        ] : [
+            FrameBand(distance: 31, width: 10, color: CIColor(red: 0.84, green: 0.93, blue: 1.00, alpha: 0.13)),
+            FrameBand(distance: 33, width: 2.5, color: CIColor(red: 0.98, green: 0.99, blue: 1.00, alpha: 0.56)),
+            FrameBand(distance: 43, width: 2.5, color: CIColor(red: 0.05, green: 0.08, blue: 0.11, alpha: 0.20))
+        ]
+    }
+
+    var output = CIImage(color: .clear).cropped(to: extent)
+    for band in bands {
+        let fill = CIImage(color: band.color).cropped(to: extent)
+        output = fill
+            .applyingFilter("CIBlendWithAlphaMask", parameters: [
+                kCIInputBackgroundImageKey: output,
+                "inputMaskImage": systemMaskBand(distance: band.distance, width: band.width, extent: extent)
+            ])
+            .cropped(to: extent)
+    }
+    guard let cgImage = iconCIContext.createCGImage(output, from: extent) else {
+        fatalError("无法生成与 iOS 遮罩同心的 Liquid Glass 边框")
+    }
+    let image = NSImage(cgImage: cgImage, size: NSSize(width: 1024, height: 1024))
+    liquidGlassFrameCache[cacheKey] = image
+    return image
+}
+
+func renderIcon(size: Int, variant: IconVariant) -> NSImage {
+    renderBitmapImage(size: size) { bounds in
+        drawSourceImage(processedSourceImage(for: variant), into: bounds)
+        if variant.style == 3 {
+            drawLiquidGlassFinish(size: CGFloat(size), nightStyle: variant.nightStyle)
+        } else {
+            drawSourceImage(
+                liquidGlassFrameImage(style: variant.style, nightStyle: variant.nightStyle),
+                into: bounds
+            )
+        }
+    }
+}
+
 func writePNG(_ image: NSImage, to url: URL) throws {
-    guard let tiff = image.tiffRepresentation,
-          let bitmap = NSBitmapImageRep(data: tiff),
+    let bitmap = image.representations.compactMap { $0 as? NSBitmapImageRep }.first
+        ?? image.tiffRepresentation.flatMap { NSBitmapImageRep(data: $0) }
+    guard let bitmap,
           let png = bitmap.representation(using: .png, properties: [:]) else {
         throw NSError(domain: "NavPlannerIcon", code: 1, userInfo: [NSLocalizedDescriptionKey: "PNG 编码失败"])
     }
@@ -475,6 +709,39 @@ func appIconContents(prefix: String) -> Data {
         ]
     ]
     return try! JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
+}
+
+func validatePNG(at url: URL, expectedPixels: Int) throws {
+    let data = try Data(contentsOf: url)
+    guard let bitmap = NSBitmapImageRep(data: data) else {
+        throw NSError(domain: "NavPlannerIcon", code: 2, userInfo: [NSLocalizedDescriptionKey: "无法校验 PNG：\(url.path)"])
+    }
+    guard bitmap.pixelsWide == expectedPixels, bitmap.pixelsHigh == expectedPixels else {
+        throw NSError(
+            domain: "NavPlannerIcon",
+            code: 3,
+            userInfo: [NSLocalizedDescriptionKey: "图标尺寸不合格：\(url.lastPathComponent) 实际为 \(bitmap.pixelsWide)x\(bitmap.pixelsHigh)，应为 \(expectedPixels)x\(expectedPixels)"]
+        )
+    }
+    guard !bitmap.hasAlpha else {
+        throw NSError(domain: "NavPlannerIcon", code: 4, userInfo: [NSLocalizedDescriptionKey: "图标含 Alpha 通道：\(url.lastPathComponent)"])
+    }
+}
+
+func validateGeneratedOutputs() throws {
+    for variant in variants {
+        let setURL = assetsRoot.appendingPathComponent("\(variant.assetName).appiconset", isDirectory: true)
+        for entry in iconEntries {
+            try validatePNG(
+                at: setURL.appendingPathComponent("\(variant.filePrefix)-\(entry.idiom)-\(entry.pixels).png"),
+                expectedPixels: entry.pixels
+            )
+        }
+        try validatePNG(
+            at: webIconRoot.appendingPathComponent("\(variant.webPreviewName).png"),
+            expectedPixels: 180
+        )
+    }
 }
 
 func removeObsoleteOutputs() throws {
@@ -502,6 +769,18 @@ try removeObsoleteOutputs()
 
 for variant in variants {
     let setURL = assetsRoot.appendingPathComponent("\(variant.assetName).appiconset", isDirectory: true)
+    if variant.style == 3 {
+        let existingIconURL = setURL.appendingPathComponent("\(variant.filePrefix)-ios-marketing-1024.png")
+        guard let existingIcon = NSImage(contentsOf: existingIconURL) else {
+            fatalError("无法读取现有风格 3 图标：\(existingIconURL.path)")
+        }
+        let preview = renderBitmapImage(size: 180) { bounds in
+            drawSourceImage(existingIcon, into: bounds)
+        }
+        try writePNG(preview, to: webIconRoot.appendingPathComponent("\(variant.webPreviewName).png"))
+        continue
+    }
+
     if FileManager.default.fileExists(atPath: setURL.path) {
         try FileManager.default.removeItem(at: setURL)
     }
@@ -515,4 +794,5 @@ for variant in variants {
     try writePNG(renderIcon(size: 180, variant: variant), to: webIconRoot.appendingPathComponent("\(variant.webPreviewName).png"))
 }
 
-print("已生成日间三档和夜间三档 App 图标；默认主图标为日间均衡。")
+try validateGeneratedOutputs()
+print("已生成并校验三套风格的日间/夜间三档 App 图标；所有 PNG 尺寸正确且不含 Alpha，默认主图标为风格 3 日间均衡。")

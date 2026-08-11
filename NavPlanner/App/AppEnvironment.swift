@@ -2,6 +2,27 @@ import Combine
 import Foundation
 import UIKit
 
+private let legacyAppIconChoices: [String: String] = [
+    "day-high": "style3-day-high",
+    "primary": "style3-day-medium",
+    "day-soft": "style3-day-soft",
+    "night-high": "style3-night-high",
+    "night-medium": "style3-night-medium",
+    "night-soft": "style3-night-soft"
+]
+
+private func normalizedAppIconChoice(_ choice: String?) -> String {
+    guard let choice, !choice.isEmpty else { return "style3-day-medium" }
+    if let migrated = legacyAppIconChoices[choice] {
+        return migrated
+    }
+    let styles = ["style1", "style2", "style3"]
+    let variants = ["day-high", "day-medium", "day-soft", "night-high", "night-medium", "night-soft"]
+    return styles.contains { style in variants.contains { choice == "\(style)-\($0)" } }
+        ? choice
+        : "style3-day-medium"
+}
+
 @MainActor
 final class AppEnvironment: ObservableObject {
     let dataStore: LocalDataStore
@@ -13,7 +34,9 @@ final class AppEnvironment: ObservableObject {
     @Published var lastBridgeEvent = "地图内核尚未发送事件"
     @Published var webThemeMode = "system"
     @Published var webEffectiveTheme = "night"
-    @Published var appIconChoice = UserDefaults.standard.string(forKey: "NavPlannerAppIconChoice") ?? "primary"
+    @Published var appIconChoice = normalizedAppIconChoice(
+        UserDefaults.standard.string(forKey: "NavPlannerAppIconChoice")
+    )
 
     init() {
         let dataStore = LocalDataStore()
@@ -69,14 +92,26 @@ final class AppEnvironment: ObservableObject {
 
     func setAppIconChoice(_ choice: String, completion: @escaping ([String: Any]) -> Void) {
         let iconOptions: [String: (iconName: String?, label: String)] = [
-            "day-high": ("AppIconDayHigh", "日间高饱和"),
-            "primary": (nil, "日间均衡"),
-            "day-soft": ("AppIconDaySoft", "日间柔和"),
-            "night-high": ("AppIconNightHigh", "夜间高对比"),
-            "night-medium": ("AppIconNightMedium", "夜间均衡"),
-            "night-soft": ("AppIconNightSoft", "夜间柔和")
+            "style1-day-high": ("AppIconStyle1DayHigh", "风格1 · 日间高饱和"),
+            "style1-day-medium": ("AppIconStyle1DayMedium", "风格1 · 日间默认"),
+            "style1-day-soft": ("AppIconStyle1DaySoft", "风格1 · 日间柔和"),
+            "style1-night-high": ("AppIconStyle1NightHigh", "风格1 · 夜间高饱和"),
+            "style1-night-medium": ("AppIconStyle1NightMedium", "风格1 · 夜间默认"),
+            "style1-night-soft": ("AppIconStyle1NightSoft", "风格1 · 夜间柔和"),
+            "style2-day-high": ("AppIconStyle2DayHigh", "风格2 · 日间高饱和"),
+            "style2-day-medium": ("AppIconStyle2DayMedium", "风格2 · 日间默认"),
+            "style2-day-soft": ("AppIconStyle2DaySoft", "风格2 · 日间柔和"),
+            "style2-night-high": ("AppIconStyle2NightHigh", "风格2 · 夜间高饱和"),
+            "style2-night-medium": ("AppIconStyle2NightMedium", "风格2 · 夜间默认"),
+            "style2-night-soft": ("AppIconStyle2NightSoft", "风格2 · 夜间柔和"),
+            "style3-day-high": ("AppIconDayHigh", "风格3 · 日间高饱和"),
+            "style3-day-medium": (nil, "风格3 · 日间默认"),
+            "style3-day-soft": ("AppIconDaySoft", "风格3 · 日间柔和"),
+            "style3-night-high": ("AppIconNightHigh", "风格3 · 夜间高饱和"),
+            "style3-night-medium": ("AppIconNightMedium", "风格3 · 夜间默认"),
+            "style3-night-soft": ("AppIconNightSoft", "风格3 · 夜间柔和")
         ]
-        let normalized = iconOptions.keys.contains(choice) ? choice : "primary"
+        let normalized = normalizedAppIconChoice(choice)
         let iconName = iconOptions[normalized]?.iconName ?? nil
         guard UIApplication.shared.supportsAlternateIcons else {
             completion([

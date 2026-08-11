@@ -15,6 +15,7 @@ export function registerSettingsPage(context) {
     applyLanguageMode,
     applyWeightUnit,
     applyPressureUnit,
+    applyAppIconStyle,
     applyAppIconChoice,
     applyMapSourceChoice,
     applyOnlineMapProvider,
@@ -64,8 +65,11 @@ export function registerSettingsPage(context) {
   elements.pressureUnitButtons.forEach((button) => {
     button.addEventListener("click", () => applyPressureUnit(button.dataset.pressureUnitChoice));
   });
-  elements.appIconChoiceButtons.forEach((button) => {
-    button.addEventListener("click", () => applyAppIconChoice(button.dataset.appIconChoice));
+  elements.appIconStyleButtons.forEach((button) => {
+    button.addEventListener("click", () => applyAppIconStyle(button.dataset.appIconStyle));
+  });
+  elements.appIconVariantButtons.forEach((button) => {
+    button.addEventListener("click", () => applyAppIconChoice(button.dataset.appIconVariant));
   });
   elements.mapSourceChoiceButtons.forEach((button) => {
     button.addEventListener("click", () => applyMapSourceChoice(button.dataset.mapSourceChoice));

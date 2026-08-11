@@ -21,7 +21,19 @@ const NAVPLANNER_API_ORIGIN = (window.location.protocol === "navplanner:"
 const apiResourceUrl = (path) => `${NAVPLANNER_API_ORIGIN}${path}`;
 const THEME_MODES = new Set(["system", "day", "night"]);
 const LANGUAGE_MODES = new Set(["system", "zh-Hans", "en"]);
-const APP_ICON_CHOICES = new Set(["day-high", "primary", "day-soft", "night-high", "night-medium", "night-soft"]);
+const APP_ICON_STYLES = new Set(["style1", "style2", "style3"]);
+const APP_ICON_VARIANTS = new Set(["day-high", "day-medium", "day-soft", "night-high", "night-medium", "night-soft"]);
+const APP_ICON_CHOICES = new Set(
+  Array.from(APP_ICON_STYLES).flatMap((style) => Array.from(APP_ICON_VARIANTS).map((variant) => `${style}-${variant}`)),
+);
+const LEGACY_APP_ICON_CHOICES = Object.freeze({
+  "day-high": "style3-day-high",
+  primary: "style3-day-medium",
+  "day-soft": "style3-day-soft",
+  "night-high": "style3-night-high",
+  "night-medium": "style3-night-medium",
+  "night-soft": "style3-night-soft",
+});
 const MAP_SOURCE_MODES = new Set(["online", "offline"]);
 const MAP_TILE_ZOOM_OFFSETS = new Set([-1, 0, 1, 2]);
 const WEIGHT_UNITS = new Set(["lb", "kg"]);
@@ -152,7 +164,8 @@ const TRANSLATIONS = {
   "settings.pressureUnitHint": { "zh-Hans": "影响计算页起降机场 QNH 显示；默认 inHg，内部气象计算仍使用 hPa。", en: "Controls Calc page departure/arrival QNH display; default is inHg, internal weather calculations remain in hPa." },
   "settings.pressureUnitChanged": { "zh-Hans": "修正海压单位已切换为 {unit}。", en: "Altimeter unit changed to {unit}." },
   "settings.appIcon": { "zh-Hans": "应用图标", en: "App Icon" },
-  "settings.appIconHint": { "zh-Hans": "默认图标为日间均衡，夜间图标使用蓝黑反色地形、紫色层次和暗橙航路。", en: "The default icon is the balanced day variant. Night icons use blue-black terrain, purple relief, and dark amber routes." },
+  "settings.appIconStyle": { "zh-Hans": "图标风格", en: "Icon style" },
+  "settings.appIconHint": { "zh-Hans": "先选择图标风格，再选择日间或夜间的高饱和、默认或柔和版本。", en: "Choose an icon style, then select a high-saturation, default, or soft Day or Night variant." },
   "settings.mapSelection": { "zh-Hans": "地图选择", en: "Map Selection" },
   "settings.mapSelectionMode": { "zh-Hans": "地图模式", en: "Map mode" },
   "settings.mapSelectionHint": { "zh-Hans": "在线地图作为增强底图；离线地图读取本机资源，断网时本地航路、程序和 nav-overlay 仍可使用。", en: "Online maps are enhanced base maps. Offline maps read local resources; routes, procedures, and nav-overlay remain local-first when offline." },
@@ -181,11 +194,14 @@ const TRANSLATIONS = {
   "appIcon.soft": { "zh-Hans": "柔和", en: "Soft" },
   "appIcon.highContrast": { "zh-Hans": "高对比", en: "High contrast" },
   "appIcon.balanced": { "zh-Hans": "均衡", en: "Balanced" },
+  "appIcon.style1": { "zh-Hans": "风格1", en: "Style 1" },
+  "appIcon.style2": { "zh-Hans": "风格2", en: "Style 2" },
+  "appIcon.style3": { "zh-Hans": "风格3", en: "Style 3" },
   "appIcon.choice.dayHigh": { "zh-Hans": "日间高饱和", en: "Day high saturation" },
-  "appIcon.choice.primary": { "zh-Hans": "日间均衡", en: "Day balanced" },
+  "appIcon.choice.primary": { "zh-Hans": "日间默认", en: "Day default" },
   "appIcon.choice.daySoft": { "zh-Hans": "日间柔和", en: "Day soft" },
-  "appIcon.choice.nightHigh": { "zh-Hans": "夜间高对比", en: "Night high contrast" },
-  "appIcon.choice.nightMedium": { "zh-Hans": "夜间均衡", en: "Night balanced" },
+  "appIcon.choice.nightHigh": { "zh-Hans": "夜间高饱和", en: "Night high saturation" },
+  "appIcon.choice.nightMedium": { "zh-Hans": "夜间默认", en: "Night default" },
   "appIcon.choice.nightSoft": { "zh-Hans": "夜间柔和", en: "Night soft" },
   "appIcon.alreadySelected": { "zh-Hans": "应用图标已是当前选择。", en: "App icon already uses the selected variant." },
   "appIcon.changed": { "zh-Hans": "已切换为{name}应用图标。", en: "Changed app icon to {name}." },
@@ -947,7 +963,7 @@ const state = {
   themeMode: THEME_MODES.has(savedThemeMode) ? savedThemeMode : "system",
   languageMode: normalizeLanguageMode(savedLanguageMode),
   effectiveLanguage: resolveLanguageMode(savedLanguageMode),
-  appIconChoice: APP_ICON_CHOICES.has(savedAppIconChoice) ? savedAppIconChoice : "primary",
+  appIconChoice: normalizeAppIconChoice(savedAppIconChoice),
   databaseStatus: null,
   databaseListStatus: null,
   databaseItems: [],
@@ -1400,7 +1416,9 @@ const elements = {
   languageChoiceButtons: document.querySelectorAll("[data-language-choice]"),
   weightUnitButtons: document.querySelectorAll("[data-weight-unit-choice]"),
   pressureUnitButtons: document.querySelectorAll("[data-pressure-unit-choice]"),
-  appIconChoiceButtons: document.querySelectorAll("[data-app-icon-choice]"),
+  appIconStyleButtons: document.querySelectorAll("[data-app-icon-style]"),
+  appIconVariantButtons: document.querySelectorAll("[data-app-icon-variant]"),
+  appIconPreviewImages: document.querySelectorAll("[data-app-icon-preview]"),
   mapSourceChoiceButtons: document.querySelectorAll("[data-map-source-choice]"),
   onlineMapProviderButtons: document.querySelectorAll("[data-online-map-provider]"),
   mapTileZoomOffsetSliderFrame: document.querySelector("#mapTileZoomOffsetSliderFrame"),
@@ -5342,7 +5360,7 @@ async function resetAllSettingsAndCaches() {
     state.effectiveLanguage = resolveLanguageMode("system");
     state.weightUnit = "lb";
     state.pressureUnit = "in";
-    state.appIconChoice = "primary";
+    state.appIconChoice = "style3-day-medium";
     state.fr24CacheItems = [];
     state.fr24CacheFlights.clear();
     updateMapCacheSummary(mapCachePayload);
@@ -5352,7 +5370,7 @@ async function resetAllSettingsAndCaches() {
     applyThemeMode("system", { persist: false });
     applyWeightUnit("lb", { persist: false, announce: false });
     applyPressureUnit("in", { persist: false, announce: false });
-    applyAppIconChoice("primary", { persist: false, notifyNative: true });
+    applyAppIconChoice("style3-day-medium", { persist: false, notifyNative: true });
     updateMapTypeOptionLabels();
     updateMapTileZoomOffsetControl();
     map.getContainer().dataset.baseMap = "terrain";
@@ -8099,18 +8117,57 @@ function applyThemeMode(mode, { persist = true } = {}) {
   });
 }
 
+function normalizeAppIconChoice(choice) {
+  const migrated = LEGACY_APP_ICON_CHOICES[choice] || choice;
+  return APP_ICON_CHOICES.has(migrated) ? migrated : "style3-day-medium";
+}
+
+function appIconStyleFromChoice(choice) {
+  return normalizeAppIconChoice(choice).split("-").slice(0, 1).join("");
+}
+
+function appIconVariantFromChoice(choice) {
+  return normalizeAppIconChoice(choice).split("-").slice(1).join("-");
+}
+
+/**
+ * 功能：切换图标风格，并保留当前日间/夜间和饱和度选择。
+ * 输入：style 为 style1/style2/style3。
+ * 输出：无返回值；复用 applyAppIconChoice 完成持久化和原生切换。
+ */
+function applyAppIconStyle(style) {
+  const normalizedStyle = APP_ICON_STYLES.has(style) ? style : "style3";
+  applyAppIconChoice(`${normalizedStyle}-${appIconVariantFromChoice(state.appIconChoice)}`);
+}
+
 /**
  * 功能：根据设置页选择切换 iOS 主屏幕 App 图标。
- * 输入：choice 为 day-high/primary/day-soft/night-high/night-medium/night-soft，persist 表示是否写入本地偏好。
+ * 输入：choice 可为完整 styleX-day/night-level，也可为当前风格下的 day/night-level。
  * 输出：无返回值；iOS App 内通过 Swift bridge 调用备用图标 API。
  */
 function applyAppIconChoice(choice, { persist = true, notifyNative = true } = {}) {
-  const normalized = APP_ICON_CHOICES.has(choice) ? choice : "primary";
+  const requested = APP_ICON_VARIANTS.has(choice)
+    ? `${appIconStyleFromChoice(state.appIconChoice)}-${choice}`
+    : choice;
+  const normalized = normalizeAppIconChoice(requested);
   state.appIconChoice = normalized;
-  elements.appIconChoiceButtons.forEach((button) => {
-    const active = button.dataset.appIconChoice === normalized;
+  const style = appIconStyleFromChoice(normalized);
+  const variant = appIconVariantFromChoice(normalized);
+  elements.appIconStyleButtons.forEach((button) => {
+    const active = button.dataset.appIconStyle === style;
     button.classList.toggle("active", active);
     button.setAttribute("aria-pressed", String(active));
+  });
+  elements.appIconVariantButtons.forEach((button) => {
+    const active = button.dataset.appIconVariant === variant;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  elements.appIconPreviewImages.forEach((image) => {
+    const previewVariant = image.dataset.appIconPreview;
+    if (APP_ICON_VARIANTS.has(previewVariant)) {
+      image.src = `/app-icons/${style}-${previewVariant}.png`;
+    }
   });
   if (persist) {
     writeLocalStorageValue("navplannerAppIconChoice", normalized);
@@ -8121,15 +8178,17 @@ function applyAppIconChoice(choice, { persist = true, notifyNative = true } = {}
 }
 
 function appIconChoiceLabel(choice) {
+  const normalized = normalizeAppIconChoice(choice);
+  const style = appIconStyleFromChoice(normalized);
   const key = {
     "day-high": "appIcon.choice.dayHigh",
-    primary: "appIcon.choice.primary",
+    "day-medium": "appIcon.choice.primary",
     "day-soft": "appIcon.choice.daySoft",
     "night-high": "appIcon.choice.nightHigh",
     "night-medium": "appIcon.choice.nightMedium",
     "night-soft": "appIcon.choice.nightSoft",
-  }[choice] || "appIcon.choice.primary";
-  return t(key);
+  }[appIconVariantFromChoice(normalized)] || "appIcon.choice.primary";
+  return `${t(`appIcon.${style}`)} · ${t(key)}`;
 }
 
 function appIconBridgeStatusMessage(payload = {}) {
@@ -15320,6 +15379,7 @@ registerSettingsPage({
   applyLanguageMode,
   applyWeightUnit,
   applyPressureUnit,
+  applyAppIconStyle,
   applyAppIconChoice,
   applyMapSourceChoice,
   applyOnlineMapProvider,

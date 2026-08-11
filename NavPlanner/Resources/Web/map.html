@@ -572,20 +572,25 @@
 
           <div class="settings-card">
             <div class="subheading" data-i18n="settings.appIcon">应用图标</div>
+            <div class="app-icon-style-group" role="radiogroup" aria-label="图标风格" data-i18n-aria-label="settings.appIconStyle">
+              <button class="app-icon-style" type="button" data-app-icon-style="style1" data-i18n="appIcon.style1">风格1</button>
+              <button class="app-icon-style" type="button" data-app-icon-style="style2" data-i18n="appIcon.style2">风格2</button>
+              <button class="app-icon-style active" type="button" data-app-icon-style="style3" data-i18n="appIcon.style3">风格3</button>
+            </div>
             <div class="app-icon-choice-group" role="radiogroup" aria-label="应用图标" data-i18n-aria-label="settings.appIcon">
               <div class="app-icon-choice-section">
                 <div class="app-icon-choice-heading" data-i18n="theme.day">日间</div>
                 <div class="app-icon-choice-row">
-                  <button class="app-icon-choice" type="button" data-app-icon-choice="day-high">
-                    <img class="app-icon-preview" src="/app-icons/day-high.png" alt="" />
+                  <button class="app-icon-choice" type="button" data-app-icon-variant="day-high">
+                    <img class="app-icon-preview" data-app-icon-preview="day-high" src="/app-icons/style3-day-high.png" alt="" />
                     <span data-i18n="appIcon.highSaturation">高饱和</span>
                   </button>
-                  <button class="app-icon-choice active" type="button" data-app-icon-choice="primary">
-                    <img class="app-icon-preview" src="/app-icons/day-medium.png" alt="" />
+                  <button class="app-icon-choice active" type="button" data-app-icon-variant="day-medium">
+                    <img class="app-icon-preview" data-app-icon-preview="day-medium" src="/app-icons/style3-day-medium.png" alt="" />
                     <span data-i18n="appIcon.default">默认</span>
                   </button>
-                  <button class="app-icon-choice" type="button" data-app-icon-choice="day-soft">
-                    <img class="app-icon-preview" src="/app-icons/day-soft.png" alt="" />
+                  <button class="app-icon-choice" type="button" data-app-icon-variant="day-soft">
+                    <img class="app-icon-preview" data-app-icon-preview="day-soft" src="/app-icons/style3-day-soft.png" alt="" />
                     <span data-i18n="appIcon.soft">柔和</span>
                   </button>
                 </div>
@@ -593,22 +598,22 @@
               <div class="app-icon-choice-section">
                 <div class="app-icon-choice-heading" data-i18n="theme.night">夜间</div>
                 <div class="app-icon-choice-row">
-                  <button class="app-icon-choice" type="button" data-app-icon-choice="night-high">
-                    <img class="app-icon-preview" src="/app-icons/night-high.png" alt="" />
-                    <span data-i18n="appIcon.highContrast">高对比</span>
+                  <button class="app-icon-choice" type="button" data-app-icon-variant="night-high">
+                    <img class="app-icon-preview" data-app-icon-preview="night-high" src="/app-icons/style3-night-high.png" alt="" />
+                    <span data-i18n="appIcon.highSaturation">高饱和</span>
                   </button>
-                  <button class="app-icon-choice" type="button" data-app-icon-choice="night-medium">
-                    <img class="app-icon-preview" src="/app-icons/night-medium.png" alt="" />
-                    <span data-i18n="appIcon.balanced">均衡</span>
+                  <button class="app-icon-choice" type="button" data-app-icon-variant="night-medium">
+                    <img class="app-icon-preview" data-app-icon-preview="night-medium" src="/app-icons/style3-night-medium.png" alt="" />
+                    <span data-i18n="appIcon.default">默认</span>
                   </button>
-                  <button class="app-icon-choice" type="button" data-app-icon-choice="night-soft">
-                    <img class="app-icon-preview" src="/app-icons/night-soft.png" alt="" />
+                  <button class="app-icon-choice" type="button" data-app-icon-variant="night-soft">
+                    <img class="app-icon-preview" data-app-icon-preview="night-soft" src="/app-icons/style3-night-soft.png" alt="" />
                     <span data-i18n="appIcon.soft">柔和</span>
                   </button>
                 </div>
               </div>
             </div>
-            <div class="helper-text" data-i18n="settings.appIconHint">默认图标为日间均衡，夜间图标使用蓝黑反色地形、紫色层次和暗橙航路。</div>
+            <div class="helper-text" data-i18n="settings.appIconHint">先选择图标风格，再选择日间或夜间的高饱和、默认或柔和版本。</div>
           </div>
 
           <div class="settings-card map-selection-card">

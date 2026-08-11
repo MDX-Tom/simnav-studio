@@ -1641,6 +1641,7 @@ body.left-panel-expanded .selection-table {
 .theme-choice,
 .language-choice,
 .weight-unit-choice,
+.app-icon-style,
 .app-icon-choice,
 .map-source-choice,
 .online-map-provider-choice,
@@ -1670,6 +1671,7 @@ body.left-panel-expanded .selection-table {
 .theme-choice:hover,
 .language-choice:hover,
 .weight-unit-choice:hover,
+.app-icon-style:hover,
 .app-icon-choice:hover,
 .map-source-choice:hover,
 .online-map-provider-choice:hover,
@@ -1683,6 +1685,7 @@ body.left-panel-expanded .selection-table {
 .theme-choice.active,
 .language-choice.active,
 .weight-unit-choice.active,
+.app-icon-style.active,
 .app-icon-choice.active,
 .map-source-choice.active,
 .online-map-provider-choice.active,
@@ -3199,6 +3202,13 @@ html[data-theme="night"] .calculate-ticks-compact em {
   gap: 9px;
 }
 
+.app-icon-style-group {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
 .app-icon-choice-section {
   display: grid;
   gap: 6px;
@@ -3390,6 +3400,7 @@ html[data-theme="day"] .detail-mode-tab.active,
 html[data-theme="day"] .theme-choice.active,
 html[data-theme="day"] .language-choice.active,
 html[data-theme="day"] .weight-unit-choice.active,
+html[data-theme="day"] .app-icon-style.active,
 html[data-theme="day"] .app-icon-choice.active,
 html[data-theme="day"] .map-source-choice.active,
 html[data-theme="day"] .online-map-provider-choice.active,
@@ -3404,6 +3415,7 @@ html[data-theme="day"] .calculate-source-choice.active {
 .theme-choice.active:hover,
 .language-choice.active:hover,
 .weight-unit-choice.active:hover,
+.app-icon-style.active:hover,
 .app-icon-choice.active:hover,
 .map-source-choice.active:hover,
 .online-map-provider-choice.active:hover,
@@ -3417,6 +3429,7 @@ html[data-theme="day"] .calculate-source-choice.active {
 html[data-theme="day"] .theme-choice.active small,
 html[data-theme="day"] .language-choice.active small,
 html[data-theme="day"] .weight-unit-choice.active small,
+html[data-theme="day"] .app-icon-style.active small,
 html[data-theme="day"] .app-icon-choice.active small,
 html[data-theme="day"] .map-source-choice.active small,
 html[data-theme="day"] .online-map-provider-choice.active small,
@@ -3427,6 +3440,7 @@ html[data-theme="day"] .calculate-source-choice.active small {
 html[data-theme="day"] .theme-choice.active span,
 html[data-theme="day"] .language-choice.active span,
 html[data-theme="day"] .weight-unit-choice.active span,
+html[data-theme="day"] .app-icon-style.active span,
 html[data-theme="day"] .app-icon-choice.active span,
 html[data-theme="day"] .map-source-choice.active span,
 html[data-theme="day"] .online-map-provider-choice.active span,
@@ -6443,6 +6457,7 @@ html[data-theme="day"] .offline-progress {
   html[data-mobile-layout="true"] .theme-choice,
   html[data-mobile-layout="true"] .language-choice,
   html[data-mobile-layout="true"] .weight-unit-choice,
+  html[data-mobile-layout="true"] .app-icon-style,
   html[data-mobile-layout="true"] .map-source-choice,
   html[data-mobile-layout="true"] .online-map-provider-choice {
     min-height: 25px;
@@ -6453,6 +6468,11 @@ html[data-theme="day"] .offline-progress {
 
   html[data-mobile-layout="true"] .app-icon-choice-group {
     gap: 5px;
+  }
+
+  html[data-mobile-layout="true"] .app-icon-style-group {
+    gap: 5px;
+    margin-bottom: 7px;
   }
 
   html[data-mobile-layout="true"] .app-icon-choice-section {

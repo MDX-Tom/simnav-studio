@@ -409,7 +409,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = C10000000000000000000001 /* CodeSigning.xcconfig */;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIconDayHigh AppIconDaySoft AppIconNightHigh AppIconNightMedium AppIconNightSoft";
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIconDayHigh AppIconDaySoft AppIconNightHigh AppIconNightMedium AppIconNightSoft AppIconStyle1DayHigh AppIconStyle1DayMedium AppIconStyle1DaySoft AppIconStyle1NightHigh AppIconStyle1NightMedium AppIconStyle1NightSoft AppIconStyle2DayHigh AppIconStyle2DayMedium AppIconStyle2DaySoft AppIconStyle2NightHigh AppIconStyle2NightMedium AppIconStyle2NightSoft";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
@@ -445,7 +445,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = C10000000000000000000001 /* CodeSigning.xcconfig */;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIconDayHigh AppIconDaySoft AppIconNightHigh AppIconNightMedium AppIconNightSoft";
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIconDayHigh AppIconDaySoft AppIconNightHigh AppIconNightMedium AppIconNightSoft AppIconStyle1DayHigh AppIconStyle1DayMedium AppIconStyle1DaySoft AppIconStyle1NightHigh AppIconStyle1NightMedium AppIconStyle1NightSoft AppIconStyle2DayHigh AppIconStyle2DayMedium AppIconStyle2DaySoft AppIconStyle2NightHigh AppIconStyle2NightMedium AppIconStyle2NightSoft";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
