@@ -203,8 +203,53 @@ App 以 SwiftUI 构建原生外壳，以 WKWebView 承载地图工作区，并�
 **导航数据库**
 
 1. 在 **设置** → **导航数据库** 中点击 **选择 s3db**。
-2. 从 Files 中选择 `.s3db`、`.sqlite`、`.sqlite3` 或 `.db` 文件。
+2. 从 Files 中选择 `.s3db`、`.sqlite`、`.sqlite3` 或 `.db` 文件，格式须符合 [导入自定义导航数据库兼容格式](#nav-db-compatible-format) 部分所述。
 3. NavPlanner 切换到导入的数据库，并刷新航路、Procedure 和 nav-overlay 缓存。
+
+<a id="nav-db-compatible-format"></a>
+<details>
+<summary><strong>导入自定义导航数据库兼容格式</strong></summary>
+
+
+建议直接使用 PMDG 机型导航数据库 `e_dfd_PMDG.s3db`，或在其基础上自定义。
+
+文件扩展名只用于文件选择器筛选；导入内容必须是有效的 **SQLite 3** 数据库，且采用 NavPlanner 实际查询的 PMDG 风格导航数据库结构。App 会先把导入文件复制进自身
+沙盒，再以只读方式打开该副本；不会转换 CSV、JSON、ARINC 424 原始文本、加密库
+或任意自定义 SQLite 结构。
+
+若要完整兼容航路规划、机场详情、Procedure 与导航图层，需保留下列数据表及其
+现有 PMDG 字段名：
+
+| 数据范围 | 必需表与主要字段 |
+|---|---|
+| 周期元数据 | `tbl_header`（`current_airac`、`revision`；一行 header） |
+| 机场 | `tbl_airports`（`airport_identifier`、`iata_ata_designator`、`airport_name`、`airport_ref_latitude`、`airport_ref_longitude`） |
+| 跑道与通讯 | `tbl_runways`（机场/跑道标识、入口坐标、方位与尺寸），`tbl_airport_communication`（机场标识、类型、频率与呼号） |
+| 航点与导航台 | `tbl_enroute_waypoints`、`tbl_terminal_waypoints`、`tbl_vhfnavaids`、`tbl_enroute_ndbnavaids`、`tbl_terminal_ndbnavaids`（标识/名称、经纬度及对应表的类型/频率字段） |
+| 航路 | `tbl_enroute_airways`（`route_identifier`、`seqno`、航点标识/坐标、方向、航路类型、高度/航向/距离字段） |
+| Procedure | `tbl_sids`、`tbl_stars`、`tbl_iaps`（机场/程序/过渡标识、`route_type`、`seqno`、航点坐标、path termination、航向/圆弧、高度/速度及推荐/圆心航点字段） |
+| ILS | `tbl_localizers_glideslopes`（机场/跑道/航向台标识、航向台坐标、方位与频率） |
+
+标识符应使用正常的大写 ICAO/PMDG 值；经纬度使用 WGS 84 十进制度；Procedure
+和航路的序号必须能按飞行路径顺序排序。方位/航向、跑道尺寸、高度、频率、
+route type 与 path terminator 必须保持 PMDG 结构的单位和语义（程序把跑道长度
+解释为英尺）。可以增加其他表和索引，但不能重命名程序查询的表或字段。
+
+导入前可先执行以下基础完整性与结构检查：
+
+```bash
+sqlite3 -readonly custom.s3db "PRAGMA quick_check;"
+sqlite3 -readonly custom.s3db \
+  "SELECT current_airac, revision FROM tbl_header LIMIT 1;"
+sqlite3 -readonly custom.s3db \
+  "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"
+```
+
+`PRAGMA quick_check` 应返回 `ok`。仅能正常打开、但缺少必需表或字段的数据库，
+可能会导入成功，但相关功能会返回空数据。自定义数据库的准确性、合法性以及
+导入或再分发权利由使用者自行负责。
+
+</details>
 
 <table align="center" width="92%">
   <tr>
@@ -275,7 +320,12 @@ Apple Development 证书。
 目标并运行。Xcode 会自动读取被忽略的本机配置，不会把 Team ID 写回受跟踪的
 工程文件。
 
-私有构建可把本地数据库放在 `NavPlanner/Resources/Database/navdata.sqlite`，也可在 App 启动后从 Settings 导入。公开分发时，不应包含尚未确认再分发权利的导航数据。
+Debug 或私有构建可把本地数据库放在
+`NavPlanner/Resources/Database/navdata.sqlite`，也可在 App 启动后从 Settings
+导入。公开 release 构建不会使用这个开发副本：
+`Tools/Release/build_public_release.sh` 要求本机 `database/` 中存在最新的
+`e_dfd_PMDG_release.s3db`，完成校验后临时把它作为 IPA 与 DMG 内的
+`Database/navdata.sqlite` （请注意，这两个数据库位置均被 Git 忽略）。
 
 <details>
 <summary><strong>命令行构建</strong></summary>
@@ -378,7 +428,8 @@ python3 Tools/Parity/run_all_parity.py
 <summary><strong>发布前检查清单</strong></summary>
 
 - 复核 `PrivacyInfo.xcprivacy` 是否覆盖实际网络、文件、缓存和可选 FR24 行为。
-- 确认导航数据库、离线地图包和底图来源的授权与分发方式。
+- 用最新 release 数据库替换 `database/e_dfd_PMDG_release.s3db`，检查其 AIRAC、`PRAGMA quick_check`、IPA/DMG 内 SHA-256 一致性及实际兼容性。
+- 确认内置示例数据库、用户导入导航数据库、离线地图包和底图来源的授权与分发方式。
 - 更新版本号、Build 号、显示名称、签名配置、App 图标和备用图标元数据。
 - 在 iPhone 小屏、iPhone 横屏、iPad 竖屏和 iPad 横屏分别测试。
 - 验证飞行模式下的启动、机场搜索、机场详情、航路规划、Procedure 绘制、nav-overlay 和离线地图。
@@ -407,8 +458,11 @@ Media/                         README 截图与视觉素材
 
 ## 数据与安全说明 ⚠️
 
-NavPlanner 仅用于模拟飞行规划、数据查看和个人学习。实际飞行必须始终以官方航行资料、管制指令、适航设备和当前运行程序为准。
+**NavPlanner 仅用于模拟飞行规划、数据查看和个人学习。实际飞行必须始终以官方航行资料、管制指令、适航设备和当前运行程序为准。**
 
 NavPlanner 可能使用第三方或用户自行提供的内容，包括地图底图、机场与 Procedure 数据、AIRAC / 导航数据库、PMTiles / MBTiles / SQLite 地图包，以及 FR24 航班数据。这些内容可能受版权、数据库权利、商标、平台条款或再分发限制约束。
+
+GitHub 公开源码仓库不包含导航数据库：根目录 `database/` 和开发用 bundle 资源均被 Git 忽略。Releases 中发布的
+IPA 与 DMG 带有一份示例数据库，供首次启动体验示例数据，把用途限制为地面娱乐飞行模拟软件。维护者不得发布包含该示例库的 IPA 或 DMG。
 
 本 App 不保证第三方数据的准确性、完整性、可用性或法律状态。你需要自行确认拥有每项数据的使用、导入、缓存和分发权利。

@@ -146,6 +146,25 @@ if ! xcrun vtool -show-build "$MAC_BINARY" | grep -q 'platform MACCATALYST'; the
   exit 4
 fi
 
+IOS_DATABASE="$IOS_APP/Database/navdata.sqlite"
+MAC_DATABASE="$MAC_APP/Contents/Resources/Database/navdata.sqlite"
+if [ ! -f "$IOS_DATABASE" ] || [ ! -f "$MAC_DATABASE" ]; then
+  echo "IPA or Mac app is missing Database/navdata.sqlite." >&2
+  exit 4
+fi
+IOS_DATABASE_SHA="$(shasum -a 256 "$IOS_DATABASE" | awk '{print $1}')"
+MAC_DATABASE_SHA="$(shasum -a 256 "$MAC_DATABASE" | awk '{print $1}')"
+IOS_DATABASE_SIZE="$(stat -f '%z' "$IOS_DATABASE")"
+IOS_DATABASE_AIRAC="$(sqlite3 -readonly "$IOS_DATABASE" 'select current_airac from tbl_header limit 1;')"
+if [ "$IOS_DATABASE_SHA" != "$MAC_DATABASE_SHA" ]; then
+  echo "IPA and Mac app contain different default navigation databases." >&2
+  exit 4
+fi
+if [ "$(sqlite3 -readonly "$IOS_DATABASE" 'PRAGMA quick_check;')" != "ok" ]; then
+  echo "Bundled default navigation database failed SQLite PRAGMA quick_check." >&2
+  exit 4
+fi
+
 if rg -a -q '/Users/[^/]+/|/home/[^/]+/' "$IOS_APP" "$MAC_APP"; then
   echo "Public application bundle contains a developer home-directory path." >&2
   exit 4
@@ -237,7 +256,8 @@ python3 - \
   "$RELEASE_DIR/metadata/build-manifest.json" \
   "$EXPECTED_VERSION" "$EXPECTED_BUILD" "$EXPECTED_BUNDLE_ID" \
   "$CURRENT_BRANCH" "$CURRENT_HEAD" \
-  "$IPA_SHA" "$IPA_SIZE" "$APP_TREE_SHA" "$APP_SIZE" "$DMG_SHA" "$DMG_SIZE" <<'PY'
+  "$IPA_SHA" "$IPA_SIZE" "$APP_TREE_SHA" "$APP_SIZE" "$DMG_SHA" "$DMG_SIZE" \
+  "$IOS_DATABASE_SHA" "$IOS_DATABASE_SIZE" "$IOS_DATABASE_AIRAC" <<'PY'
 import json
 import sys
 
@@ -254,13 +274,16 @@ import sys
     app_size,
     dmg_sha,
     dmg_size,
+    database_sha,
+    database_size,
+    database_airac,
 ) = sys.argv[1:]
 
 with open(manifest_path, "r", encoding="utf-8") as handle:
     manifest = json.load(handle)
 
-if manifest.get("schema_version") != 3:
-    raise SystemExit("Public manifest schema is not version 3.")
+if manifest.get("schema_version") != 4:
+    raise SystemExit("Public manifest schema is not version 4.")
 
 release = manifest.get("release", {})
 expected_release = {
@@ -289,6 +312,19 @@ for path, (expected_sha, expected_size) in expected_artifacts.items():
     if artifact.get("sha256") != expected_sha or artifact.get("size_bytes") != expected_size:
         raise SystemExit(f"Manifest hash/size does not match {path}.")
 
+database = manifest.get("bundled_database", {})
+expected_database = {
+    "source": "database/e_dfd_PMDG_release.s3db",
+    "bundle_path": "Database/navdata.sqlite",
+    "role": "example navigation database bundled with release artifacts",
+    "current_airac": database_airac,
+    "size_bytes": int(database_size),
+    "sha256": database_sha,
+    "sqlite_quick_check": "passed",
+}
+for key, expected in expected_database.items():
+    if database.get(key) != expected:
+        raise SystemExit(f"Manifest bundled_database.{key} does not match the packaged database.")
 identity_audit = manifest.get("identity_and_secret_audit", {})
 if not identity_audit or any(value is not False for value in identity_audit.values()):
     raise SystemExit("Manifest identity/secret audit is missing or does not report a clean result.")
@@ -304,4 +340,5 @@ echo "IPA_SIGNING=unsigned/no authority/no provisioning"
 echo "MAC_SIGNING=adhoc/no authority/no TeamIdentifier"
 echo "DMG_VERIFY_AND_APP_PARITY=passed"
 echo "MANIFEST_ARTIFACT_PARITY=passed"
+echo "BUNDLED_EXAMPLE_DATABASE_PARITY=passed"
 echo "TRACKED_AND_UNTRACKED_PUBLIC_SIGNING_MATERIAL=none"

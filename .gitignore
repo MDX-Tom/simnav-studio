@@ -57,6 +57,8 @@ AuthKey_*.p8
 codex/
 
 docs/Obsolete/
+# Local navigation-database inputs and bundled build resources.
+/database/
 NavPlanner/Resources/Database
 
 # Local Codex workspace state and editable diagrams (kept locally, never committed)

@@ -6,6 +6,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PROJECT_FILE="$PROJECT_ROOT/NavPlanner.xcodeproj"
 PUBLIC_SIGNING_CONFIG="$PROJECT_ROOT/Config/CodeSigning.xcconfig"
+RELEASE_DATABASE_SOURCE="$PROJECT_ROOT/database/e_dfd_PMDG_release.s3db"
+BUNDLED_DATABASE_DIR="$PROJECT_ROOT/NavPlanner/Resources/Database"
+BUNDLED_DATABASE_TARGET="$BUNDLED_DATABASE_DIR/navdata.sqlite"
 SCHEME="NavPlanner"
 CONFIGURATION="Release"
 
@@ -16,6 +19,64 @@ BUNDLE_IDENTIFIER="$(awk -F' = ' '/^PRODUCT_BUNDLE_IDENTIFIER = / {print $2; exi
 if [ -z "$BUNDLE_IDENTIFIER" ]; then
   echo "Public Bundle Identifier is missing from Config/CodeSigning.xcconfig." >&2
   exit 2
+fi
+
+if [ ! -f "$RELEASE_DATABASE_SOURCE" ]; then
+  echo "Release database is missing: $RELEASE_DATABASE_SOURCE" >&2
+  echo "Place the latest e_dfd_PMDG_release.s3db in the Git-ignored database/ directory." >&2
+  exit 2
+fi
+
+DATABASE_QUICK_CHECK="$(sqlite3 -readonly "$RELEASE_DATABASE_SOURCE" 'PRAGMA quick_check;')"
+if [ "$DATABASE_QUICK_CHECK" != "ok" ]; then
+  echo "Release database failed SQLite PRAGMA quick_check: $DATABASE_QUICK_CHECK" >&2
+  exit 2
+fi
+
+REQUIRED_DATABASE_TABLES=(
+  tbl_header
+  tbl_airports
+  tbl_runways
+  tbl_airport_communication
+  tbl_enroute_waypoints
+  tbl_terminal_waypoints
+  tbl_vhfnavaids
+  tbl_enroute_ndbnavaids
+  tbl_terminal_ndbnavaids
+  tbl_enroute_airways
+  tbl_sids
+  tbl_stars
+  tbl_iaps
+  tbl_localizers_glideslopes
+)
+for table_name in "${REQUIRED_DATABASE_TABLES[@]}"; do
+  if [ "$(sqlite3 -readonly "$RELEASE_DATABASE_SOURCE" "select count(*) from sqlite_master where type = 'table' and name = '$table_name';")" != "1" ]; then
+    echo "Release database is missing required table: $table_name" >&2
+    exit 2
+  fi
+done
+
+DATABASE_SHA="$(shasum -a 256 "$RELEASE_DATABASE_SOURCE" | awk '{print $1}')"
+DATABASE_SIZE="$(stat -f '%z' "$RELEASE_DATABASE_SOURCE")"
+DATABASE_AIRAC="$(sqlite3 -readonly "$RELEASE_DATABASE_SOURCE" 'select current_airac from tbl_header limit 1;')"
+if [ -z "$DATABASE_AIRAC" ]; then
+  echo "Release database tbl_header.current_airac is empty." >&2
+  exit 2
+fi
+
+if [ -e "$BUNDLED_DATABASE_TARGET" ] && [ ! -f "$BUNDLED_DATABASE_TARGET" ]; then
+  echo "Bundled database target is not a regular file: $BUNDLED_DATABASE_TARGET" >&2
+  exit 2
+fi
+if [ -d "$BUNDLED_DATABASE_DIR" ]; then
+  UNEXPECTED_BUNDLED_DATABASE_RESOURCE="$(
+    find "$BUNDLED_DATABASE_DIR" -mindepth 1 -maxdepth 1 ! -name 'navdata.sqlite' -print -quit
+  )"
+  if [ -n "$UNEXPECTED_BUNDLED_DATABASE_RESOURCE" ]; then
+    echo "Unexpected resource beside navdata.sqlite: $UNEXPECTED_BUNDLED_DATABASE_RESOURCE" >&2
+    echo "Release builds may bundle only the prepared example navigation database." >&2
+    exit 2
+  fi
 fi
 
 if [ "$#" -gt 1 ]; then
@@ -56,11 +117,33 @@ fi
 
 WORK_DIR="$(mktemp -d "$RELEASES_ROOT/.navplanner-build-$VERSION.XXXXXX")"
 OUTPUT_DIR="$WORK_DIR/release-$VERSION"
+BUNDLED_DATABASE_BACKUP="$WORK_DIR/navdata.sqlite.before-release"
+BUNDLED_DATABASE_WAS_PRESENT=0
+BUNDLED_DATABASE_RESTORE_REQUIRED=0
 cleanup() {
+  local result=$?
+  if [ "$BUNDLED_DATABASE_RESTORE_REQUIRED" -eq 1 ]; then
+    if [ "$BUNDLED_DATABASE_WAS_PRESENT" -eq 1 ]; then
+      /usr/bin/ditto "$BUNDLED_DATABASE_BACKUP" "$BUNDLED_DATABASE_TARGET" || result=3
+    else
+      rm -f -- "$BUNDLED_DATABASE_TARGET" || result=3
+    fi
+  fi
   rm -rf -- "$WORK_DIR"
+  trap - EXIT
+  exit "$result"
 }
 trap cleanup EXIT
 trap 'exit 130' HUP INT TERM
+
+if [ -f "$BUNDLED_DATABASE_TARGET" ]; then
+  /usr/bin/ditto "$BUNDLED_DATABASE_TARGET" "$BUNDLED_DATABASE_BACKUP"
+  BUNDLED_DATABASE_WAS_PRESENT=1
+fi
+mkdir -p "$BUNDLED_DATABASE_DIR"
+/usr/bin/ditto "$RELEASE_DATABASE_SOURCE" "$WORK_DIR/navdata.sqlite.release"
+BUNDLED_DATABASE_RESTORE_REQUIRED=1
+mv -f "$WORK_DIR/navdata.sqlite.release" "$BUNDLED_DATABASE_TARGET"
 
 TASK_DEVELOPER_DIR="${DEVELOPER_DIR:-}"
 if [ -z "$TASK_DEVELOPER_DIR" ]; then
@@ -157,6 +240,19 @@ assert_resource_parity \
   "$IOS_APP/PrivacyInfo.xcprivacy" \
   "$MAC_PUBLIC_APP/Contents/Resources/PrivacyInfo.xcprivacy"
 
+for bundled_database in \
+  "$IOS_APP/Database/navdata.sqlite" \
+  "$MAC_PUBLIC_APP/Contents/Resources/Database/navdata.sqlite"; do
+  if [ ! -f "$bundled_database" ]; then
+    echo "Release build is missing the default navigation database: $bundled_database" >&2
+    exit 3
+  fi
+  if [ "$(shasum -a 256 "$bundled_database" | awk '{print $1}')" != "$DATABASE_SHA" ]; then
+    echo "Bundled navigation database does not match database/e_dfd_PMDG_release.s3db." >&2
+    exit 3
+  fi
+done
+
 /usr/bin/ditto "$MAC_PUBLIC_APP" "$WORK_DIR/dmg-stage/$(basename "$MAC_PUBLIC_APP")"
 ln -s /Applications "$WORK_DIR/dmg-stage/Applications"
 
@@ -189,12 +285,19 @@ SWIFT_VERSION="$(xcrun swiftc --version 2>&1 | tr '\n' ' ' | sed 's/[[:space:]]*
 HOST_MACOS_VERSION="$(sw_vers -productVersion)"
 GENERATED_AT="$(date '+%Y-%m-%dT%H:%M:%S%z')"
 
-python3 - "$OUTPUT_DIR/metadata/build-manifest.json" "$OUTPUT_DIR/PUBLIC_RELEASE_NOTES.md" <<PY
+python3 - \
+  "$OUTPUT_DIR/metadata/build-manifest.json" \
+  "$OUTPUT_DIR/PUBLIC_RELEASE_NOTES.md" \
+  "$DATABASE_AIRAC" "$DATABASE_SIZE" "$DATABASE_SHA" <<PY
 import json
 import sys
 
+database_airac = sys.argv[3]
+database_size = int(sys.argv[4])
+database_sha = sys.argv[5]
+
 manifest = {
-    "schema_version": 3,
+    "schema_version": 4,
     "release": {
         "name": "NavPlanner",
         "marketing_version": "$VERSION",
@@ -228,6 +331,15 @@ manifest = {
         "ios_error_count": int("$IOS_ERROR_COUNT"),
         "mac_warning_count": int("$MAC_WARNING_COUNT"),
         "mac_error_count": int("$MAC_ERROR_COUNT"),
+    },
+    "bundled_database": {
+        "source": "database/e_dfd_PMDG_release.s3db",
+        "bundle_path": "Database/navdata.sqlite",
+        "role": "example navigation database bundled with release artifacts",
+        "current_airac": database_airac,
+        "size_bytes": database_size,
+        "sha256": database_sha,
+        "sqlite_quick_check": "passed",
     },
     "artifacts": [
         {
@@ -285,6 +397,7 @@ manifest = {
         "binary_platform_and_architecture": "passed",
         "mac_codesign_deep_strict": "passed",
         "bundle_web_database_privacyinfo_parity": "passed",
+        "release_database_source_hash_and_bundle_hash": "passed",
         "dmg_verify_mount_and_same_app_parity": "passed by the mandatory post-package audit",
         "sha256sums": "passed by the mandatory post-package audit",
         "standalone_launch_and_runtime_workflow": "manual validation required; recorded outside this reproducible packaging script",
@@ -297,7 +410,7 @@ manifest = {
     ],
     "publication_preconditions": [
         "Source changes must correspond to a reviewed commit or tag; this candidate was built from a dirty working tree.",
-        "Redistribution rights for the bundled navigation database must be confirmed separately.",
+        "Written redistribution permission required by the bundled Navigraph/Jeppesen example database notice must be confirmed separately.",
         "Publishing or creating a GitHub Release requires explicit user authorization.",
     ],
 }
@@ -315,9 +428,9 @@ notes = """# NavPlanner $VERSION public-safe release candidate
   contains no Developer ID certificate.
 - No xcarchive, raw build log, account email, certificate, private key,
   provisioning profile or App Store Connect key belongs in a GitHub Release.
-- This directory is a local candidate only. Do not publish it until the source
-  changes correspond to a reviewed commit/tag and redistribution rights for
-  the bundled navigation database have been confirmed.
+- The IPA and DMG include the example database prepared locally as
+  database/e_dfd_PMDG_release.s3db and bundled as Database/navdata.sqlite.
+  The public source repository itself does not contain a navigation database.
 
 ## 中文说明
 
@@ -327,8 +440,8 @@ notes = """# NavPlanner $VERSION public-safe release candidate
   Developer ID 证书。
 - GitHub Release 不得包含 xcarchive、原始日志、账号邮箱、证书、私钥、
   provisioning profile 或 App Store Connect 密钥。
-- 这只是本地候选。源码对应 reviewed commit/tag 且确认内置导航数据库的
-  再分发权利之前，不得公开发布。
+- IPA 与 DMG 包含本机 database/e_dfd_PMDG_release.s3db 准备的示例数据库，
+  在 App 内封装为 Database/navdata.sqlite；公开源码仓库本身不含导航数据库。
 """
 with open(sys.argv[2], "w", encoding="utf-8") as handle:
     handle.write(notes)

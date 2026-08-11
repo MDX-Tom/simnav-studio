@@ -45,9 +45,27 @@ Keychain，不能写入 xcconfig、脚本或日志。
 
 ## 构建 public-safe 候选
 
+每次构建 release 前，必须把拟随发行版分发的最新示例导航数据库放到：
+
+```text
+database/e_dfd_PMDG_release.s3db
+```
+
+根目录 `database/` 整体被 Git 忽略，GitHub 公开源码仓库不带数据库。不得用
+`e_dfd_PMDG_local.s3db`、旧的 `NavPlanner/Resources/Database/navdata.sqlite`
+或其他开发数据库替代 release 输入。脚本会拒绝缺少 release 数据库、
+`PRAGMA quick_check` 不通过或缺少核心 PMDG 表的构建。
+
 ```bash
 Tools/Release/build_public_release.sh
 ```
+
+封包脚本会把上述文件临时复制为
+`NavPlanner/Resources/Database/navdata.sqlite`，让 iOS 与 Mac Catalyst 构建都将
+它作为 App 默认数据库；无论构建成功、失败或中断，脚本都会恢复构建前的本地
+资源。最终 IPA 与 DMG 内的路径均为 `Database/navdata.sqlite`。脚本还会核对
+源文件、IPA 与 Mac App 的 SHA-256，记录数据库大小和 AIRAC 到 manifest，并由
+独立审计再次验证两端数据库一致且 `PRAGMA quick_check` 通过。
 
 根目录 `releases/` 被 Git 忽略，并且只允许长期保留一个
 `release-VERSION/` 候选目录。脚本拒绝覆盖既有候选；原始日志、DerivedData、
@@ -63,8 +81,7 @@ DMG staging 和其他构建中间产物只写入 `releases/.navplanner-build-*` 
 - SHA-256 checksums。
 
 脚本在封包前核对 Web、Database 和 PrivacyInfo bundle parity，并在结束前强制
-执行独立审计。内置导航数据库来自本机被忽略的 source resource；是否可以公开
-再分发必须另行确认，构建成功不代表数据库许可已经解决。
+执行独立审计。IPA 与 DMG 会带上该示例数据库，构建成功证明文件完整性与封包一致性。
 
 也可独立复跑审计：
 
