@@ -205,6 +205,7 @@ const TRANSLATIONS = {
   "appIcon.choice.nightSoft": { "zh-Hans": "夜间柔和", en: "Night soft" },
   "appIcon.alreadySelected": { "zh-Hans": "应用图标已是当前选择。", en: "App icon already uses the selected variant." },
   "appIcon.changed": { "zh-Hans": "已切换为{name}应用图标。", en: "Changed app icon to {name}." },
+  "appIcon.savedOnMac": { "zh-Hans": "已保存{name}；Mac 版的 Dock 与访达图标保持默认。", en: "Saved {name}; the Mac app keeps its default Dock and Finder icon." },
   "appIcon.unsupported": { "zh-Hans": "当前系统不支持切换 App 图标。", en: "This system does not support changing the app icon." },
   "appIcon.changeFailed": { "zh-Hans": "切换应用图标失败。", en: "Failed to change app icon." },
   "database.loading": { "zh-Hans": "正在读取本地导航数据库...", en: "Reading local navigation database..." },
@@ -8193,6 +8194,9 @@ function appIconChoiceLabel(choice) {
 
 function appIconBridgeStatusMessage(payload = {}) {
   const rawMessage = cleanErrorMessage(payload.message || "");
+  if (payload.persisted_only) {
+    return t("appIcon.savedOnMac", { name: appIconChoiceLabel(payload.icon_choice || state.appIconChoice) });
+  }
   if (payload.error) {
     if (/不支持|unsupported/i.test(rawMessage)) {
       return t("appIcon.unsupported");

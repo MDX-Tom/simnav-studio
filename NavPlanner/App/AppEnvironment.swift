@@ -114,6 +114,16 @@ final class AppEnvironment: ObservableObject {
         let normalized = normalizedAppIconChoice(choice)
         let iconName = iconOptions[normalized]?.iconName ?? nil
         guard UIApplication.shared.supportsAlternateIcons else {
+            if ProcessInfo.processInfo.isMacCatalystApp {
+                appIconChoice = normalized
+                UserDefaults.standard.set(normalized, forKey: "NavPlannerAppIconChoice")
+                completion([
+                    "icon_choice": normalized,
+                    "persisted_only": true,
+                    "message": "已保存图标选择；Mac 版的 Dock 与访达图标保持默认。"
+                ])
+                return
+            }
             completion([
                 "icon_choice": appIconChoice,
                 "error": true,
