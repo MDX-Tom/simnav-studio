@@ -3,11 +3,11 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="Media/navplanner-hero-zh-Hans-dark.webp" />
   <source media="(prefers-color-scheme: light)" srcset="Media/navplanner-hero-zh-Hans.webp" />
-  <img src="Media/navplanner-hero-zh-Hans.webp" alt="NavPlanner 在 iPhone 与 iPad 上展示 LGAV 至 EDDM 航路及 STAR 选择" width="84%" />
+  <img src="Media/navplanner-hero-zh-Hans.webp" alt="SimNav Studio 在 iPhone 与 iPad 上展示 LGAV 至 EDDM 航路及 STAR 选择" width="84%" />
 </picture><br />
 
 <p>
-  <a href="https://github.com/MDX-Tom/NavPlanner-App/stargazers"><img src="https://img.shields.io/github/stars/MDX-Tom/NavPlanner-App?logo=github&label=Stars" alt="GitHub Stars" /></a>
+  <a href="https://github.com/MDX-Tom/simnav-studio/stargazers"><img src="https://img.shields.io/github/stars/MDX-Tom/simnav-studio?logo=github&label=Stars" alt="GitHub Stars" /></a>
   <img src="https://img.shields.io/badge/设备-iPhone%20%7C%20iPad%20%7C%20mac-475569" alt="iPhone、iPad与mac" />
     <img src="https://img.shields.io/badge/Swift-5.0-F05138?logo=swift&logoColor=white" alt="Swift 5.0" />
   <img src="https://img.shields.io/badge/版本-0.1.0-0F766E" alt="版本 0.1.0" />
@@ -18,9 +18,10 @@
   <a href="README.zh-CN.md"><img src="https://img.shields.io/badge/语言-简体中文-DC2626.svg" alt="简体中文" /></a>
 </p>
 
-<h1>NavPlanner</h1>
+<h1>SimNav Studio</h1>
 
-<p><strong>从航路规划到地图复盘，一站式、本地计算的模拟飞行工作台。</strong></p>
+<p><strong>Planning &amp; Navigation for Flight Simulation</strong></p>
+<p>从航路规划到地图复盘，一站式、本地计算的模拟飞行工作台。</p>
 <p>原生适配 iPhone & iPad · 航路规划 · Procedure 查看 · 轨迹对照 · 离线地图</p>
 
 <p>
@@ -40,7 +41,7 @@
 
 ## 项目概览 ✈️
 
-NavPlanner 是一款面向模拟飞行的 iOS 规划工作台。它把 **航路规划**、**机场与 Procedure 查看**、**FR24 轨迹下载、对照与拟合**、**离线地图**、**本地导航数据库**集中在一个 App 中，在核心功能离线可用的基础上，串联从航线构思到地图复盘的完整流程。
+SimNav Studio 是一款面向模拟飞行的 iOS 规划工作台。它把 **航路规划**、**机场与 Procedure 查看**、**FR24 轨迹下载、对照与拟合**、**离线地图**、**本地导航数据库**集中在一个 App 中，在核心功能离线可用的基础上，串联从航线构思到地图复盘的完整流程。
 
 App 以 SwiftUI 构建原生外壳，以 WKWebView 承载地图工作区，并在 App 内封装 Swift 服务层。导入的数据库、地图包、缓存、偏好设置和轨迹历史均保存在 App 沙盒内。
 
@@ -49,7 +50,7 @@ App 以 SwiftUI 构建原生外壳，以 WKWebView 承载地图工作区，并�
 </p>
 
 > [!CAUTION]
-> **仅限模拟飞行。** NavPlanner 不是认证航空软件，不得用于真实飞行计划、真实导航、签派放行、运行决策或任何安全关键航空活动。
+> **仅限模拟飞行。** SimNav Studio 不是认证航空软件，不得用于真实飞行计划、真实导航、签派放行、运行决策或任何安全关键航空活动。
 
 <a id="highlights"></a>
 
@@ -166,13 +167,13 @@ App 以 SwiftUI 构建原生外壳，以 WKWebView 承载地图工作区，并�
 3. 查询该航线最近最多 10 个航班，或手动搜索航班号 / flightId。
 4. 下载并绘制轨迹、导入 GPX、查看高度 / 速度剖面，或把轨迹拟合到本地航路引擎。
 
-尚未起飞的航班会使用深灰色计划卡片显示。由于 FR24 此时还没有实际 playback，NavPlanner 会明确提示这一限制，并可使用本地自动规划器以虚线绘制计划预览；该虚线不会被表述为实际飞行轨迹或 FR24 filed route。
+尚未起飞的航班会使用深灰色计划卡片显示。由于 FR24 此时还没有实际 playback，SimNav Studio 会明确提示这一限制，并可使用本地自动规划器以虚线绘制计划预览；该虚线不会被表述为实际飞行轨迹或 FR24 filed route。
 
 若已加载航班的实际起降机场与计划页不同，Query 会在拟合前把实际机场同步回 Plan。对于终端采样充分、跑道判断可靠的轨迹，系统会先匹配完整的 SID / STAR / Approach，再以 Procedure 边界为端点拟合中间航路。
 
 下载轨迹会以 GPX、playback JSON 和 metadata 缓存在本机。Query 可检索缓存、绘制或拟合缓存轨迹、分享 GPX、收藏重要轨迹、打开缓存目录，并清理未收藏的下载记录。
 
-> **在线增强功能。** FR24 为可选功能。断网、会话失效或 FR24 返回验证页时，本地航路规划、机场查询、Procedure、nav-overlay 和离线地图仍可使用。NavPlanner 只复用用户在 App 内完成验证后的会话，不绕过 Cloudflare，也不自动处理 CAPTCHA。
+> **在线增强功能。** FR24 为可选功能。断网、会话失效或 FR24 返回验证页时，本地航路规划、机场查询、Procedure、nav-overlay 和离线地图仍可使用。SimNav Studio 只复用用户在 App 内完成验证后的会话，不绕过 Cloudflare，也不自动处理 CAPTCHA。
 
 <table align="center" width="92%">
   <tr>
@@ -204,7 +205,7 @@ App 以 SwiftUI 构建原生外壳，以 WKWebView 承载地图工作区，并�
 
 1. 在 **设置** → **导航数据库** 中点击 **选择 s3db**。
 2. 从 Files 中选择 `.s3db`、`.sqlite`、`.sqlite3` 或 `.db` 文件，格式须符合 [导入自定义导航数据库兼容格式](#nav-db-compatible-format) 部分所述。
-3. NavPlanner 切换到导入的数据库，并刷新航路、Procedure 和 nav-overlay 缓存。
+3. SimNav Studio 切换到导入的数据库，并刷新航路、Procedure 和 nav-overlay 缓存。
 
 <a id="nav-db-compatible-format"></a>
 <details>
@@ -213,7 +214,7 @@ App 以 SwiftUI 构建原生外壳，以 WKWebView 承载地图工作区，并�
 
 建议直接使用 PMDG 机型导航数据库 `e_dfd_PMDG.s3db`，或在其基础上自定义。
 
-文件扩展名只用于文件选择器筛选；导入内容必须是有效的 **SQLite 3** 数据库，且采用 NavPlanner 实际查询的 PMDG 风格导航数据库结构。App 会先把导入文件复制进自身
+文件扩展名只用于文件选择器筛选；导入内容必须是有效的 **SQLite 3** 数据库，且采用 SimNav Studio 实际查询的 PMDG 风格导航数据库结构。App 会先把导入文件复制进自身
 沙盒，再以只读方式打开该副本；不会转换 CSV、JSON、ARINC 424 原始文本、加密库
 或任意自定义 SQLite 结构。
 
@@ -273,7 +274,7 @@ sqlite3 -readonly custom.s3db \
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="Media/architecture/project-architecture-zh-dark.webp" />
   <source media="(prefers-color-scheme: light)" srcset="Media/architecture/project-architecture-zh-light.webp" />
-  <img src="Media/architecture/project-architecture-zh-light.webp" alt="NavPlanner 系统架构图：以核心工作流为主线" />
+  <img src="Media/architecture/project-architecture-zh-light.webp" alt="SimNav Studio 系统架构图：以核心工作流为主线" />
 </picture>
 
 编号工作流把依赖方向明确展示出来：航路规划产出的 payload 会被机场、计算和查询复用；Procedure 选择同时约束剖面计算和轨迹拟合；设置页提供所有离线路径依赖的本地数据库与地图存储。箭头同时表达以下实现原理：
@@ -300,8 +301,8 @@ sqlite3 -readonly custom.s3db \
 ### 快速开始
 
 ```bash
-git clone https://github.com/MDX-Tom/NavPlanner-App.git
-cd NavPlanner-App
+git clone https://github.com/MDX-Tom/simnav-studio.git
+cd simnav-studio
 Tools/Signing/setup_local_signing.sh
 open NavPlanner.xcodeproj
 ```
@@ -309,12 +310,18 @@ open NavPlanner.xcodeproj
 签名脚本会从本机有效的 Apple Development 证书读取 Team ID，并且只写入
 被 Git 忽略的 `Config/CodeSigning.local.xcconfig`。如果自己的账号无法注册
 仓库公开 Bundle Identifier，可传入仅限本机的覆盖值，例如
-`--bundle-id com.example.NavPlanner`。Simulator 构建不需要签名；真机运行前，
+`--bundle-id com.example.simnavstudio`。Simulator 构建不需要签名；真机运行前，
 如果脚本提示没有有效 identity，请先在 Xcode 添加 Apple Account 并创建
 Apple Development 证书。
 如果 Xcode 后续提示没有可用 profile 或 profile 已过期，请打开
 “Xcode → Settings → Accounts”刷新 Apple Account 与证书，再重新运行脚本。
 账号凭据始终只留在 Xcode 与钥匙串中，不得复制进仓库。
+
+产品正式名称为 **SimNav Studio**，桌面图标使用短名称 **SimNav**，Bundle
+Identifier 为 `com.mdxtom.simnavstudio`。为保持源码兼容，现有
+`NavPlanner.xcodeproj`、`NavPlanner` scheme、可执行文件和 App 数据路径名称
+保持不变。由于 Bundle Identifier 已更换，Apple 平台会把它视为与旧标识版本
+不同的 App，旧 App 沙盒中的数据不会自动迁移。
 
 在 Xcode 中选择 **NavPlanner** scheme，再选择 iPhone、iPad 或 Mac Catalyst
 目标并运行。Xcode 会自动读取被忽略的本机配置，不会把 Team ID 写回受跟踪的
@@ -395,8 +402,8 @@ provisioning profile，不能直接安装。
 
 #### Mac
 
-1. 下载带 `-catalyst-adhoc-not-notarized.dmg` 后缀的 DMG，并复验 SHA-256。
-2. 打开 DMG，将 `NavPlanner.app` 拖入“应用程序”。
+1. 下载带 `-catalyst-adhoc.dmg` 后缀的 DMG，并复验 SHA-256。
+2. 打开 DMG，将其中的 `SimNav-Studio-<version>-catalyst-adhoc.app` 拖入“应用程序”。
 3. 首次启动时按住 Control 点击 App 并选择“打开”；如果 macOS 仍拦截，只有在
    已核实校验和与下载来源后，才使用“系统设置 → 隐私与安全性 → 仍要打开”。
 
@@ -458,9 +465,9 @@ Media/                         README 截图与视觉素材
 
 ## 数据与安全说明 ⚠️
 
-**NavPlanner 仅用于模拟飞行规划、数据查看和个人学习。实际飞行必须始终以官方航行资料、管制指令、适航设备和当前运行程序为准。**
+**SimNav Studio 仅用于模拟飞行规划、数据查看和个人学习。实际飞行必须始终以官方航行资料、管制指令、适航设备和当前运行程序为准。**
 
-NavPlanner 可能使用第三方或用户自行提供的内容，包括地图底图、机场与 Procedure 数据、AIRAC / 导航数据库、PMTiles / MBTiles / SQLite 地图包，以及 FR24 航班数据。这些内容可能受版权、数据库权利、商标、平台条款或再分发限制约束。
+SimNav Studio 可能使用第三方或用户自行提供的内容，包括地图底图、机场与 Procedure 数据、AIRAC / 导航数据库、PMTiles / MBTiles / SQLite 地图包，以及 FR24 航班数据。这些内容可能受版权、数据库权利、商标、平台条款或再分发限制约束。
 
 GitHub 公开源码仓库不包含导航数据库：根目录 `database/` 和开发用 bundle 资源均被 Git 忽略。Releases 中发布的
 IPA 与 DMG 带有一份示例数据库，供首次启动体验示例数据，把用途限制为地面娱乐飞行模拟软件。维护者不得发布包含该示例库的 IPA 或 DMG。

@@ -3,7 +3,7 @@
 // 仓库只保留公开默认值；真实 Team ID 和证书身份不得写入本文件。
 
 CODE_SIGN_STYLE = Automatic
-PRODUCT_BUNDLE_IDENTIFIER = com.midaxia.navplanner
+PRODUCT_BUNDLE_IDENTIFIER = com.mdxtom.simnavstudio
 
 // Xcode silently skips this file on a fresh clone. Local developers create it
 // with Tools/Signing/setup_local_signing.sh; Git always ignores it.

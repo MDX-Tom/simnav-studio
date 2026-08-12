@@ -336,7 +336,7 @@ struct MapWebView: UIViewRepresentable {
                     completionHandler()
                     return
                 }
-                let alert = UIAlertController(title: "NavPlanner", message: message, preferredStyle: .alert)
+                let alert = UIAlertController(title: "SimNav Studio", message: message, preferredStyle: .alert)
                 alert.addAction(UIAlertAction(title: "确定", style: .default) { _ in
                     completionHandler()
                 })
@@ -350,6 +350,34 @@ struct MapWebView: UIViewRepresentable {
 
         func webView(
             _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
+            guard navigationAction.navigationType == .linkActivated,
+                  let url = navigationAction.request.url,
+                  Self.isProjectRepositoryURL(url)
+            else {
+                decisionHandler(.allow)
+                return
+            }
+
+            decisionHandler(.cancel)
+            UIApplication.shared.open(url)
+        }
+
+        private static func isProjectRepositoryURL(_ url: URL) -> Bool {
+            url.scheme?.lowercased() == "https"
+                && url.host?.lowercased() == "github.com"
+                && url.port == nil
+                && url.user == nil
+                && url.password == nil
+                && url.path == "/MDX-Tom/simnav-studio"
+                && url.query == nil
+                && url.fragment == nil
+        }
+
+        func webView(
+            _ webView: WKWebView,
             runJavaScriptConfirmPanelWithMessage message: String,
             initiatedByFrame frame: WKFrameInfo,
             completionHandler: @escaping (Bool) -> Void
@@ -359,7 +387,7 @@ struct MapWebView: UIViewRepresentable {
                     completionHandler(false)
                     return
                 }
-                let alert = UIAlertController(title: "NavPlanner", message: message, preferredStyle: .alert)
+                let alert = UIAlertController(title: "SimNav Studio", message: message, preferredStyle: .alert)
                 alert.addAction(UIAlertAction(title: "取消", style: .cancel) { _ in
                     completionHandler(false)
                 })

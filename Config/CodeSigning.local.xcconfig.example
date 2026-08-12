@@ -12,4 +12,4 @@ CODE_SIGN_IDENTITY = Apple Development
 
 // 无法使用仓库 Bundle ID 时，可只在本机覆盖；公开配置会在此文件之前加载。
 // Developers who cannot use the repository Bundle ID may override it locally.
-// PRODUCT_BUNDLE_IDENTIFIER = com.example.NavPlanner
+// PRODUCT_BUNDLE_IDENTIFIER = com.example.simnavstudio

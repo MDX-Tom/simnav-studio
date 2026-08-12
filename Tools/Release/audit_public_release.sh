@@ -8,6 +8,11 @@ RELEASE_DIR="${1:-}"
 EXPECTED_VERSION="$(awk -F'= ' '/MARKETING_VERSION = / {gsub(/;/, "", $2); print $2; exit}' "$PROJECT_ROOT/NavPlanner.xcodeproj/project.pbxproj")"
 EXPECTED_BUILD="$(awk -F'= ' '/CURRENT_PROJECT_VERSION = / {gsub(/;/, "", $2); print $2; exit}' "$PROJECT_ROOT/NavPlanner.xcodeproj/project.pbxproj")"
 EXPECTED_BUNDLE_ID="$(awk -F' = ' '/^PRODUCT_BUNDLE_IDENTIFIER = / {print $2; exit}' "$PROJECT_ROOT/Config/CodeSigning.xcconfig")"
+EXPECTED_PRODUCT_NAME="SimNav Studio"
+EXPECTED_DISPLAY_NAME="SimNav"
+EXPECTED_SUBTITLE="Planning & Navigation for Flight Simulation"
+EXPECTED_INTERNAL_BUNDLE_NAME="NavPlanner"
+ARTIFACT_BASENAME="SimNav-Studio"
 
 if [ -z "$EXPECTED_BUNDLE_ID" ]; then
   echo "Public Bundle Identifier is missing from Config/CodeSigning.xcconfig." >&2
@@ -48,11 +53,11 @@ if [ "$SENSITIVE_PUBLIC_CONTENT" -ne 0 ]; then
   exit 3
 fi
 
-IPA_PATH="$(find "$RELEASE_DIR/ios" -maxdepth 1 -type f -name '*-unsigned.ipa' -print -quit)"
-MAC_APP="$(find "$RELEASE_DIR/macos" -maxdepth 1 -type d -name '*-adhoc.app' -print -quit)"
-DMG_PATH="$(find "$RELEASE_DIR/macos" -maxdepth 1 -type f -name '*-adhoc-not-notarized.dmg' -print -quit)"
+IPA_PATH="$RELEASE_DIR/ios/$ARTIFACT_BASENAME-$EXPECTED_VERSION-unsigned.ipa"
+MAC_APP="$RELEASE_DIR/macos/$ARTIFACT_BASENAME-$EXPECTED_VERSION-catalyst-adhoc.app"
+DMG_PATH="$RELEASE_DIR/macos/$ARTIFACT_BASENAME-$EXPECTED_VERSION-catalyst-adhoc.dmg"
 
-if [ -z "$IPA_PATH" ] || [ -z "$MAC_APP" ] || [ -z "$DMG_PATH" ]; then
+if [ ! -f "$IPA_PATH" ] || [ ! -d "$MAC_APP" ] || [ ! -f "$DMG_PATH" ]; then
   echo "Expected unsigned IPA, ad-hoc app and ad-hoc DMG were not found." >&2
   exit 4
 fi
@@ -96,6 +101,8 @@ assert_plist_value() {
 assert_plist_value "$IOS_APP/Info.plist" CFBundleIdentifier "$EXPECTED_BUNDLE_ID"
 assert_plist_value "$IOS_APP/Info.plist" CFBundleShortVersionString "$EXPECTED_VERSION"
 assert_plist_value "$IOS_APP/Info.plist" CFBundleVersion "$EXPECTED_BUILD"
+assert_plist_value "$IOS_APP/Info.plist" CFBundleName "$EXPECTED_INTERNAL_BUNDLE_NAME"
+assert_plist_value "$IOS_APP/Info.plist" CFBundleDisplayName "$EXPECTED_DISPLAY_NAME"
 assert_plist_value "$IOS_APP/Info.plist" UIDeviceFamily:0 1
 assert_plist_value "$IOS_APP/Info.plist" UIDeviceFamily:1 2
 
@@ -136,6 +143,8 @@ MAC_BINARY="$MAC_APP/Contents/MacOS/$(
 assert_plist_value "$MAC_APP/Contents/Info.plist" CFBundleIdentifier "$EXPECTED_BUNDLE_ID"
 assert_plist_value "$MAC_APP/Contents/Info.plist" CFBundleShortVersionString "$EXPECTED_VERSION"
 assert_plist_value "$MAC_APP/Contents/Info.plist" CFBundleVersion "$EXPECTED_BUILD"
+assert_plist_value "$MAC_APP/Contents/Info.plist" CFBundleName "$EXPECTED_INTERNAL_BUNDLE_NAME"
+assert_plist_value "$MAC_APP/Contents/Info.plist" CFBundleDisplayName "$EXPECTED_DISPLAY_NAME"
 MAC_ARCHS="$(lipo -archs "$MAC_BINARY")"
 if ! printf ' %s ' "$MAC_ARCHS" | grep -q ' arm64 ' || ! printf ' %s ' "$MAC_ARCHS" | grep -q ' x86_64 '; then
   echo "Mac app is not a universal arm64 + x86_64 Catalyst build." >&2
@@ -170,7 +179,18 @@ if rg -a -q '/Users/[^/]+/|/home/[^/]+/' "$IOS_APP" "$MAC_APP"; then
   exit 4
 fi
 
-hdiutil verify "$DMG_PATH" >/dev/null
+verify_dmg() {
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    if hdiutil verify "$DMG_PATH" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  hdiutil verify "$DMG_PATH" >/dev/null
+}
+
+verify_dmg
 
 mkdir "$MOUNT_DIR"
 hdiutil attach -readonly -nobrowse -mountpoint "$MOUNT_DIR" "$DMG_PATH" >/dev/null
@@ -255,6 +275,7 @@ CURRENT_BRANCH="$(git -C "$PROJECT_ROOT" branch --show-current)"
 python3 - \
   "$RELEASE_DIR/metadata/build-manifest.json" \
   "$EXPECTED_VERSION" "$EXPECTED_BUILD" "$EXPECTED_BUNDLE_ID" \
+  "$EXPECTED_PRODUCT_NAME" "$EXPECTED_DISPLAY_NAME" "$EXPECTED_SUBTITLE" "$ARTIFACT_BASENAME" \
   "$CURRENT_BRANCH" "$CURRENT_HEAD" \
   "$IPA_SHA" "$IPA_SIZE" "$APP_TREE_SHA" "$APP_SIZE" "$DMG_SHA" "$DMG_SIZE" \
   "$IOS_DATABASE_SHA" "$IOS_DATABASE_SIZE" "$IOS_DATABASE_AIRAC" <<'PY'
@@ -266,6 +287,10 @@ import sys
     expected_version,
     expected_build,
     expected_bundle_id,
+    expected_product_name,
+    expected_display_name,
+    expected_subtitle,
+    artifact_basename,
     current_branch,
     current_head,
     ipa_sha,
@@ -287,6 +312,9 @@ if manifest.get("schema_version") != 4:
 
 release = manifest.get("release", {})
 expected_release = {
+    "name": expected_product_name,
+    "display_name": expected_display_name,
+    "subtitle": expected_subtitle,
     "marketing_version": expected_version,
     "build_number": expected_build,
     "bundle_identifier": expected_bundle_id,
@@ -301,9 +329,9 @@ if source.get("branch") != current_branch or source.get("head") != current_head:
 
 artifacts = {item.get("path"): item for item in manifest.get("artifacts", [])}
 expected_artifacts = {
-    "ios/NavPlanner-" + expected_version + "-unsigned.ipa": (ipa_sha, int(ipa_size)),
-    "macos/NavPlanner-" + expected_version + "-catalyst-adhoc.app": (app_sha, int(app_size)),
-    "macos/NavPlanner-" + expected_version + "-catalyst-adhoc-not-notarized.dmg": (dmg_sha, int(dmg_size)),
+    "ios/" + artifact_basename + "-" + expected_version + "-unsigned.ipa": (ipa_sha, int(ipa_size)),
+    "macos/" + artifact_basename + "-" + expected_version + "-catalyst-adhoc.app": (app_sha, int(app_size)),
+    "macos/" + artifact_basename + "-" + expected_version + "-catalyst-adhoc.dmg": (dmg_sha, int(dmg_size)),
 }
 for path, (expected_sha, expected_size) in expected_artifacts.items():
     artifact = artifacts.get(path)

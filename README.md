@@ -3,11 +3,11 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="Media/navplanner-hero-en-dark.webp" />
   <source media="(prefers-color-scheme: light)" srcset="Media/navplanner-hero-en.webp" />
-  <img src="Media/navplanner-hero-en.webp" alt="NavPlanner on iPhone and iPad, showing the LGAV to EDDM route and STAR selection" width="84%" />
+  <img src="Media/navplanner-hero-en.webp" alt="SimNav Studio on iPhone and iPad, showing the LGAV to EDDM route and STAR selection" width="84%" />
 </picture><br />
 
 <p>
-  <a href="https://github.com/MDX-Tom/NavPlanner-App/stargazers"><img src="https://img.shields.io/github/stars/MDX-Tom/NavPlanner-App?logo=github&label=Stars" alt="GitHub Stars" /></a>
+  <a href="https://github.com/MDX-Tom/simnav-studio/stargazers"><img src="https://img.shields.io/github/stars/MDX-Tom/simnav-studio?logo=github&label=Stars" alt="GitHub Stars" /></a>
   <img src="https://img.shields.io/badge/Devices-iPhone%20%7C%20iPad%20%7C%20Mac-475569" alt="iPhone, iPad, and Mac" />
   <img src="https://img.shields.io/badge/Swift-5.0-F05138?logo=swift&logoColor=white" alt="Swift 5.0" />
   <img src="https://img.shields.io/badge/Version-0.1.0-0F766E" alt="Version 0.1.0" />
@@ -18,9 +18,10 @@
   <a href="README.zh-CN.md"><img src="https://img.shields.io/badge/语言-简体中文-DC2626.svg" alt="简体中文" /></a>
 </p>
 
-<h1>NavPlanner</h1>
+<h1>SimNav Studio</h1>
 
-<p><strong>From route planning to map review—an all-in-one flight-simulation workspace with local computation.</strong></p>
+<p><strong>Planning &amp; Navigation for Flight Simulation</strong></p>
+<p>From route planning to map review—an all-in-one flight-simulation workspace with local computation.</p>
 <p>Native on iPhone &amp; iPad · Route planning · Procedure inspection · Track comparison · Offline maps</p>
 
 <p>
@@ -40,7 +41,7 @@
 
 ## Overview ✈️
 
-NavPlanner is an iOS planning desk for flight simulation. It brings **route planning**, **airport and procedure inspection**, **FR24 track download, comparison, and matching**, **offline maps**, and **local navigation databases** into one app—connecting an end-to-end workflow from route idea to map review while keeping core features available offline.
+SimNav Studio is an iOS planning desk for flight simulation. It brings **route planning**, **airport and procedure inspection**, **FR24 track download, comparison, and matching**, **offline maps**, and **local navigation databases** into one app—connecting an end-to-end workflow from route idea to map review while keeping core features available offline.
 
 A SwiftUI shell surrounds a WKWebView map workspace and an in-app Swift service layer. Imported databases, map packages, caches, preferences, and track history remain inside the app sandbox.
 
@@ -49,7 +50,7 @@ A SwiftUI shell surrounds a WKWebView map workspace and an in-app Swift service 
 </p>
 
 > [!CAUTION]
-> **For flight simulation only.** NavPlanner is not certified aviation software and must not be used for real-world flight planning, navigation, dispatch, operational decisions, or any safety-critical aviation activity.
+> **For flight simulation only.** SimNav Studio is not certified aviation software and must not be used for real-world flight planning, navigation, dispatch, operational decisions, or any safety-critical aviation activity.
 
 <a id="highlights"></a>
 
@@ -71,12 +72,12 @@ A SwiftUI shell surrounds a WKWebView map workspace and an in-app Swift service 
 
 <table align="center" width="80%">
   <tr>
-    <td align="center"><strong>Light · iPhone 17 Pro portrait</strong><br /><img alt="NavPlanner light theme on iPhone previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/day/02-procedure-iphone.webp" height="272" /></td>
-    <td align="center"><strong>Light · iPad Pro 13-inch landscape</strong><br /><img alt="NavPlanner light theme on iPad previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/day/02-procedure-ipad.webp" height="272" /></td>
+    <td align="center"><strong>Light · iPhone 17 Pro portrait</strong><br /><img alt="SimNav Studio light theme on iPhone previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/day/02-procedure-iphone.webp" height="272" /></td>
+    <td align="center"><strong>Light · iPad Pro 13-inch landscape</strong><br /><img alt="SimNav Studio light theme on iPad previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/day/02-procedure-ipad.webp" height="272" /></td>
   </tr>
   <tr>
-    <td align="center"><strong>Dark · iPhone 17 Pro portrait</strong><br /><img alt="NavPlanner dark theme on iPhone previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/night/02-procedure-iphone.webp" height="272" /></td>
-    <td align="center"><strong>Dark · iPad Pro 13-inch landscape</strong><br /><img alt="NavPlanner dark theme on iPad previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/night/02-procedure-ipad.webp" height="272" /></td>
+    <td align="center"><strong>Dark · iPhone 17 Pro portrait</strong><br /><img alt="SimNav Studio dark theme on iPhone previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/night/02-procedure-iphone.webp" height="272" /></td>
+    <td align="center"><strong>Dark · iPad Pro 13-inch landscape</strong><br /><img alt="SimNav Studio dark theme on iPad previewing the runway-filtered EDDM STAR overview" src="Media/workflows/en/night/02-procedure-ipad.webp" height="272" /></td>
   </tr>
 </table>
 
@@ -166,13 +167,13 @@ The calculation model is local-first and works offline. Online weather is an enh
 3. List up to 10 recent flights for the route, or search a flight number / flightId manually.
 4. Download and draw a track, import GPX, inspect altitude / speed profiles, or match the track against the local route engine.
 
-Flights that have not departed are shown as deep-gray scheduled cards. Because FR24 has no actual playback for them yet, NavPlanner clearly labels the limitation and can draw a dashed preview generated by the local auto-planner; the dashed line is not presented as an actual or filed FR24 track.
+Flights that have not departed are shown as deep-gray scheduled cards. Because FR24 has no actual playback for them yet, SimNav Studio clearly labels the limitation and can draw a dashed preview generated by the local auto-planner; the dashed line is not presented as an actual or filed FR24 track.
 
 When a loaded flight reports different actual airports, Query synchronizes them back to Plan before matching. For dense tracks with reliable terminal samples, matching identifies the complete SID / STAR / Approach first, then fits the enroute airway between procedure boundaries.
 
 Downloaded tracks are cached locally as GPX, playback JSON, and metadata. Query can search the cache, draw or match cached tracks, share GPX, favorite important tracks, open the cache folder, and clear non-favorited downloads.
 
-> **Online enhancement.** FR24 is optional. If the network is unavailable, the session expires, or FR24 returns a verification page, local planning, airport lookup, procedures, nav overlays, and offline maps remain available. NavPlanner reuses only the session completed by the user inside the app; it does not bypass Cloudflare or automate CAPTCHA challenges.
+> **Online enhancement.** FR24 is optional. If the network is unavailable, the session expires, or FR24 returns a verification page, local planning, airport lookup, procedures, nav overlays, and offline maps remain available. SimNav Studio reuses only the session completed by the user inside the app; it does not bypass Cloudflare or automate CAPTCHA challenges.
 
 <table align="center" width="92%">
   <tr>
@@ -204,7 +205,7 @@ Online map cache and offline packages are managed separately. Clearing the onlin
 
 1. In **Settings** → **Navigation Database**, tap **Choose s3db**.
 2. Pick a `.s3db`, `.sqlite`, `.sqlite3`, or `.db` file from Files; its format must match the [custom navigation-database compatibility](#nav-db-compatible-format) section below.
-3. NavPlanner switches to the imported database and refreshes route, procedure, and nav-overlay caches.
+3. SimNav Studio switches to the imported database and refreshes route, procedure, and nav-overlay caches.
 
 <a id="nav-db-compatible-format"></a>
 <details>
@@ -215,7 +216,7 @@ It is recommended to use the PMDG aircraft navigation database
 
 The extension is only a file-picker filter: the imported file must be a valid
 **SQLite 3** database using the PMDG-style navigation schema queried by
-NavPlanner. The app copies an import into its sandbox and opens that copy
+SimNav Studio. The app copies an import into its sandbox and opens that copy
 read-only. It does not convert CSV, JSON, ARINC 424 source text, encrypted
 databases, or arbitrary SQLite schemas.
 
@@ -279,7 +280,7 @@ The architecture is organized around the user-facing core workflow rather than s
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="Media/architecture/project-architecture-en-dark.webp" />
   <source media="(prefers-color-scheme: light)" srcset="Media/architecture/project-architecture-en-light.webp" />
-  <img src="Media/architecture/project-architecture-en-light.webp" alt="NavPlanner architecture: workflow-first system design" />
+  <img src="Media/architecture/project-architecture-en-light.webp" alt="SimNav Studio architecture: workflow-first system design" />
 </picture>
 
 The numbered workflow makes the dependency direction explicit: route planning produces the payload consumed by Airport, Calc, and Query; Procedure selection constrains both profile calculation and track matching; Settings feeds the local database and map stores that every offline path depends on. The arrows also expose the implementation principles:
@@ -306,8 +307,8 @@ The numbered workflow makes the dependency direction explicit: route planning pr
 ### Quick start
 
 ```bash
-git clone https://github.com/MDX-Tom/NavPlanner-App.git
-cd NavPlanner-App
+git clone https://github.com/MDX-Tom/simnav-studio.git
+cd simnav-studio
 Tools/Signing/setup_local_signing.sh
 open NavPlanner.xcodeproj
 ```
@@ -316,13 +317,20 @@ The signing helper reads the Team ID from a valid Apple Development certificate
 and writes it only to the Git-ignored
 `Config/CodeSigning.local.xcconfig`. If your account cannot provision the public
 Bundle Identifier, pass a private override such as
-`--bundle-id com.example.NavPlanner`. Simulator builds do not require signing.
+`--bundle-id com.example.simnavstudio`. Simulator builds do not require signing.
 For a physical device, first add your Apple Account and create an Apple
 Development certificate in Xcode if the helper reports that no identity exists.
 If Xcode later reports that no profile is available or that a profile expired,
 open **Xcode → Settings → Accounts**, refresh the Apple Account and certificates,
 then rerun the helper. Account credentials remain in Xcode and Keychain and must
 never be copied into this repository.
+
+The product is branded **SimNav Studio** and appears under the short icon name
+**SimNav**. Its Bundle Identifier is `com.mdxtom.simnavstudio`. The existing
+`NavPlanner.xcodeproj`, `NavPlanner` scheme, executable, and app-data path names
+remain unchanged for source compatibility. Because the Bundle Identifier has
+changed, Apple platforms treat this build as a separate app from installations
+using the previous identifier; their sandbox data does not migrate automatically.
 
 In Xcode, select the **NavPlanner** scheme, choose an iPhone, iPad, or Mac
 Catalyst destination, and run the app. Xcode automatically reads the ignored
@@ -402,13 +410,13 @@ profile, and cannot be installed directly.
 
 Alternatively, you can install directly from local Xcode by running
 `Tools/Signing/setup_local_signing.sh`, connecting the device, selecting it as
-the NavPlanner destination, and pressing Run. The generated signing file remains
+the internal **NavPlanner** scheme destination, and pressing Run. The generated signing file remains
 only on that Mac and is ignored by Git.
 
 #### Mac
 
-1. Download the `-catalyst-adhoc-not-notarized.dmg` and verify its SHA-256.
-2. Open the DMG and drag `NavPlanner.app` to Applications.
+1. Download the `-catalyst-adhoc.dmg` and verify its SHA-256.
+2. Open the DMG and drag the bundled `SimNav-Studio-<version>-catalyst-adhoc.app` to Applications.
 3. On first launch, Control-click the app and choose **Open**. If macOS still
    blocks it, use **System Settings → Privacy & Security → Open Anyway** only
    after verifying the checksum and download source.
@@ -472,9 +480,9 @@ Media/                         README screenshots and visual assets
 
 ## Data & Safety Notice ⚠️
 
-**NavPlanner is a simulator-planning, inspection, and personal-learning aid only. For real-world aviation, always rely on official aeronautical publications, ATC instructions, certified avionics, and current operational procedures.**
+**SimNav Studio is a simulator-planning, inspection, and personal-learning aid only. For real-world aviation, always rely on official aeronautical publications, ATC instructions, certified avionics, and current operational procedures.**
 
-NavPlanner may use third-party or user-supplied materials, including basemaps, airport and procedure data, AIRAC / navigation databases, PMTiles / MBTiles / SQLite packages, and FR24 flight data. These materials may be subject to copyright, database rights, trademarks, platform terms, or redistribution restrictions.
+SimNav Studio may use third-party or user-supplied materials, including basemaps, airport and procedure data, AIRAC / navigation databases, PMTiles / MBTiles / SQLite packages, and FR24 flight data. These materials may be subject to copyright, database rights, trademarks, platform terms, or redistribution restrictions.
 
 The public GitHub source
 repository does **not** include a navigation database: the root `database/`

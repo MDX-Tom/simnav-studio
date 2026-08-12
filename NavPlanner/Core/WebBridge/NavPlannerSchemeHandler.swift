@@ -3757,7 +3757,7 @@ private final class FR24Service {
         }.joined(separator: "\n")
         return """
         <?xml version="1.0" encoding="UTF-8"?>
-        <gpx version="1.1" creator="NavPlanner" xmlns="http://www.topografix.com/GPX/1/1" xmlns:navplanner="https://navplanner.app/gpx/1/0">
+        <gpx version="1.1" creator="SimNav Studio" xmlns="http://www.topografix.com/GPX/1/1" xmlns:navplanner="https://navplanner.app/gpx/1/0">
           <trk>
             <name>\(xmlEscape(name))</name>
             <trkseg>

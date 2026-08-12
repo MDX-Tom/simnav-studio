@@ -1,6 +1,12 @@
 # 公开发布封包 / Public release packaging
 
-NavPlanner 采用 UTM、Provenance 等开源项目常见的公开侧载边界：
+正式产品名称为 **SimNav Studio**，桌面图标短名称为 **SimNav**，副标题为
+**Planning & Navigation for Flight Simulation**。发布工件统一使用
+`SimNav-Studio-<version>-…` 文件名；内部 Xcode 工程、scheme、可执行文件、
+与数据目录继续保留 `NavPlanner` 标识以兼容现有源码，Bundle Identifier 则为
+`com.mdxtom.simnavstudio`。旧 Bundle Identifier 的沙盒数据不会自动迁移到新 App。
+
+SimNav Studio 采用 UTM、Provenance 等开源项目常见的公开侧载边界：
 
 - GitHub 面向的 iOS/iPadOS 工件关闭 Xcode code signing，并使用
   `-unsigned.ipa` 后缀。
@@ -31,7 +37,7 @@ Xcode GUI 与命令行都能使用同一份本机签名，而仓库没有具体 
 
 ```bash
 Tools/Signing/setup_local_signing.sh \
-  --bundle-id com.example.NavPlanner \
+  --bundle-id com.example.simnavstudio \
   --force
 ```
 

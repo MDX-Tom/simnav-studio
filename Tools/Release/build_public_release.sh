@@ -11,10 +11,17 @@ BUNDLED_DATABASE_DIR="$PROJECT_ROOT/NavPlanner/Resources/Database"
 BUNDLED_DATABASE_TARGET="$BUNDLED_DATABASE_DIR/navdata.sqlite"
 SCHEME="NavPlanner"
 CONFIGURATION="Release"
+PRODUCT_NAME="SimNav Studio"
+APP_DISPLAY_NAME="SimNav"
+PRODUCT_SUBTITLE="Planning & Navigation for Flight Simulation"
+ARTIFACT_BASENAME="SimNav-Studio"
 
 VERSION="$(awk -F'= ' '/MARKETING_VERSION = / {gsub(/;/, "", $2); print $2; exit}' "$PROJECT_ROOT/NavPlanner.xcodeproj/project.pbxproj")"
 BUILD_NUMBER="$(awk -F'= ' '/CURRENT_PROJECT_VERSION = / {gsub(/;/, "", $2); print $2; exit}' "$PROJECT_ROOT/NavPlanner.xcodeproj/project.pbxproj")"
 BUNDLE_IDENTIFIER="$(awk -F' = ' '/^PRODUCT_BUNDLE_IDENTIFIER = / {print $2; exit}' "$PUBLIC_SIGNING_CONFIG")"
+IPA_FILENAME="$ARTIFACT_BASENAME-$VERSION-unsigned.ipa"
+MAC_APP_FILENAME="$ARTIFACT_BASENAME-$VERSION-catalyst-adhoc.app"
+DMG_FILENAME="$ARTIFACT_BASENAME-$VERSION-catalyst-adhoc.dmg"
 
 if [ -z "$BUNDLE_IDENTIFIER" ]; then
   echo "Public Bundle Identifier is missing from Config/CodeSigning.xcconfig." >&2
@@ -182,11 +189,11 @@ IOS_EXECUTABLE="$IOS_APP/$(
 )"
 xcrun strip -S -x "$IOS_EXECUTABLE"
 
-/usr/bin/ditto "$IOS_APP" "$WORK_DIR/ios-stage/Payload/NavPlanner.app"
-xattr -cr "$WORK_DIR/ios-stage/Payload/NavPlanner.app"
+/usr/bin/ditto "$IOS_APP" "$WORK_DIR/ios-stage/Payload/$APP_DISPLAY_NAME.app"
+xattr -cr "$WORK_DIR/ios-stage/Payload/$APP_DISPLAY_NAME.app"
 (
   cd "$WORK_DIR/ios-stage"
-  COPYFILE_DISABLE=1 /usr/bin/zip -qry -X "$OUTPUT_DIR/ios/NavPlanner-$VERSION-unsigned.ipa" Payload
+  COPYFILE_DISABLE=1 /usr/bin/zip -qry -X "$OUTPUT_DIR/ios/$IPA_FILENAME" Payload
 )
 
 xcodebuild -project "$PROJECT_FILE" -scheme "$SCHEME" -configuration "$CONFIGURATION" -destination 'generic/platform=macOS,variant=Mac Catalyst' -derivedDataPath "$MAC_DERIVED" ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY= DEVELOPMENT_TEAM= clean build >"$WORK_DIR/logs/macos-unsigned-release-build.txt" 2>&1
@@ -194,7 +201,7 @@ MAC_WARNING_COUNT="$(awk 'BEGIN { IGNORECASE=1 } /warning:/ { count++ } END { pr
 MAC_ERROR_COUNT="$(awk 'BEGIN { IGNORECASE=1 } /error:/ { count++ } END { print count + 0 }' "$WORK_DIR/logs/macos-unsigned-release-build.txt")"
 
 MAC_BUILD_APP="$MAC_DERIVED/Build/Products/Release-maccatalyst/NavPlanner.app"
-MAC_PUBLIC_APP="$OUTPUT_DIR/macos/NavPlanner-$VERSION-catalyst-adhoc.app"
+MAC_PUBLIC_APP="$OUTPUT_DIR/macos/$MAC_APP_FILENAME"
 if [ ! -d "$MAC_BUILD_APP" ]; then
   echo "Unsigned Catalyst app not found: $MAC_BUILD_APP" >&2
   exit 3
@@ -256,10 +263,14 @@ done
 /usr/bin/ditto "$MAC_PUBLIC_APP" "$WORK_DIR/dmg-stage/$(basename "$MAC_PUBLIC_APP")"
 ln -s /Applications "$WORK_DIR/dmg-stage/Applications"
 
-DMG_PATH="$OUTPUT_DIR/macos/NavPlanner-$VERSION-catalyst-adhoc-not-notarized.dmg"
-hdiutil create -volname "NavPlanner $VERSION" -srcfolder "$WORK_DIR/dmg-stage" -ov -format UDZO "$DMG_PATH" >"$WORK_DIR/logs/dmg-create.txt" 2>&1
+DMG_PATH="$OUTPUT_DIR/macos/$DMG_FILENAME"
+diskutil image create from \
+  --format UDZO \
+  --volumeName "$PRODUCT_NAME $VERSION" \
+  "$WORK_DIR/dmg-stage" \
+  "$DMG_PATH" >"$WORK_DIR/logs/dmg-create.txt" 2>&1
 
-IPA_PATH="$OUTPUT_DIR/ios/NavPlanner-$VERSION-unsigned.ipa"
+IPA_PATH="$OUTPUT_DIR/ios/$IPA_FILENAME"
 APP_TREE_SHA="$(
   cd "$MAC_PUBLIC_APP"
   find . -type f -print0 | sort -z | xargs -0 shasum -a 256 | shasum -a 256 | awk '{print $1}'
@@ -299,7 +310,9 @@ database_sha = sys.argv[5]
 manifest = {
     "schema_version": 4,
     "release": {
-        "name": "NavPlanner",
+        "name": "$PRODUCT_NAME",
+        "display_name": "$APP_DISPLAY_NAME",
+        "subtitle": "$PRODUCT_SUBTITLE",
         "marketing_version": "$VERSION",
         "build_number": "$BUILD_NUMBER",
         "bundle_identifier": "$BUNDLE_IDENTIFIER",
@@ -343,7 +356,7 @@ manifest = {
     },
     "artifacts": [
         {
-            "path": "ios/NavPlanner-$VERSION-unsigned.ipa",
+            "path": "ios/$IPA_FILENAME",
             "type": "unsigned iOS/iPadOS sideload IPA",
             "platform": "iphoneos",
             "architectures": ["arm64"],
@@ -356,7 +369,7 @@ manifest = {
             "installation": "Must be re-signed by AltStore, SideStore, Sideloadly or another trusted signing workflow using the installer's own account.",
         },
         {
-            "path": "macos/NavPlanner-$VERSION-catalyst-adhoc.app",
+            "path": "macos/$MAC_APP_FILENAME",
             "type": "Mac Catalyst application",
             "platform": "Mac Catalyst",
             "architectures": ["arm64", "x86_64"],
@@ -369,7 +382,7 @@ manifest = {
             "installation": "Local testing only; not Developer ID signed and not notarized.",
         },
         {
-            "path": "macos/NavPlanner-$VERSION-catalyst-adhoc-not-notarized.dmg",
+            "path": "macos/$DMG_FILENAME",
             "type": "Mac disk image",
             "platform": "macOS",
             "architectures": ["arm64", "x86_64"],
@@ -377,7 +390,7 @@ manifest = {
             "sha256": "$DMG_SHA",
             "signing_identity_type": "none; contained app is ad-hoc",
             "signing": "contains only the ad-hoc Catalyst app",
-            "export_method": "hdiutil UDZO disk image",
+            "export_method": "diskutil image create from --format UDZO",
             "installation": "Gatekeeper public-distribution trust is not provided; Developer ID signing and notarization would require a separate private CI workflow.",
         },
     ],
@@ -393,7 +406,7 @@ manifest = {
     },
     "validation": {
         "ipa_unzip_and_unsigned_structure": "passed",
-        "built_info_version_build_bundle_id_and_device_family": "passed",
+        "built_info_version_build_bundle_id_device_family_and_branding": "passed",
         "binary_platform_and_architecture": "passed",
         "mac_codesign_deep_strict": "passed",
         "bundle_web_database_privacyinfo_parity": "passed",
@@ -403,8 +416,8 @@ manifest = {
         "standalone_launch_and_runtime_workflow": "manual validation required; recorded outside this reproducible packaging script",
     },
     "publishable_github_assets": [
-        "ios/NavPlanner-$VERSION-unsigned.ipa",
-        "macos/NavPlanner-$VERSION-catalyst-adhoc-not-notarized.dmg",
+        "ios/$IPA_FILENAME",
+        "macos/$DMG_FILENAME",
         "SHA256SUMS.txt",
         "PUBLIC_RELEASE_NOTES.md",
     ],
@@ -419,7 +432,9 @@ with open(sys.argv[1], "w", encoding="utf-8") as handle:
     json.dump(manifest, handle, ensure_ascii=False, indent=2)
     handle.write("\n")
 
-notes = """# NavPlanner $VERSION public-safe release candidate
+notes = """# $PRODUCT_NAME $VERSION public-safe release candidate
+
+> $PRODUCT_SUBTITLE
 
 - The iOS/iPadOS IPA is **unsigned**. It contains no developer certificate,
   TeamIdentifier or provisioning profile. A sideloading tool must re-sign it
@@ -452,8 +467,8 @@ PY
   MANIFEST_SHA="$(shasum -a 256 metadata/build-manifest.json | awk '{print $1}')"
   NOTES_SHA="$(shasum -a 256 PUBLIC_RELEASE_NOTES.md | awk '{print $1}')"
   {
-    printf '%s  %s\n' "$IPA_SHA" "ios/NavPlanner-$VERSION-unsigned.ipa"
-    printf '%s  %s\n' "$DMG_SHA" "macos/NavPlanner-$VERSION-catalyst-adhoc-not-notarized.dmg"
+    printf '%s  %s\n' "$IPA_SHA" "ios/$IPA_FILENAME"
+    printf '%s  %s\n' "$DMG_SHA" "macos/$DMG_FILENAME"
     printf '%s  %s\n' "$MANIFEST_SHA" "metadata/build-manifest.json"
     printf '%s  %s\n' "$NOTES_SHA" "PUBLIC_RELEASE_NOTES.md"
   } >SHA256SUMS.txt
