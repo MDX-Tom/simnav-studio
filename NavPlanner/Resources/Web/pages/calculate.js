@@ -1591,26 +1591,6 @@ export function createCalculatePage(context) {
     return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" fill="${options.fill}" font-size="${size.toFixed(1)}" font-weight="${options.weight || 760}" text-anchor="${options.anchor || "middle"}"${family}>${escapeHtml(text)}</text>`;
   }
 
-  function drawRelativeWindArrowSvg(x, y, components, colors) {
-    const speedKt = Math.max(0, Number(components.windSpeedKt) || 0);
-    const length = clampNumber(9 + speedKt * 0.13, 11, 21);
-    const angle = ((Number(components.relativeWindDeg) || 0) * Math.PI) / 180;
-    const x2 = x + Math.sin(angle) * length;
-    const y2 = y - Math.cos(angle) * length;
-    const headAngleA = angle + Math.PI * 0.78;
-    const headAngleB = angle - Math.PI * 0.78;
-    const hx1 = x2 - Math.sin(headAngleA) * 5.5;
-    const hy1 = y2 + Math.cos(headAngleA) * 5.5;
-    const hx2 = x2 - Math.sin(headAngleB) * 5.5;
-    const hy2 = y2 + Math.cos(headAngleB) * 5.5;
-    const stroke = components.tailwindKt >= 0 ? "rgba(21, 80, 128, 0.90)" : "rgba(28, 33, 38, 0.90)";
-    return `
-      <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.1" fill="${stroke}" opacity="0.84" />
-      <line x1="${x.toFixed(1)}" y1="${y.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${stroke}" stroke-width="1.6" stroke-linecap="round" />
-      <path d="M${x2.toFixed(1)} ${y2.toFixed(1)} L${hx1.toFixed(1)} ${hy1.toFixed(1)} M${x2.toFixed(1)} ${y2.toFixed(1)} L${hx2.toFixed(1)} ${hy2.toFixed(1)}" stroke="${stroke}" stroke-width="1.6" stroke-linecap="round" />
-    `;
-  }
-
   function drawRelativeWindBarbSvg(x, y, components, colors) {
     const speedKt = Math.max(0, Number(components.windSpeedKt) || 0);
     const length = clampNumber(7.5 + speedKt * 0.075, 10, 16);
@@ -1698,46 +1678,6 @@ export function createCalculatePage(context) {
       lower: clampNumber(center - thickness / 2, band.minFt, band.maxFt - 600),
       upper: clampNumber(center + thickness / 2, band.minFt + 600, band.maxFt),
     };
-  }
-
-  function cloudBandSegmentPath(segment, band, xForDistance, yForAltitude, innerRatio = 0) {
-    const smoothed = segment.map((sample, index) => {
-      const coverage = cloudValueForBand(sample, band.key);
-      const bounds = cloudBandBounds(sample, band, coverage);
-      const neighborStart = Math.max(0, index - 2);
-      const neighborEnd = Math.min(segment.length - 1, index + 2);
-      let lowerSum = 0;
-      let upperSum = 0;
-      let weightSum = 0;
-      for (let cursor = neighborStart; cursor <= neighborEnd; cursor += 1) {
-        const neighbor = segment[cursor];
-        const neighborCoverage = cloudValueForBand(neighbor, band.key);
-        const neighborBounds = cloudBandBounds(neighbor, band, neighborCoverage);
-        const weight = 1 / (1 + Math.abs(cursor - index));
-        lowerSum += neighborBounds.lower * weight;
-        upperSum += neighborBounds.upper * weight;
-        weightSum += weight;
-      }
-      return {
-        sample,
-        lower: lowerSum / Math.max(0.0001, weightSum),
-        upper: upperSum / Math.max(0.0001, weightSum),
-        bounds,
-      };
-    });
-    const upperPoints = [];
-    const lowerPoints = [];
-    smoothed.forEach((item) => {
-      const { sample } = item;
-      const thickness = Math.max(600, item.bounds.upper - item.bounds.lower);
-      const lower = item.lower + thickness * innerRatio;
-      const upper = item.upper - thickness * innerRatio;
-      upperPoints.push({ x: xForDistance(sample.distanceNm), y: yForAltitude(upper) });
-      lowerPoints.push({ x: xForDistance(sample.distanceNm), y: yForAltitude(lower) });
-    });
-    const top = smoothSvgPathForPoints(upperPoints);
-    const bottom = smoothSvgPathForPoints(lowerPoints.reverse(), { omitMove: true });
-    return `${top} ${bottom} Z`;
   }
 
   function smoothSvgPathForPoints(points, { omitMove = false } = {}) {

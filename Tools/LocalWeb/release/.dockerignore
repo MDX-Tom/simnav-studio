@@ -1,0 +1,7 @@
+native
+SHA256SUMS.txt
+web-manifest.json
+*.md
+run-*
+stop-*
+build-windows-native.ps1

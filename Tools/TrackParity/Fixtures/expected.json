@@ -1,0 +1,262 @@
+{
+  "baseline": {
+    "captured_commit": "b6018e62088ad70dbe54ae281302ba976ab7408c",
+    "database": {
+      "current_airac": "2603",
+      "revision": "n3",
+      "sha256": "f08e04591a5b78c16b7808aed1ee257922de86e1c02ba6909d1878dd7c935932",
+      "size_bytes": 185647104
+    }
+  },
+  "results": {
+    "error imported track too short": {
+      "error": "Imported track needs at least two lat/lon points.",
+      "summary_sha256": "f23be4396ce35b471bde4c0d4b1e529d2e123054a4494737b91f25b6428b282f"
+    },
+    "error unresolved departure": {
+      "error": "Departure or arrival could not be resolved.",
+      "summary_sha256": "0cc753dfe034556a4a50daed560b7484416e6be40c7fe9a668d62dfb0ef0fec9"
+    },
+    "track KLAX-KPSP airway": {
+      "distance_nm": 98.413,
+      "message_kind": "generated",
+      "point_count": 12,
+      "route_display": "LAX V370 GARNE",
+      "selected_procedures": {
+        "approach": {
+          "procedure": "VORB",
+          "runway": "",
+          "transition": "ALL"
+        },
+        "sid": {
+          "procedure": "ORCKA5",
+          "runway": "",
+          "transition": "RW25L"
+        },
+        "star": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        }
+      },
+      "selected_runways": {
+        "arrival": "ALL",
+        "departure": "RW25L"
+      },
+      "source_provider": "Imported track",
+      "source_track_count": 11,
+      "summary_sha256": "7a66daece552984f582b9aab5e3c43b2013350b56391710d187e20b253396778"
+    },
+    "track KLAX-KPSP fill": {
+      "distance_nm": 98.413,
+      "message_kind": "generated",
+      "point_count": 12,
+      "route_display": "LAX V370 GARNE",
+      "selected_procedures": {
+        "approach": {
+          "procedure": "VORB",
+          "runway": "",
+          "transition": "ALL"
+        },
+        "sid": {
+          "procedure": "ORCKA5",
+          "runway": "",
+          "transition": "RW25L"
+        },
+        "star": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        }
+      },
+      "selected_runways": {
+        "arrival": "ALL",
+        "departure": "RW25L"
+      },
+      "source_provider": "Imported track",
+      "source_track_count": 11,
+      "summary_sha256": "7a66daece552984f582b9aab5e3c43b2013350b56391710d187e20b253396778"
+    },
+    "track VHHH-WSSS auto": {
+      "distance_nm": 1469.342,
+      "message_kind": "generated",
+      "point_count": 28,
+      "route_display": "香港 DCT PECAN V11 IDOSI A1 DAN W1 AC L644 CN L642 ESPOB Q801 ESBUM Q802 ELALO",
+      "selected_procedures": {
+        "approach": {
+          "procedure": "I20C",
+          "runway": "",
+          "transition": "ALL"
+        },
+        "sid": {
+          "procedure": "PECA1D",
+          "runway": "",
+          "transition": "RW25C"
+        },
+        "star": {
+          "procedure": "ELAL1B",
+          "runway": "",
+          "transition": "RW20B"
+        }
+      },
+      "selected_runways": {
+        "arrival": "RW20C",
+        "departure": "RW25C"
+      },
+      "source_provider": "Imported track",
+      "source_track_count": 39,
+      "summary_sha256": "273da2e752cb5613c082c425dccf30317d32eed2e1b79a1fb7d02d42ee32af68"
+    },
+    "track ZBAA-ZPPP parallel runway MEBNA procedure": {
+      "distance_nm": 1218.472,
+      "message_kind": "generated",
+      "point_count": 36,
+      "route_display": "RUSDO W45 VAGBI B215 GODON W43 SAVPA W276 ARELA W30 MEBNA",
+      "selected_procedures": {
+        "approach": {
+          "procedure": "I03-Y",
+          "runway": "",
+          "transition": "ALL"
+        },
+        "sid": {
+          "procedure": "RUSD9Z",
+          "runway": "",
+          "transition": "RW36R"
+        },
+        "star": {
+          "procedure": "MEB1J",
+          "runway": "",
+          "transition": "ALL"
+        }
+      },
+      "selected_runways": {
+        "arrival": "RW03",
+        "departure": "RW36R"
+      },
+      "source_provider": "Imported track",
+      "source_track_count": 455,
+      "summary_sha256": "258dfe5a8a4865ee9a005292941206131ae35d3f41240d87830584e1b264490d"
+    },
+    "track ZBAA-ZSPD auto": {
+      "distance_nm": 746.716,
+      "message_kind": "generated",
+      "point_count": 28,
+      "route_display": "PEK XX0275 PAMRU V30 YQG W142 DALIM A593 DUMET",
+      "selected_procedures": {
+        "approach": {
+          "procedure": "I16LY",
+          "runway": "",
+          "transition": "ALL"
+        },
+        "sid": {
+          "procedure": "ELKU2G",
+          "runway": "",
+          "transition": "RW18L"
+        },
+        "star": {
+          "procedure": "DUM01A",
+          "runway": "",
+          "transition": "ALL"
+        }
+      },
+      "selected_runways": {
+        "arrival": "RW16L",
+        "departure": "RW18L"
+      },
+      "source_provider": "Imported track",
+      "source_track_count": 35,
+      "summary_sha256": "e5bbad547f4e55eaa36cfa4c8b85d8cdbdeba4a88b586bec6bf08de75db54779"
+    },
+    "track ZBAA-ZSSS partial SID procedure first": {
+      "distance_nm": 648.088,
+      "message_kind": "generated",
+      "point_count": 28,
+      "route_display": "ELKUR W40 YQG W142 DALIM A593 PIMOL V14 AGPUX DCT ESBAG R343 SASAN",
+      "selected_procedures": {
+        "approach": {
+          "procedure": "I18LZ",
+          "runway": "",
+          "transition": "SS201"
+        },
+        "sid": {
+          "procedure": "ELKU9Z",
+          "runway": "",
+          "transition": "RW36R"
+        },
+        "star": {
+          "procedure": "SAS62A",
+          "runway": "",
+          "transition": "RW18B"
+        }
+      },
+      "selected_runways": {
+        "arrival": "RW18L",
+        "departure": "RW36R"
+      },
+      "source_provider": "Imported track",
+      "source_track_count": 122,
+      "summary_sha256": "3f315f411cddfacf69bec8cfe0fc991f91f8df934d525beeabb661a6734bc113"
+    },
+    "track ZPPP-ZBAA dense terminal procedure": {
+      "distance_nm": 1262.695,
+      "message_kind": "generated",
+      "point_count": 27,
+      "route_display": "DADOL W144 IGNAK W179 WFX DCT AGTUP W277 MIGIR W193 NNW J250 UGOTU J144 SLL J142 LEBOM B215 OMKAK DCT VIGEK B458 TZH J121 P520 W69 GUVBA",
+      "selected_procedures": {
+        "approach": {
+          "procedure": "I36LZ",
+          "runway": "",
+          "transition": "ALL"
+        },
+        "sid": {
+          "procedure": "DAD9W",
+          "runway": "",
+          "transition": "RW03"
+        },
+        "star": {
+          "procedure": "GUVB7X",
+          "runway": "",
+          "transition": "ALL"
+        }
+      },
+      "selected_runways": {
+        "arrival": "RW36L",
+        "departure": "RW03"
+      },
+      "source_provider": "Imported track",
+      "source_track_count": 74,
+      "summary_sha256": "c9d5cfa02bc32724c621c6c9085b5568ad07426b24293e14b86763e4e145ebce"
+    },
+    "track dateline NFFN-NSTU": {
+      "distance_nm": 725.032,
+      "message_kind": "generated",
+      "point_count": 12,
+      "route_display": "MELEB DCT NN G224 TUT",
+      "selected_procedures": {
+        "approach": {
+          "procedure": "VORB",
+          "runway": "",
+          "transition": "ALL"
+        },
+        "sid": {
+          "procedure": "ALPHA",
+          "runway": "",
+          "transition": "RW02"
+        },
+        "star": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        }
+      },
+      "selected_runways": {
+        "arrival": "ALL",
+        "departure": "RW02"
+      },
+      "source_provider": "Imported track",
+      "source_track_count": 11,
+      "summary_sha256": "1488b81c8a6395ae86ecb6fa17d7631e4541b6308b778e75e18b6d7241c6360d"
+    }
+  },
+  "schema_version": 1
+}

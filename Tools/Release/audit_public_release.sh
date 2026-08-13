@@ -56,11 +56,13 @@ fi
 IPA_PATH="$RELEASE_DIR/ios/$ARTIFACT_BASENAME-$EXPECTED_VERSION-unsigned.ipa"
 MAC_APP="$RELEASE_DIR/macos/$ARTIFACT_BASENAME-$EXPECTED_VERSION-catalyst-adhoc.app"
 DMG_PATH="$RELEASE_DIR/macos/$ARTIFACT_BASENAME-$EXPECTED_VERSION-catalyst-adhoc.dmg"
+WEB_DIR="$RELEASE_DIR/web"
 
-if [ ! -f "$IPA_PATH" ] || [ ! -d "$MAC_APP" ] || [ ! -f "$DMG_PATH" ]; then
-  echo "Expected unsigned IPA, ad-hoc app and ad-hoc DMG were not found." >&2
+if [ ! -f "$IPA_PATH" ] || [ ! -d "$MAC_APP" ] || [ ! -f "$DMG_PATH" ] || [ ! -d "$WEB_DIR" ]; then
+  echo "Expected unsigned IPA, ad-hoc app, ad-hoc DMG and Local Web package were not found." >&2
   exit 4
 fi
+"$PROJECT_ROOT/Tools/LocalWeb/audit_web_release.sh" "$WEB_DIR"
 
 unzip -tq "$IPA_PATH" >/dev/null
 if unzip -Z1 "$IPA_PATH" | grep -Eq '(^|/)embedded\.mobileprovision$|(^|/)_CodeSignature(/|$)'; then
@@ -180,8 +182,7 @@ if rg -a -q '/Users/[^/]+/|/home/[^/]+/' "$IOS_APP" "$MAC_APP"; then
 fi
 
 verify_dmg() {
-  local attempt
-  for attempt in 1 2 3 4 5; do
+  for _ in 1 2 3 4 5; do
     if hdiutil verify "$DMG_PATH" >/dev/null 2>&1; then
       return 0
     fi
@@ -269,6 +270,11 @@ APP_TREE_SHA="$(
 IPA_SIZE="$(stat -f '%z' "$IPA_PATH")"
 DMG_SIZE="$(stat -f '%z' "$DMG_PATH")"
 APP_SIZE="$(find "$MAC_APP" -type f -print0 | xargs -0 stat -f '%z' | awk '{sum += $1} END {print sum + 0}')"
+WEB_TREE_SHA="$(
+  cd "$WEB_DIR"
+  find . -type f -print0 | sort -z | xargs -0 shasum -a 256 | shasum -a 256 | awk '{print $1}'
+)"
+WEB_SIZE="$(find "$WEB_DIR" -type f -print0 | xargs -0 stat -f '%z' | awk '{sum += $1} END {print sum + 0}')"
 CURRENT_HEAD="$(git -C "$PROJECT_ROOT" rev-parse HEAD)"
 CURRENT_BRANCH="$(git -C "$PROJECT_ROOT" branch --show-current)"
 
@@ -278,6 +284,7 @@ python3 - \
   "$EXPECTED_PRODUCT_NAME" "$EXPECTED_DISPLAY_NAME" "$EXPECTED_SUBTITLE" "$ARTIFACT_BASENAME" \
   "$CURRENT_BRANCH" "$CURRENT_HEAD" \
   "$IPA_SHA" "$IPA_SIZE" "$APP_TREE_SHA" "$APP_SIZE" "$DMG_SHA" "$DMG_SIZE" \
+  "$WEB_TREE_SHA" "$WEB_SIZE" \
   "$IOS_DATABASE_SHA" "$IOS_DATABASE_SIZE" "$IOS_DATABASE_AIRAC" <<'PY'
 import json
 import sys
@@ -299,6 +306,8 @@ import sys
     app_size,
     dmg_sha,
     dmg_size,
+    web_sha,
+    web_size,
     database_sha,
     database_size,
     database_airac,
@@ -307,8 +316,8 @@ import sys
 with open(manifest_path, "r", encoding="utf-8") as handle:
     manifest = json.load(handle)
 
-if manifest.get("schema_version") != 4:
-    raise SystemExit("Public manifest schema is not version 4.")
+if manifest.get("schema_version") != 5:
+    raise SystemExit("Public manifest schema is not version 5.")
 
 release = manifest.get("release", {})
 expected_release = {
@@ -332,6 +341,7 @@ expected_artifacts = {
     "ios/" + artifact_basename + "-" + expected_version + "-unsigned.ipa": (ipa_sha, int(ipa_size)),
     "macos/" + artifact_basename + "-" + expected_version + "-catalyst-adhoc.app": (app_sha, int(app_size)),
     "macos/" + artifact_basename + "-" + expected_version + "-catalyst-adhoc.dmg": (dmg_sha, int(dmg_size)),
+    "web/": (web_sha, int(web_size)),
 }
 for path, (expected_sha, expected_size) in expected_artifacts.items():
     artifact = artifacts.get(path)
@@ -339,6 +349,13 @@ for path, (expected_sha, expected_size) in expected_artifacts.items():
         raise SystemExit(f"Manifest is missing artifact metadata for {path}.")
     if artifact.get("sha256") != expected_sha or artifact.get("size_bytes") != expected_size:
         raise SystemExit(f"Manifest hash/size does not match {path}.")
+
+if artifacts["web/"].get("http_transports") != {
+    "macos": "hummingbird-2.22.0",
+    "linux": "hummingbird-2.22.0",
+    "windows": "swift-nio-2.101.3",
+}:
+    raise SystemExit("Public manifest Web HTTP transport pins do not match the release package.")
 
 database = manifest.get("bundled_database", {})
 expected_database = {
@@ -369,4 +386,5 @@ echo "MAC_SIGNING=adhoc/no authority/no TeamIdentifier"
 echo "DMG_VERIFY_AND_APP_PARITY=passed"
 echo "MANIFEST_ARTIFACT_PARITY=passed"
 echo "BUNDLED_EXAMPLE_DATABASE_PARITY=passed"
+echo "LOCAL_WEB_PACKAGE_PARITY_AND_SECURITY=passed"
 echo "TRACKED_AND_UNTRACKED_PUBLIC_SIGNING_MATERIAL=none"

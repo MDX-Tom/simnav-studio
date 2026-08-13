@@ -1,5 +1,11 @@
 import Foundation
+#if canImport(SQLite3)
 import SQLite3
+#elseif canImport(CSQLite)
+import CSQLite
+#else
+#error("SQLite3 or CSQLite is required to build SimNavCore")
+#endif
 
 private let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
@@ -128,4 +134,3 @@ final class SQLiteDatabase {
         return row
     }
 }
-

@@ -1,0 +1,35 @@
+name: Local Web Linux container
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - Package.swift
+      - Package.resolved
+      - NavPlanner/Core/**
+      - NavPlanner/Resources/Web/**
+      - LocalWeb/**
+      - Tools/LocalWeb/**
+      - .github/workflows/local-web-linux.yml
+
+permissions:
+  contents: read
+
+jobs:
+  linux-amd64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Generate single-source Web package
+        run: >-
+          Tools/LocalWeb/package_web_release.sh
+          --output "$RUNNER_TEMP/SimNav-Web"
+
+      - name: Build and smoke native Linux Swift container
+        run: >-
+          Tools/LocalWeb/audit_web_release.sh
+          "$RUNNER_TEMP/SimNav-Web"
+          --docker-smoke

@@ -4,6 +4,10 @@ import { registerPlanPage } from "./pages/plan.js";
 import { registerQueryPage } from "./pages/query.js";
 import { registerSettingsPage } from "./pages/settings.js";
 
+const runtime = window.SimNavRuntime;
+if (!runtime) {
+  throw new Error("SimNav runtime.js must load before app.js.");
+}
 const savedThemeMode = readLocalStorageValue("navplannerThemeMode");
 const savedAppIconChoice = readLocalStorageValue("navplannerAppIconChoice");
 const savedLanguageMode = readLocalStorageValue("navplannerLanguageMode");
@@ -79,7 +83,7 @@ const ONLINE_MAP_PROVIDER_KEYS = new Set(Object.keys(ONLINE_MAP_PROVIDERS));
 const themeMediaQuery = typeof window.matchMedia === "function" ? window.matchMedia("(prefers-color-scheme: light)") : null;
 
 const TRANSLATIONS = {
-  "app.title": { "zh-Hans": "航空航路规划器", en: "Aviation Route Planner" },
+  "app.title": { "zh-Hans": "SimNav Studio", en: "SimNav Studio" },
   "nav.plan": { "zh-Hans": "计划", en: "Plan" },
   "nav.airport": { "zh-Hans": "机场", en: "Airport" },
   "nav.query": { "zh-Hans": "查询", en: "Query" },
@@ -207,6 +211,7 @@ const TRANSLATIONS = {
   "appIcon.alreadySelected": { "zh-Hans": "应用图标已是当前选择。", en: "App icon already uses the selected variant." },
   "appIcon.changed": { "zh-Hans": "已切换为{name}应用图标。", en: "Changed app icon to {name}." },
   "appIcon.savedOnMac": { "zh-Hans": "已保存{name}；Mac 版的 Dock 与访达图标保持默认。", en: "Saved {name}; the Mac app keeps its default Dock and Finder icon." },
+  "appIcon.savedOnWeb": { "zh-Hans": "已保存{name}并更新浏览器标签图标；安装后的系统图标由浏览器管理。", en: "Saved {name} and updated the browser tab icon. Installed icons are managed by the browser." },
   "appIcon.unsupported": { "zh-Hans": "当前系统不支持切换 App 图标。", en: "This system does not support changing the app icon." },
   "appIcon.changeFailed": { "zh-Hans": "切换应用图标失败。", en: "Failed to change app icon." },
   "database.loading": { "zh-Hans": "正在读取本地导航数据库...", en: "Reading local navigation database..." },
@@ -214,7 +219,7 @@ const TRANSLATIONS = {
   "database.unavailable": { "zh-Hans": "数据库不可用", en: "Database unavailable" },
   "database.revision": { "zh-Hans": "修订 {revision}", en: "Rev {revision}" },
   "database.loaded": { "zh-Hans": "本地导航数据库已就绪。", en: "Local navigation database is ready." },
-  "database.iosOnly": { "zh-Hans": "本地数据库选择需要在 iOS App 内使用。", en: "Local database selection is available inside the iOS app." },
+  "database.iosOnly": { "zh-Hans": "当前运行环境无法选择本地数据库。", en: "This runtime cannot select a local database." },
   "database.cancelled": { "zh-Hans": "已取消选择数据库文件。", en: "Database file selection cancelled." },
   "database.importFailed": { "zh-Hans": "导入数据库失败。", en: "Database import failed." },
   "database.switched": { "zh-Hans": "已切换本地导航数据库。", en: "Local navigation database switched." },
@@ -251,7 +256,7 @@ const TRANSLATIONS = {
   "offline.notEnabled": { "zh-Hans": "未启用离线地图", en: "No offline map enabled" },
   "offline.noResources": { "zh-Hans": "暂无离线地图资源", en: "No offline map resources" },
   "offline.foundResources": { "zh-Hans": "已发现 {count} 个资源，请点“管理”选择一个作为离线底图。", en: "{count} resources found. Tap Manage to choose one as the offline base map." },
-  "offline.noResourcesHint": { "zh-Hans": "可以下载选区瓦片，或把 PMTiles / MBTiles / SQLite 地图包放入本机离线目录。", en: "Download selected-area tiles, or place PMTiles / MBTiles / SQLite map packages in the local offline directory." },
+  "offline.noResourcesHint": { "zh-Hans": "可以下载选区瓦片，或直接导入 PMTiles / MBTiles / SQLite 地图包。", en: "Download selected-area tiles, or directly import a PMTiles / MBTiles / SQLite map package." },
   "offline.kind.vector": { "zh-Hans": "矢量", en: "Vector" },
   "offline.kind.raster": { "zh-Hans": "栅格", en: "Raster" },
   "offline.kind.resource": { "zh-Hans": "资源", en: "Resource" },
@@ -301,6 +306,11 @@ const TRANSLATIONS = {
   "offline.action.compact": { "zh-Hans": "压缩存储", en: "Compact Storage" },
   "offline.action.delete": { "zh-Hans": "删除", en: "Delete" },
   "offline.action.refresh": { "zh-Hans": "刷新", en: "Refresh" },
+  "offline.action.import": { "zh-Hans": "导入地图包", en: "Import Map Package" },
+  "offline.action.importing": { "zh-Hans": "正在导入…", en: "Importing…" },
+  "offline.importCancelled": { "zh-Hans": "已取消选择离线地图文件。", en: "Offline map selection cancelled." },
+  "offline.importFailed": { "zh-Hans": "导入离线地图失败。", en: "Offline map import failed." },
+  "offline.importedResource": { "zh-Hans": "已导入并启用离线地图：{name}", en: "Imported and enabled offline map: {name}" },
   "offline.activeResource": { "zh-Hans": "当前活动资源：{name}", en: "Active resource: {name}" },
   "offline.unset": { "zh-Hans": "未设置", en: "Not set" },
   "offline.emptyManage": { "zh-Hans": "map_offline/ 下暂无可管理资源。可以切换到“下载”标签创建一个离线地形资源。", en: "No manageable resources in map_offline/. Switch to Download to create an offline terrain resource." },
@@ -480,6 +490,7 @@ const TRANSLATIONS = {
   "query.search": { "zh-Hans": "查询", en: "Search" },
   "query.importGPX": { "zh-Hans": "手动导入", en: "Import GPX" },
   "query.importGPXOpening": { "zh-Hans": "请选择 GPX 轨迹文件。", en: "Choose a GPX track file." },
+  "query.importGPXCancelled": { "zh-Hans": "已取消选择 GPX 轨迹文件。", en: "GPX file selection cancelled." },
   "query.importGPXDrawn": { "zh-Hans": "已导入并绘制 {filename}，共 {count} 个点。", en: "Imported and drawn {filename} with {count} points." },
   "query.hint": { "zh-Hans": "", en: "" },
   "query.statusInitial": { "zh-Hans": "填好起飞和到达机场后，可查询该航线的最新 FR24 航班。", en: "Enter departure and arrival first, then search recent FR24 flights on this route." },
@@ -579,6 +590,7 @@ const TRANSLATIONS = {
   "query.cache": { "zh-Hans": "FR24 轨迹缓存", en: "FR24 Track Cache" },
   "query.cacheStatus": { "zh-Hans": "正在读取缓存...", en: "Reading cache..." },
   "query.cacheInitial": { "zh-Hans": "GPX、playback JSON 和 meta JSON 缓存在 App Caches 中。", en: "GPX, playback JSON, and meta JSON are stored in App Caches." },
+  "query.cacheInitialLocalWeb": { "zh-Hans": "Local Web 缓存在独立数据根中；可从下方缓存航班列表安全下载 GPX。", en: "Local Web cache is isolated under its data root; download GPX safely from the cached-flight list below." },
   "query.cacheSummary": { "zh-Hans": "FR24 缓存：{size}，{count} 个文件。", en: "FR24 cache: {size}, {count} files." },
   "query.cacheSearchTitle": { "zh-Hans": "检索已下载轨迹", en: "Search Downloaded Tracks" },
   "query.cacheSearchPlaceholder": { "zh-Hans": "航班号 / flightId / 机场 / 机型", en: "Flight / flightId / airport / aircraft" },
@@ -603,8 +615,10 @@ const TRANSLATIONS = {
   "query.cacheUnfavorited": { "zh-Hans": "已取消收藏 FR24 缓存文件。", en: "FR24 cached files unfavorited." },
   "query.cacheClearedWithFavorites": { "zh-Hans": "已删除未收藏的 FR24 缓存，保留 {count} 个收藏。", en: "Deleted non-favorited FR24 cache and kept {count} favorites." },
   "query.openCacheDirectory": { "zh-Hans": "打开目录", en: "Open Folder" },
+  "query.openCacheDownloads": { "zh-Hans": "查看下载入口", en: "Show Downloads" },
   "query.cacheDirectoryOpening": { "zh-Hans": "正在打开 FR24 缓存目录...", en: "Opening FR24 cache folder..." },
   "query.cacheDirectoryOpened": { "zh-Hans": "已打开 FR24 缓存目录。", en: "FR24 cache folder opened." },
+  "query.cacheBrowserList": { "zh-Hans": "Local Web 缓存文件可从下方缓存航班列表直接下载。", en: "Local Web cache files can be downloaded from the cached-flight list below." },
   "query.cacheDirectoryFailed": { "zh-Hans": "无法打开 FR24 缓存目录。", en: "Could not open the FR24 cache folder." },
   "query.access": { "zh-Hans": "FR24 网络访问", en: "FR24 Network Access" },
   "query.accessInitial": { "zh-Hans": "FR24 尚未探测，可直接查询。", en: "FR24 has not been probed yet; you can query directly." },
@@ -622,6 +636,8 @@ const TRANSLATIONS = {
   "query.accessMissing": { "zh-Hans": "未配置", en: "missing" },
   "query.accessOpenBrowser": { "zh-Hans": "打开 FR24 验证页", en: "Open FR24 Verification" },
   "query.accessSyncBrowser": { "zh-Hans": "同步内置浏览器会话", en: "Sync Browser Session" },
+  "query.accessOpenExternal": { "zh-Hans": "在浏览器中打开 FR24", en: "Open FR24 in Browser" },
+  "query.accessSyncLimitation": { "zh-Hans": "查看会话同步限制", en: "Session Sync Limitation" },
   "query.accessProbe": { "zh-Hans": "验证 / 重试", en: "Verify / Retry" },
   "query.accessVerifying": { "zh-Hans": "已保存 FR24 会话，正在验证是否可用...", en: "FR24 session saved; verifying availability..." },
   "query.accessVerified": { "zh-Hans": "FR24 会话已验证，可执行在线查询。", en: "FR24 session verified; online queries are available." },
@@ -630,6 +646,9 @@ const TRANSLATIONS = {
   "query.accessSyncing": { "zh-Hans": "正在同步内置浏览器中的 FR24 会话...", en: "Syncing the FR24 session from the in-app browser..." },
   "query.accessSynced": { "zh-Hans": "已从内置浏览器同步 FR24 Web 会话。", en: "FR24 Web session synced from the in-app browser." },
   "query.accessSyncMissing": { "zh-Hans": "内置浏览器还没有可同步的 FR24 会话。请先完成 FR24 / Cloudflare 验证。", en: "No FR24 session is available in the in-app browser yet. Complete FR24 / Cloudflare verification first." },
+  "query.accessExternalOpened": { "zh-Hans": "已在独立标签页打开 FR24。Local Web 不读取其他标签页 Cookie、不绕过 Cloudflare；如获授权可使用下方手动会话配置。", en: "FR24 opened in a separate tab. Local Web does not read another tab's cookies or bypass Cloudflare; use the manual session fields below only when authorized." },
+  "query.accessExternalBlocked": { "zh-Hans": "浏览器拦截了 FR24 新标签页，请允许弹窗后重试。", en: "The browser blocked the FR24 tab. Allow pop-ups and try again." },
+  "query.accessSyncUnsupported": { "zh-Hans": "Local Web 无法读取其他浏览器标签页的 Cookie，且不会绕过 FR24 / Cloudflare 验证。可在获授权时使用下方手动配置。", en: "Local Web cannot read cookies from another browser tab and does not bypass FR24 or Cloudflare verification. Use the manual fields below only when authorized." },
   "query.accessManual": { "zh-Hans": "高级：手动会话配置（可选）", en: "Advanced: Manual Session (Optional)" },
   "query.accessCookie": { "zh-Hans": "FR24 Web Cookie", en: "FR24 Web Cookie" },
   "query.accessFrPl": { "zh-Hans": "_frPl", en: "_frPl" },
@@ -638,6 +657,7 @@ const TRANSLATIONS = {
   "query.accessSaved": { "zh-Hans": "已保存 FR24 Web 会话配置。", en: "FR24 Web session saved." },
   "query.accessCleared": { "zh-Hans": "已清除 FR24 Web 会话配置。", en: "FR24 Web session cleared." },
   "query.accessHint": { "zh-Hans": "在 App 内打开 FR24 验证页并正常完成验证，然后同步会话，即可查询 FR24 航班。", en: "Open FR24 verification inside the app, complete verification normally, then sync the session to query FR24 flights." },
+  "query.accessHintLocalWeb": { "zh-Hans": "Local Web 可在独立标签页正常打开 FR24，但不会读取其他标签页 Cookie，也不会绕过 FR24 / Cloudflare 验证；仅在获授权时使用下方手动会话配置。", en: "Local Web can open FR24 normally in a separate tab, but it does not read another tab's cookies or bypass FR24 / Cloudflare verification. Use the manual session fields below only when authorized." },
   "query.undoTrack": { "zh-Hans": "撤销上一步绘制", en: "Undo Last Drawing" },
   "query.redoTrack": { "zh-Hans": "重做上次撤销", en: "Redo Last Undo" },
   "query.clearTrack": { "zh-Hans": "清除绘制", en: "Clear Drawing" },
@@ -1489,6 +1509,7 @@ const elements = {
   fr24AccessSummary: document.querySelector("#fr24AccessSummary"),
   fr24OpenBrowserButton: document.querySelector("#fr24OpenBrowserButton"),
   fr24SyncBrowserButton: document.querySelector("#fr24SyncBrowserButton"),
+  fr24AccessHint: document.querySelector("#fr24AccessHint"),
   fr24CookieInput: document.querySelector("#fr24CookieInput"),
   fr24FrPlInput: document.querySelector("#fr24FrPlInput"),
   fr24SaveAccessButton: document.querySelector("#fr24SaveAccessButton"),
@@ -5224,6 +5245,13 @@ function formatBytes(bytes) {
   return `${size >= 10 || unitIndex === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unitIndex]}`;
 }
 
+function offlineProviderLabel(resource = {}) {
+  if (String(resource.provider || "").toLowerCase() === "local_import") {
+    return t("offline.localResource");
+  }
+  return resource.provider_label || resource.provider || t("offline.unknownProvider");
+}
+
 /**
  * 功能：更新 Settings 中的离线地图摘要。
  * 输入：status 为离线地图 API 返回值。
@@ -5251,7 +5279,7 @@ function updateOfflineMapSettingsSummary(status = state.offlineMapStatus) {
   if (active) {
     elements.offlineMapSummaryTitle.textContent = t("offline.enabledTitle", { name: active.name });
     elements.offlineMapSummaryText.textContent = t("offline.enabledSummary", {
-      provider: active.provider_label || active.provider || t("offline.localResource"),
+      provider: offlineProviderLabel(active),
       kind: offlineKindLabel(active.kind),
       size: formatBytes(active.size_bytes),
       count: formatCount(active.tile_count || 0),
@@ -5986,7 +6014,7 @@ function offlineJobHtml(job) {
         <span style="width:${percent.toFixed(1)}%"></span>
       </div>
       <div class="offline-download-meta">
-        <span>${escapeHtml(String(job.provider_label || job.provider || t("offline.unknownProvider")))}</span>
+        <span>${escapeHtml(String(offlineProviderLabel(job)))}</span>
         <span>${escapeHtml(zoomText)}</span>
         <span>${escapeHtml(t("offline.tileProgress", { downloaded: formatCount(job.downloaded || 0), total: formatCount(job.total || 0) }))}</span>
         <span>${escapeHtml(t("offline.failedCount", { count: Number(job.failed || 0) }))}</span>
@@ -6027,7 +6055,7 @@ function offlineResourceCardHtml(resource) {
       <div class="offline-resource-head">
         <div>
           <strong>${escapeHtml(resource.name)}</strong>
-          <span>${escapeHtml(resource.provider_label || resource.provider || t("offline.unknownProvider"))}</span>
+          <span>${escapeHtml(offlineProviderLabel(resource))}</span>
         </div>
         ${activeText || `<span class="offline-badge">${escapeHtml(offlineKindLabel(resource.kind))}</span>`}
       </div>
@@ -6068,7 +6096,10 @@ function offlineManagePanelHtml(status) {
         <strong>${escapeHtml(t("offline.localResource"))}</strong>
         <span>${escapeHtml(t("offline.activeResource", { name: active || t("offline.unset") }))}</span>
       </div>
-      <button type="button" class="offline-action-button" data-offline-action="refresh">${escapeHtml(t("offline.action.refresh"))}</button>
+      <div class="offline-toolbar-actions">
+        <button type="button" class="offline-action-button primary" data-offline-action="import">${escapeHtml(t("offline.action.import"))}</button>
+        <button type="button" class="offline-action-button" data-offline-action="refresh">${escapeHtml(t("offline.action.refresh"))}</button>
+      </div>
     </div>
     <div class="offline-resource-list">${resourceHtml}</div>
   `;
@@ -6321,6 +6352,22 @@ function handleOfflineDownloadFormChange(event) {
 async function handleOfflineResourceAction(button) {
   const action = button.dataset.offlineAction;
   const name = button.dataset.name || "";
+  if (action === "import") {
+    button.disabled = true;
+    button.textContent = t("offline.action.importing");
+    try {
+      const payload = await runtime.importOfflineMap();
+      if (!payload?.pending_native) {
+        await handleNativeOfflineMapImported(payload || {});
+      }
+    } catch (error) {
+      await handleNativeOfflineMapImported({
+        error: true,
+        message: cleanErrorMessage(error?.message || t("offline.importFailed")),
+      });
+    }
+    return;
+  }
   if (action === "refresh") {
     await refreshOfflineMapStatus();
     return;
@@ -6495,7 +6542,8 @@ function scheduleOfflineMapPoll() {
  * 输出：Promise，解析为函数处理结果。
  */
 async function fetchJson(path, options = {}) {
-  const { superseded, ...fetchOptions } = options;
+  const { superseded, ...rawFetchOptions } = options;
+  const fetchOptions = runtime.authorizeFetchOptions(rawFetchOptions);
   const requestWasCancelled = () => (
     Boolean(fetchOptions.signal?.aborted)
     || (typeof superseded === "function" && Boolean(superseded()))
@@ -7930,13 +7978,19 @@ function resetDatabaseDependentCaches() {
  * 输入：无。
  * 输出：无返回值；App 内通过 JS bridge 触发 UIDocumentPicker。
  */
-function requestDatabaseSelection() {
-  const handler = window.webkit?.messageHandlers?.navplanner;
-  if (!handler) {
-    setStatus(t("database.iosOnly"), true);
-    return;
+async function requestDatabaseSelection() {
+  try {
+    const payload = await runtime.selectDatabase();
+    if (!payload?.pending_native) {
+      await handleNativeDatabaseSelected(payload || {});
+    }
+  } catch (error) {
+    await handleNativeDatabaseSelected({
+      error: true,
+      local_status: "import_failed",
+      message: cleanErrorMessage(error?.message || t("database.importFailed")),
+    });
   }
-  handler.postMessage({ type: "selectDatabase" });
 }
 
 /**
@@ -7945,7 +7999,7 @@ function requestDatabaseSelection() {
  * 输出：无返回值；非 iOS WebView 环境下静默忽略。
  */
 function postNativeEvent(type, payload = {}) {
-  window.webkit?.messageHandlers?.navplanner?.postMessage({ type, payload });
+  return runtime.postEvent(type, payload);
 }
 
 /**
@@ -7979,6 +8033,58 @@ async function handleNativeDatabaseSelected(payload = {}) {
   }
 }
 
+/**
+ * 功能：处理 App 文件选择器或 Local Web 上传完成后的离线地图状态。
+ * 输入：payload 为 MapStore 的完整状态或取消/错误信息。
+ * 输出：刷新离线底图、资源管理器和全局状态提示。
+ */
+async function handleNativeOfflineMapImported(payload = {}) {
+  if (payload.local_status === "cancelled") {
+    renderOfflineMapModal();
+    setStatus(t("offline.importCancelled"));
+    return;
+  }
+  if (payload.error || !Array.isArray(payload.resources)) {
+    renderOfflineMapModal();
+    setStatus(localizedErrorMessage(payload.message || t("offline.importFailed")), true);
+    return;
+  }
+  state.offlineMapStatus = payload;
+  refreshOfflineBaseLayer();
+  renderOfflineMapModal();
+  if (hasActiveOfflineDisplayResource(payload)) {
+    setBaseMap("offline");
+  }
+  const name = payload.imported?.name || payload.active || t("offline.defaultName");
+  setStatus(t("offline.importedResource", { name }));
+}
+
+function updateRuntimeCapabilityLabels() {
+  const usesLocalWebFallback = Boolean(runtime.capabilities?.fr24CompliantFallback);
+  if (elements.fr24OpenBrowserButton) {
+    elements.fr24OpenBrowserButton.textContent = t(
+      usesLocalWebFallback ? "query.accessOpenExternal" : "query.accessOpenBrowser",
+    );
+  }
+  if (elements.fr24SyncBrowserButton) {
+    elements.fr24SyncBrowserButton.textContent = t(
+      usesLocalWebFallback ? "query.accessSyncLimitation" : "query.accessSyncBrowser",
+    );
+  }
+  if (elements.fr24AccessHint) {
+    elements.fr24AccessHint.textContent = t(
+      usesLocalWebFallback ? "query.accessHintLocalWeb" : "query.accessHint",
+    );
+  }
+  if (elements.fr24OpenCacheDirectoryButton) {
+    elements.fr24OpenCacheDirectoryButton.textContent = t(
+      runtime.capabilities?.browserFileDownload
+        ? "query.openCacheDownloads"
+        : "query.openCacheDirectory",
+    );
+  }
+}
+
 function refreshLocalizedDynamicText() {
   updateLayoutButtonLabels();
   updateMapTypeOptionLabels();
@@ -7996,6 +8102,7 @@ function refreshLocalizedDynamicText() {
   updateMapCacheSummary(state.mapCacheStatus);
   updateFR24CacheSummary(state.fr24CacheStatus || {});
   updateFR24AccessSummary(state.fr24AccessStatus || {});
+  updateRuntimeCapabilityLabels();
   updateFR24ProfilePanel();
   renderFR24Flights(state.fr24SearchFlights);
   updateAirportPanelVisibility();
@@ -8175,7 +8282,17 @@ function applyAppIconChoice(choice, { persist = true, notifyNative = true } = {}
     writeLocalStorageValue("navplannerAppIconChoice", normalized);
   }
   if (notifyNative) {
-    postNativeEvent("setAppIcon", { iconChoice: normalized });
+    runtime.setAppIcon(normalized).then((payload) => {
+      if (!payload?.pending_native) {
+        handleNativeAppIconChanged(payload || {});
+      }
+    }).catch((error) => {
+      handleNativeAppIconChanged({
+        error: true,
+        icon_choice: normalized,
+        message: cleanErrorMessage(error?.message || t("appIcon.changeFailed")),
+      });
+    });
   }
 }
 
@@ -8194,6 +8311,9 @@ function appIconChoiceLabel(choice) {
 }
 
 function appIconBridgeStatusMessage(payload = {}) {
+  if (payload.browser_icon) {
+    return t("appIcon.savedOnWeb", { name: appIconChoiceLabel(payload.icon_choice || state.appIconChoice) });
+  }
   const rawMessage = cleanErrorMessage(payload.message || "");
   if (payload.persisted_only) {
     return t("appIcon.savedOnMac", { name: appIconChoiceLabel(payload.icon_choice || state.appIconChoice) });
@@ -13985,7 +14105,9 @@ function updateFR24CacheSummary(payload) {
   const size = formatBytes(payload?.size_bytes || 0);
   const count = formatCount(payload?.file_count || 0);
   elements.fr24CacheTitle.textContent = t("query.cacheSummary", { size, count });
-  elements.fr24CacheSummary.textContent = payload?.root || t("query.cacheInitial");
+  elements.fr24CacheSummary.textContent = payload?.root || t(
+    runtime.capabilities?.browserFileDownload ? "query.cacheInitialLocalWeb" : "query.cacheInitial",
+  );
 }
 
 function updateFR24AccessSummary(payload) {
@@ -14033,39 +14155,48 @@ function fr24NativeSessionMessage(payload = {}) {
 }
 
 function openFR24VerificationBrowser() {
-  if (!window.webkit?.messageHandlers?.navplanner) {
-    setFR24QueryStatus(t("database.iosOnly"), true);
-    return;
+  try {
+    const payload = runtime.openFR24Verification();
+    if (payload?.pending_native) {
+      setFR24QueryStatus(t("query.accessOpening"));
+    } else {
+      setFR24QueryStatus(t(payload?.opened ? "query.accessExternalOpened" : "query.accessExternalBlocked"), !payload?.opened);
+    }
+  } catch (error) {
+    setFR24QueryStatus(cleanErrorMessage(error?.message || t("query.accessExternalBlocked")), true);
   }
-  postNativeEvent("openFR24Verification");
-  setFR24QueryStatus(t("query.accessOpening"));
 }
 
 function syncFR24BrowserSession() {
-  if (!window.webkit?.messageHandlers?.navplanner) {
-    setFR24QueryStatus(t("database.iosOnly"), true);
-    return;
-  }
-  postNativeEvent("syncFR24Session");
-  setFR24QueryStatus(t("query.accessSyncing"));
+  const payload = runtime.syncFR24Session();
+  setFR24QueryStatus(
+    payload?.pending_native ? t("query.accessSyncing") : t("query.accessSyncUnsupported"),
+    Boolean(payload?.unsupported),
+  );
 }
 
 function openFR24CacheDirectory() {
-  if (!window.webkit?.messageHandlers?.navplanner) {
-    setFR24QueryStatus(t("database.iosOnly"), true);
-    return;
-  }
-  postNativeEvent("openFR24CacheDirectory");
-  setFR24QueryStatus(t("query.cacheDirectoryOpening"));
+  const payload = runtime.openFR24CacheDirectory();
+  setFR24QueryStatus(
+    payload?.pending_native ? t("query.cacheDirectoryOpening") : t("query.cacheBrowserList"),
+  );
 }
 
-function importFR24GPX() {
-  if (!window.webkit?.messageHandlers?.navplanner) {
-    setFR24QueryStatus(t("database.iosOnly"), true);
-    return;
-  }
-  postNativeEvent("importFR24GPX");
+async function importFR24GPX() {
   setFR24QueryStatus(t("query.importGPXOpening"));
+  try {
+    const payload = await runtime.importFR24GPX();
+    if (payload?.cancelled) {
+      setFR24QueryStatus(t("query.importGPXCancelled"));
+    } else if (!payload?.pending_native) {
+      handleNativeFR24GPXImported(payload || {});
+    }
+  } catch (error) {
+    handleNativeFR24GPXImported({
+      error: true,
+      message: cleanErrorMessage(error?.message || "GPX import failed."),
+    });
+  }
 }
 
 function handleNativeFR24SessionUpdated(payload = {}) {
@@ -15207,10 +15338,6 @@ async function shareFR24CachedFlight(key) {
   if (!flight || !cacheKey) {
     return;
   }
-  if (!window.webkit?.messageHandlers?.navplanner) {
-    setFR24QueryStatus(t("database.iosOnly"), true);
-    return;
-  }
   setFR24QueryBusy(true);
   setFR24QueryStatus(t("query.cacheSharing"));
   try {
@@ -15220,12 +15347,13 @@ async function shareFR24CachedFlight(key) {
       body: JSON.stringify({ cache_key: cacheKey }),
     });
     updateFR24CacheSummary(payload.cache || state.fr24CacheStatus || {});
-    if (!payload.share_path) {
+    if (!payload.share_path && !payload.download_url) {
       throw new Error(t("query.cacheDirectoryFailed"));
     }
-    postNativeEvent("shareFile", {
-      path: payload.share_path,
+    await runtime.shareFile({
+      path: payload.share_path || "",
       title: payload.filename || flightPrimaryLabel(flight),
+      downloadURL: payload.download_url || "",
     });
     await searchFR24Cache();
     setFR24QueryStatus(t("query.cacheShareReady"));
@@ -15478,6 +15606,7 @@ window.addEventListener("languagechange", () => {
   }
 });
 window.navplannerNativeDatabaseSelected = handleNativeDatabaseSelected;
+window.navplannerNativeOfflineMapImported = handleNativeOfflineMapImported;
 window.navplannerNativeAppIconChanged = handleNativeAppIconChanged;
 window.navplannerNativeFR24SessionUpdated = handleNativeFR24SessionUpdated;
 window.navplannerNativeFR24CacheDirectoryOpened = handleNativeFR24CacheDirectoryOpened;
@@ -17366,6 +17495,7 @@ async function init() {
   updateMapTypeOptionLabels();
   updateMapTypeOptionState();
   updateMapTileZoomOffsetControl();
+  updateRuntimeCapabilityLabels();
   setDetailTab("airport");
   setMobileBottomTab("plan");
   try {

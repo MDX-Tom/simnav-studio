@@ -8,9 +8,9 @@
 
 <p>
   <a href="https://github.com/MDX-Tom/simnav-studio/stargazers"><img src="https://img.shields.io/github/stars/MDX-Tom/simnav-studio?logo=github&label=Stars" alt="GitHub Stars" /></a>
-  <img src="https://img.shields.io/badge/Devices-iPhone%20%7C%20iPad%20%7C%20Mac-475569" alt="iPhone, iPad, and Mac" />
+  <img src="https://img.shields.io/badge/Platforms-iOS%20%7C%20macOS%20%7C%20Local%20Web-475569" alt="iOS, macOS, and Local Web" />
   <img src="https://img.shields.io/badge/Swift-5.0-F05138?logo=swift&logoColor=white" alt="Swift 5.0" />
-  <img src="https://img.shields.io/badge/Version-0.1.0-0F766E" alt="Version 0.1.0" />
+  <img src="https://img.shields.io/badge/Version-0.1.1-0F766E" alt="Version 0.1.1" />
 </p>
 
 <p>
@@ -22,7 +22,7 @@
 
 <p><strong>Planning &amp; Navigation for Flight Simulation</strong></p>
 <p>From route planning to map review—an all-in-one flight-simulation workspace with local computation.</p>
-<p>Native on iPhone &amp; iPad · Route planning · Procedure inspection · Track comparison · Offline maps</p>
+<p>iPhone &amp; iPad App · macOS App · Local Web · One shared local-first core</p>
 
 <p>
   <a href="#overview">Overview</a> ·
@@ -41,9 +41,15 @@
 
 ## Overview ✈️
 
-SimNav Studio is an iOS planning desk for flight simulation. It brings **route planning**, **airport and procedure inspection**, **FR24 track download, comparison, and matching**, **offline maps**, and **local navigation databases** into one app—connecting an end-to-end workflow from route idea to map review while keeping core features available offline.
+SimNav Studio is a local-first planning desk for flight simulation, delivered as an **iPhone / iPad App**, a **macOS App**, and **Local Web** for a browser on the same computer. It brings **route planning**, **airport and procedure inspection**, **FR24 track download, comparison, and matching**, **offline maps**, and **local navigation databases** into one workspace—connecting an end-to-end workflow from route idea to map review while keeping core features available offline.
 
-A SwiftUI shell surrounds a WKWebView map workspace and an in-app Swift service layer. Imported databases, map packages, caches, preferences, and track history remain inside the app sandbox.
+The Apple Apps use a SwiftUI shell around the shared Web workspace; Local Web serves that exact same `NavPlanner/Resources/Web/` tree over localhost. Both transports call the same Swift planner and database runtime, so there is no second UI or business backend to synchronize. Apple data remains in the App sandbox, while Local Web uses its own data root.
+
+| Formal platform | Delivery | Current source status |
+|---|---|---|
+| **iOS / iPadOS App** | Universal App / unsigned release IPA | Supported |
+| **macOS App** | Universal Mac Catalyst App / ad-hoc DMG | Supported |
+| **Local Web** | localhost browser on macOS, Windows, and Linux | One shared request processor and Swift core; Hummingbird serves macOS/Linux, while Windows uses the native SwiftNIO adapter when its host-built bundle is included and otherwise uses the Docker Desktop fallback. |
 
 <p align="center">
   <strong>Route idea</strong> → <strong>Automatic planning</strong> → <strong>Procedure selection</strong> → <strong>Flight profile calculation</strong> → <strong>Map replay</strong>
@@ -290,7 +296,7 @@ The numbered workflow makes the dependency direction explicit: route planning pr
 | **Local-first core** | `PlannerService` + `LocalDataStore` + `MapStore` | Route resolution, procedures, nav-overlay, local maps, and database inspection continue without network access. |
 | **Procedure-first matching** | actual-airport sync → terminal procedure fit → airway A* → smoothing | Recorded tracks preserve SID / STAR / APPROACH context before enroute matching. |
 | **Online as enhancement** | FR24 session, Open-Meteo, and Terrarium DEM are dashed optional paths | Network/session failures fall back to local estimates and do not replace the core workflow. |
-| **Typed payload boundaries** | `navplanner://` API and JS bridge | Each stage returns a payload that can be rendered by the map or the active workspace panel without sharing storage internals. |
+| **Typed payload boundaries** | shared `SimNavRuntimeRouter` behind `navplanner://` and localhost HTTP adapters | Each stage returns the same typed payload through WebKit or HTTP without sharing storage internals. |
 | **Separated cache domains** | SQLite navigation DB, offline map packages, online tile cache, and FR24 cache | Import, refresh, clear, and rollback operations stay scoped to the resource they own. |
 
 <a id="build-from-source"></a>
@@ -299,10 +305,10 @@ The numbered workflow makes the dependency direction explicit: route planning pr
 
 ### Requirements
 
-- macOS with Xcode
-- iOS 17.0 or later deployment target
-- iPhone / iPad Simulator, macOS, or a physical device
-- Optional local navigation database for private builds
+- Apple Apps: macOS with Xcode, an iOS 17.0-or-later deployment target, and an iPhone / iPad Simulator, Mac Catalyst destination, or physical device
+- Local Web from source: macOS 14 or later, Swift 6.1 or later, and `curl`
+- Packaged Local Web: the bundled macOS server runs natively; Windows runs the bundled SwiftNIO `.exe` directly when a Windows-smoked native bundle is included, otherwise it uses Docker Desktop; Linux requires Docker Engine with Compose v2
+- Optional local navigation database for private App or Local Web builds
 
 ### Quick start
 
@@ -344,6 +350,46 @@ launch. Public release builds do not use that development copy:
 `Database/navdata.sqlite` in both the IPA and DMG. Both database locations are
 Git-ignored.
 
+### Run Local Web
+
+The Local Web development entry starts the native server on
+`http://127.0.0.1:8010`, serves the canonical App Web resources directly, and
+copies the selected database into a separate Local Web data directory:
+
+```bash
+Tools/LocalWeb/run.sh
+```
+
+In a development checkout the script automatically detects the Git-ignored
+`database/e_dfd_PMDG_release.s3db` when present. You can also select inputs
+explicitly:
+
+```bash
+Tools/LocalWeb/run.sh \
+  --database /path/to/navigation.s3db \
+  --data-dir /path/to/simnav-web-data \
+  --port 8010
+```
+
+Press Control-C to stop the server. It binds only to `127.0.0.1`; Host and
+Origin are restricted to loopback, and state-changing requests require the
+per-process token injected into the shared page. A database imported or selected
+in Settings remains active after the native process or container restarts.
+Tracked packaging generates `releases/release-<version>/web/` with macOS,
+Windows, and Linux launchers. The Windows launcher runs
+`simnav-local-web.exe` and its bundled runtime DLLs directly when a
+Windows-smoked native bundle is present—without installing Swift or starting
+Linux, WSL, or Docker—and otherwise falls back to Docker Desktop. Linux builds
+and runs the native Swift executable inside the pinned container. The v0.1.1
+candidate is generated from the same reviewed source commit as the Apple
+artifacts.
+
+The browser does not execute Swift itself: each launcher starts a loopback HTTP
+process. Hummingbird 2.22.0 is used on macOS/Linux but does not support Windows,
+so the Windows executable uses a thin direct SwiftNIO 2.101.3 transport over the
+same request processor and `SimNavRuntimeRouter`. This is a native Windows
+process, not a Linux server.
+
 <details>
 <summary><strong>Command-line build</strong></summary>
 
@@ -370,7 +416,7 @@ xcodebuild -project NavPlanner.xcodeproj \
 
 </details>
 
-### Install the IPA and DMG from Releases
+### Install the iOS, macOS, and Web Releases
 
 <details>
 <summary><strong>Why this matters</strong></summary>
@@ -394,7 +440,7 @@ credentials only from protected CI secrets. See
 trusted signing workflow that re-signs it with your own account.**
 
 <details>
-<summary><strong>Install on iPhone, iPad, and Mac</strong></summary>
+<summary><strong>Install on iPhone, iPad, Mac, and Local Web</strong></summary>
 
 #### iPhone and iPad
 
@@ -426,6 +472,21 @@ ad-hoc signed and not notarized, so it does not have Developer ID/Gatekeeper
 public-distribution trust; it is not a native AppKit app or a Designed-for-iPad
 wrapper.
 
+#### Local Web
+
+Local Web is the third formal release platform. A Web-enabled release places
+its launchers and required payload under `web/`: macOS uses
+`run-macos.command`, Linux uses `run-linux.sh`, and Windows uses
+`run-windows.ps1`. The macOS launcher prefers its universal native binary;
+Windows prefers a packaged native SwiftNIO `.exe` and uses Docker only when that
+bundle is absent; Linux builds the same Swift core with Hummingbird in Docker. Every container port is
+published only to `127.0.0.1`; stop scripts handle recorded native processes or Docker and preserve
+the Local Web data root / named volume.
+No database, map package, track, session, cache, or token is shipped in `web/`;
+import data you are permitted to use from the browser. The tracked release
+builder and audit generate and validate this payload as part of the v0.1.1
+candidate.
+
 </details>
 
 <a id="validation"></a>
@@ -437,12 +498,17 @@ wrapper.
 
 ```bash
 node --check NavPlanner/Resources/Web/app.js
+node --check NavPlanner/Resources/Web/runtime.js
 node --check NavPlanner/Resources/Web/vendor/maplibre-gl/maplibre-gl.js
 plutil -lint NavPlanner.xcodeproj/project.pbxproj NavPlanner/Support/PrivacyInfo.xcprivacy
 python3 Tools/Parity/run_all_parity.py
+swift test
+swift build --product simnav-local-web
+Tools/LocalWeb/package_web_release.sh --output /tmp/SimNav-Web-check
+Tools/LocalWeb/audit_web_release.sh /tmp/SimNav-Web-check --docker-smoke
 ```
 
-`Tools/Parity` compares the Swift local service layer against the read-only Web reference implementation after route-planning, track-matching, or procedure-geometry changes.
+`Tools/Parity` compiles the shared Swift core and checks versioned Route 22, Track 10, and Procedure 6 behavior fixtures after route-planning, track-matching, or procedure-geometry changes.
 
 </details>
 
@@ -456,6 +522,7 @@ python3 Tools/Parity/run_all_parity.py
 - Test iPhone compact width, iPhone landscape, iPad portrait, and iPad landscape.
 - Verify airplane-mode launch, airport search, airport detail, route planning, procedure drawing, nav-overlay rendering, and offline maps.
 - Verify FR24 missing-session, Cloudflare-verification, flightId, GPX import, profile scrubbing, failed-download, drawing, matching, sharing, and cache-management paths.
+- Verify all three Web launchers, native Windows SwiftNIO artifact smoke when included, both HTTP transports, Docker loopback publication, data-volume persistence, and the absence of bundled databases or user data.
 - Filter Xcode logs by the `NavPlanner` process; beta simulators may print unrelated system-service errors.
 
 </details>
@@ -468,11 +535,13 @@ python3 Tools/Parity/run_all_parity.py
 NavPlanner.xcodeproj/          Xcode project
 NavPlanner/
   App/                         SwiftUI app entry and shell
-  Core/                        Local database, planner, map store, WebBridge
+  Core/                        Shared database, planner, map store, runtime, WebBridge
   Features/                    SwiftUI feature containers
-  Resources/Web/               WKWebView map workspace resources
+  Resources/Web/               Single App + Local Web workspace source
   Support/                     Asset catalog and privacy manifest
-Tools/                         Icon generation and parity tools
+LocalWeb/                      Shared HTTP processor, Hummingbird/SwiftNIO adapters, and SwiftPM tests
+Package.swift                  Shared-core and Local Web SwiftPM graph
+Tools/                         Local Web, release, signing, icon, and parity tools
 Media/                         README screenshots and visual assets
 ```
 
@@ -489,5 +558,10 @@ repository does **not** include a navigation database: the root `database/`
 directory and the development bundle resource are Git-ignored. The IPA and
 DMG published under Releases include an example database and stored inside the app, so the app has usable sample data on first launch.
 No IPA or DMG containing this sample may be published by the maintainers.
+
+Local Web keeps its writable database and caches separate from the Apple App.
+Until Web redistribution rights are explicitly confirmed, a Web release must
+not bundle the development database; users supply their own compatible database
+through the documented import or mount flow.
 
 This app does not guarantee the accuracy, completeness, availability, or legal status of third-party data. You are responsible for confirming your right to use, import, cache, and distribute each data source.

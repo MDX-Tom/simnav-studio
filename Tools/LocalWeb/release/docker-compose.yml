@@ -1,0 +1,37 @@
+name: simnav-studio-web
+
+services:
+  simnav-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: simnav-studio-local-web:${SIMNAV_WEB_VERSION:-local}
+    init: true
+    restart: unless-stopped
+    read_only: true
+    environment:
+      SIMNAV_CONTAINER: "1"
+      SIMNAV_BIND_HOST: "0.0.0.0"
+      SIMNAV_WEB_PORT: "${SIMNAV_WEB_PORT:-8010}"
+      SIMNAV_WEB_ROOT: /opt/simnav/Web
+      SIMNAV_DATA_DIR: /var/lib/simnav/data
+    ports:
+      - "127.0.0.1:${SIMNAV_WEB_PORT:-8010}:${SIMNAV_WEB_PORT:-8010}"
+    volumes:
+      - simnav-data:/var/lib/simnav/data
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:$${SIMNAV_WEB_PORT}/healthz >/dev/null"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+      start_period: 3s
+
+volumes:
+  simnav-data:
+    name: simnav-studio-web-data

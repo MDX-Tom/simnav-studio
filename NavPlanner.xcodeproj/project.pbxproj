@@ -36,8 +36,19 @@
 		B00000000000000000000013 /* LocalDataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000013 /* LocalDataStore.swift */; };
 		B00000000000000000000014 /* PlannerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000014 /* PlannerService.swift */; };
 		B00000000000000000000015 /* MapStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000015 /* MapStore.swift */; };
+		B00000000000000000000024 /* OnlineTileCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000024 /* OnlineTileCache.swift */; };
 		B00000000000000000000016 /* NavPlannerSchemeHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000016 /* NavPlannerSchemeHandler.swift */; };
 		B00000000000000000000017 /* MapBridgeScriptHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000017 /* MapBridgeScriptHandler.swift */; };
+		B00000000000000000000018 /* RuntimeRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000018 /* RuntimeRequest.swift */; };
+		B00000000000000000000019 /* RuntimeResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000019 /* RuntimeResponse.swift */; };
+		B00000000000000000000020 /* RuntimeConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000020 /* RuntimeConfiguration.swift */; };
+		B00000000000000000000021 /* RuntimeURLRequestAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000021 /* RuntimeURLRequestAdapter.swift */; };
+		B00000000000000000000023 /* RuntimeHTTPRequestAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000023 /* RuntimeHTTPRequestAdapter.swift */; };
+		B00000000000000000000025 /* WeatherProxy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000025 /* WeatherProxy.swift */; };
+		B00000000000000000000026 /* FR24Service.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000026 /* FR24Service.swift */; };
+		B00000000000000000000027 /* SimNavWebResourceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000027 /* SimNavWebResourceStore.swift */; };
+		B00000000000000000000028 /* RuntimeWebKitResponseAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000028 /* RuntimeWebKitResponseAdapter.swift */; };
+		B00000000000000000000022 /* SimNavRuntimeRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000022 /* SimNavRuntimeRouter.swift */; };
 		B00000000000000000000102 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000102 /* Assets.xcassets */; };
 		B00000000000000000000103 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000103 /* PrivacyInfo.xcprivacy */; };
 		B00000000000000000000104 /* Web in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000104 /* Web */; };
@@ -62,8 +73,19 @@
 		F00000000000000000000013 /* LocalDataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalDataStore.swift; sourceTree = "<group>"; };
 		F00000000000000000000014 /* PlannerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlannerService.swift; sourceTree = "<group>"; };
 		F00000000000000000000015 /* MapStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapStore.swift; sourceTree = "<group>"; };
+		F00000000000000000000024 /* OnlineTileCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnlineTileCache.swift; sourceTree = "<group>"; };
 		F00000000000000000000016 /* NavPlannerSchemeHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavPlannerSchemeHandler.swift; sourceTree = "<group>"; };
 		F00000000000000000000017 /* MapBridgeScriptHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapBridgeScriptHandler.swift; sourceTree = "<group>"; };
+		F00000000000000000000018 /* RuntimeRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeRequest.swift; sourceTree = "<group>"; };
+		F00000000000000000000019 /* RuntimeResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeResponse.swift; sourceTree = "<group>"; };
+		F00000000000000000000020 /* RuntimeConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeConfiguration.swift; sourceTree = "<group>"; };
+		F00000000000000000000021 /* RuntimeURLRequestAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeURLRequestAdapter.swift; sourceTree = "<group>"; };
+		F00000000000000000000023 /* RuntimeHTTPRequestAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeHTTPRequestAdapter.swift; sourceTree = "<group>"; };
+		F00000000000000000000025 /* WeatherProxy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherProxy.swift; sourceTree = "<group>"; };
+		F00000000000000000000026 /* FR24Service.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FR24Service.swift; sourceTree = "<group>"; };
+		F00000000000000000000027 /* SimNavWebResourceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimNavWebResourceStore.swift; sourceTree = "<group>"; };
+		F00000000000000000000028 /* RuntimeWebKitResponseAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeWebKitResponseAdapter.swift; sourceTree = "<group>"; };
+		F00000000000000000000022 /* SimNavRuntimeRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimNavRuntimeRouter.swift; sourceTree = "<group>"; };
 		F00000000000000000000102 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F00000000000000000000103 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		F00000000000000000000104 /* Web */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Web; sourceTree = "<group>"; };
@@ -198,6 +220,8 @@
 				G00000000000000000000011 /* LocalDataStore */,
 				G00000000000000000000012 /* PlannerCore */,
 				G00000000000000000000015 /* MapStore */,
+				G00000000000000000000018 /* FR24 */,
+				G00000000000000000000017 /* Runtime */,
 				G00000000000000000000016 /* WebBridge */,
 			);
 			path = Core;
@@ -249,6 +273,7 @@
 			isa = PBXGroup;
 			children = (
 				F00000000000000000000015 /* MapStore.swift */,
+				F00000000000000000000024 /* OnlineTileCache.swift */,
 			);
 			path = MapStore;
 			sourceTree = "<group>";
@@ -260,6 +285,30 @@
 				F00000000000000000000017 /* MapBridgeScriptHandler.swift */,
 			);
 			path = WebBridge;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000017 /* Runtime */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000000018 /* RuntimeRequest.swift */,
+				F00000000000000000000019 /* RuntimeResponse.swift */,
+				F00000000000000000000020 /* RuntimeConfiguration.swift */,
+				F00000000000000000000021 /* RuntimeURLRequestAdapter.swift */,
+				F00000000000000000000023 /* RuntimeHTTPRequestAdapter.swift */,
+				F00000000000000000000025 /* WeatherProxy.swift */,
+				F00000000000000000000022 /* SimNavRuntimeRouter.swift */,
+				F00000000000000000000027 /* SimNavWebResourceStore.swift */,
+				F00000000000000000000028 /* RuntimeWebKitResponseAdapter.swift */,
+			);
+			path = Runtime;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000018 /* FR24 */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000000026 /* FR24Service.swift */,
+			);
+			path = FR24;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -341,29 +390,27 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
-				"$(SRCROOT)/NavPlanner-web",
-				"$(SRCROOT)/NavPlanner-web/src",
-				"$(SRCROOT)/NavPlanner-web/src/__init__.py",
-				"$(SRCROOT)/NavPlanner-web/src/planner_api.py",
-				"$(SRCROOT)/NavPlanner-web/src/planner_config.py",
-				"$(SRCROOT)/NavPlanner-web/src/planner_core.py",
-				"$(SRCROOT)/NavPlanner-web/src/planner_database.py",
-				"$(SRCROOT)/NavPlanner-web/src/planner_maps.py",
-				"$(SRCROOT)/NavPlanner-web/src/planner_models.py",
-				"$(SRCROOT)/NavPlanner-web/src/planner_overlay.py",
-				"$(SRCROOT)/NavPlanner-web/src/planner_routes.py",
-				"$(SRCROOT)/NavPlanner-web/src/planner_runtime.py",
 				"$(SRCROOT)/NavPlanner/Resources/Database/navdata.sqlite",
 				"$(SRCROOT)/NavPlanner/Core/Models/NavModels.swift",
 				"$(SRCROOT)/NavPlanner/Core/LocalDataStore/SQLiteDatabase.swift",
 				"$(SRCROOT)/NavPlanner/Core/LocalDataStore/LocalDataStore.swift",
 				"$(SRCROOT)/Tools/Parity/run_all_parity.py",
+				"$(SRCROOT)/Tools/Parity/fixture_support.py",
 				"$(SRCROOT)/Tools/RouteParity/route_parity.py",
 				"$(SRCROOT)/Tools/RouteParity/RouteParityProbe.swift",
+				"$(SRCROOT)/Tools/RouteParity/Fixtures/cases.json",
+				"$(SRCROOT)/Tools/RouteParity/Fixtures/expected.json",
 				"$(SRCROOT)/Tools/TrackParity/track_parity.py",
 				"$(SRCROOT)/Tools/TrackParity/TrackParityProbe.swift",
+				"$(SRCROOT)/Tools/TrackParity/Fixtures/cases.json",
+				"$(SRCROOT)/Tools/TrackParity/Fixtures/expected.json",
+				"$(SRCROOT)/Tools/TrackParity/Fixtures/zbaa_zppp_parallel_runway_mebna.json",
+				"$(SRCROOT)/Tools/TrackParity/Fixtures/zbaa_zsss_partial_sid_procedure_first.json",
+				"$(SRCROOT)/Tools/TrackParity/Fixtures/zppp_zbaa_fr24_procedure.json",
 				"$(SRCROOT)/Tools/ProcedureParity/procedure_parity.py",
 				"$(SRCROOT)/Tools/ProcedureParity/ProcedureParityProbe.swift",
+				"$(SRCROOT)/Tools/ProcedureParity/Fixtures/cases.json",
+				"$(SRCROOT)/Tools/ProcedureParity/Fixtures/expected.json",
 				"$(SRCROOT)/NavPlanner/Core/PlannerCore/PlannerService.swift",
 			);
 			name = "Run Route/Track Parity";
@@ -397,8 +444,19 @@
 				B00000000000000000000013 /* LocalDataStore.swift in Sources */,
 				B00000000000000000000014 /* PlannerService.swift in Sources */,
 				B00000000000000000000015 /* MapStore.swift in Sources */,
+				B00000000000000000000024 /* OnlineTileCache.swift in Sources */,
 				B00000000000000000000016 /* NavPlannerSchemeHandler.swift in Sources */,
 				B00000000000000000000017 /* MapBridgeScriptHandler.swift in Sources */,
+				B00000000000000000000018 /* RuntimeRequest.swift in Sources */,
+				B00000000000000000000019 /* RuntimeResponse.swift in Sources */,
+				B00000000000000000000020 /* RuntimeConfiguration.swift in Sources */,
+				B00000000000000000000021 /* RuntimeURLRequestAdapter.swift in Sources */,
+				B00000000000000000000023 /* RuntimeHTTPRequestAdapter.swift in Sources */,
+				B00000000000000000000025 /* WeatherProxy.swift in Sources */,
+				B00000000000000000000026 /* FR24Service.swift in Sources */,
+				B00000000000000000000022 /* SimNavRuntimeRouter.swift in Sources */,
+				B00000000000000000000027 /* SimNavWebResourceStore.swift in Sources */,
+				B00000000000000000000028 /* RuntimeWebKitResponseAdapter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -413,7 +471,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = SimNav;
@@ -429,7 +487,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.1.1;
 				OTHER_LDFLAGS = "-lsqlite3";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
@@ -449,7 +507,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = SimNav;
@@ -465,7 +523,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.1.1;
 				OTHER_LDFLAGS = "-lsqlite3";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";

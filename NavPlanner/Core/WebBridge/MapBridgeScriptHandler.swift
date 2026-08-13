@@ -4,6 +4,7 @@ import WebKit
 final class MapBridgeScriptHandler: NSObject, WKScriptMessageHandler {
     weak var environment: AppEnvironment?
     var selectDatabaseHandler: (() -> Void)?
+    var importOfflineMapHandler: (() -> Void)?
     var importFR24GPXHandler: (() -> Void)?
     var setAppIconHandler: ((String) -> Void)?
     var openFR24VerificationHandler: (() -> Void)?
@@ -49,6 +50,10 @@ final class MapBridgeScriptHandler: NSObject, WKScriptMessageHandler {
         DispatchQueue.main.async { [weak self] in
             if type == "selectDatabase" {
                 self?.selectDatabaseHandler?()
+                return
+            }
+            if type == "importOfflineMap" {
+                self?.importOfflineMapHandler?()
                 return
             }
             if type == "importFR24GPX" {

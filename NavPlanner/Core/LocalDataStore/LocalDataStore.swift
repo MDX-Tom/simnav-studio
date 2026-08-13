@@ -4,14 +4,33 @@ final class LocalDataStore: @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.navplanner.local-data", qos: .userInitiated)
     private let fileManager: FileManager
     private let bundle: Bundle
+    private let rootDirectory: URL?
+    private let explicitBundledDatabaseURL: URL?
     private var database: SQLiteDatabase?
     private(set) var databaseURL: URL?
     private(set) var startupError: String?
     private let bundledDatabaseName = "navdata.sqlite"
+    private let activeDatabaseMarkerName = ".active-database"
+    private static let supportedDatabaseExtensions = Set(["sqlite", "sqlite3", "s3db", "db"])
+    private static let maximumDatabaseBytes = 8 * 1_024 * 1_024 * 1_024
+    private static let requiredTables = Set([
+        "tbl_header",
+        "tbl_airports",
+        "tbl_runways",
+        "tbl_enroute_waypoints",
+        "tbl_enroute_airways"
+    ])
 
-    init(bundle: Bundle = .main, fileManager: FileManager = .default) {
+    init(
+        bundle: Bundle = .main,
+        fileManager: FileManager = .default,
+        rootDirectory: URL? = nil,
+        bundledDatabaseURL: URL? = nil
+    ) {
         self.bundle = bundle
         self.fileManager = fileManager
+        self.rootDirectory = rootDirectory
+        self.explicitBundledDatabaseURL = bundledDatabaseURL
 
         do {
             try prepareDatabase()
@@ -23,6 +42,8 @@ final class LocalDataStore: @unchecked Sendable {
     init(databaseURL: URL, fileManager: FileManager = .default) {
         self.bundle = .main
         self.fileManager = fileManager
+        self.rootDirectory = nil
+        self.explicitBundledDatabaseURL = nil
 
         do {
             self.databaseURL = databaseURL
@@ -59,16 +80,33 @@ final class LocalDataStore: @unchecked Sendable {
     func importDatabase(from source: URL) throws -> [String: Any] {
         try queue.sync {
             let databaseDirectory = try databaseDirectoryLocked()
-
+            try validateDatabaseFileLocked(source)
             let cleanName = source.deletingPathExtension().lastPathComponent
                 .components(separatedBy: CharacterSet.alphanumerics.inverted)
                 .filter { !$0.isEmpty }
                 .joined(separator: "_")
             let baseName = cleanName.isEmpty || cleanName == "navdata" ? "navdata_custom" : cleanName
             let destination = uniqueDatabaseURLLocked(baseName: baseName, directory: databaseDirectory)
-            try fileManager.copyItem(at: source, to: destination)
+            let staging = databaseDirectory.appendingPathComponent(
+                ".simnav-database-import-\(UUID().uuidString).sqlite"
+            )
+            defer {
+                if fileManager.fileExists(atPath: staging.path) {
+                    try? fileManager.removeItem(at: staging)
+                }
+            }
+            try fileManager.copyItem(at: source, to: staging)
+            try validateDatabaseFileLocked(staging)
+            try fileManager.moveItem(at: staging, to: destination)
 
-            let nextDatabase = try SQLiteDatabase(path: destination)
+            let nextDatabase: SQLiteDatabase
+            do {
+                nextDatabase = try SQLiteDatabase(path: destination)
+                try persistActiveDatabaseLocked(destination, directory: databaseDirectory)
+            } catch {
+                try? fileManager.removeItem(at: destination)
+                throw error
+            }
             database = nextDatabase
             databaseURL = destination
             startupError = nil
@@ -104,6 +142,7 @@ final class LocalDataStore: @unchecked Sendable {
                 ])
             }
             let nextDatabase = try SQLiteDatabase(path: target)
+            try persistActiveDatabaseLocked(target, directory: databaseDirectory)
             database = nextDatabase
             databaseURL = target
             startupError = nil
@@ -156,7 +195,9 @@ final class LocalDataStore: @unchecked Sendable {
                 try fileManager.removeItem(at: destination)
             }
             try fileManager.copyItem(at: source, to: destination)
-            database = try SQLiteDatabase(path: destination)
+            let nextDatabase = try SQLiteDatabase(path: destination)
+            try persistActiveDatabaseLocked(destination, directory: databaseDirectory)
+            database = nextDatabase
             databaseURL = destination
             startupError = nil
             var payload = statusPayloadLocked(message: "已恢复并启用内置导航数据库：\(bundledDatabaseName)")
@@ -167,6 +208,18 @@ final class LocalDataStore: @unchecked Sendable {
 
     private func prepareDatabase() throws {
         let databaseDirectory = try databaseDirectoryLocked()
+        if let activeURL = activeDatabaseURLLocked(directory: databaseDirectory) {
+            do {
+                databaseURL = activeURL
+                database = try SQLiteDatabase(path: activeURL)
+                return
+            } catch {
+                databaseURL = nil
+                database = nil
+                clearActiveDatabaseMarkerLocked(directory: databaseDirectory)
+            }
+        }
+
         let destination = databaseDirectory.appendingPathComponent(bundledDatabaseName)
         if !fileManager.fileExists(atPath: destination.path) {
             guard let source = bundledDatabaseURLLocked() else {
@@ -179,6 +232,7 @@ final class LocalDataStore: @unchecked Sendable {
 
         databaseURL = destination
         database = try SQLiteDatabase(path: destination)
+        try? persistActiveDatabaseLocked(destination, directory: databaseDirectory)
     }
 
     private func statusPayloadLocked(message: String? = nil) -> [String: Any] {
@@ -191,15 +245,23 @@ final class LocalDataStore: @unchecked Sendable {
     }
 
     private func databaseDirectoryLocked() throws -> URL {
-        let supportRoot = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("NavPlanner", isDirectory: true)
+        let supportRoot: URL
+        if let rootDirectory {
+            supportRoot = rootDirectory
+        } else {
+            supportRoot = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("NavPlanner", isDirectory: true)
+        }
         let databaseDirectory = supportRoot.appendingPathComponent("Database", isDirectory: true)
         try fileManager.createDirectory(at: databaseDirectory, withIntermediateDirectories: true)
         return databaseDirectory
     }
 
     private func bundledDatabaseURLLocked() -> URL? {
-        bundle.url(
+        if let explicitBundledDatabaseURL {
+            return explicitBundledDatabaseURL
+        }
+        return bundle.url(
             forResource: "navdata",
             withExtension: "sqlite",
             subdirectory: "Database"
@@ -221,7 +283,11 @@ final class LocalDataStore: @unchecked Sendable {
     private func databaseFileURLLocked(name: String, directory: URL) throws -> URL {
         let fileName = URL(fileURLWithPath: name).lastPathComponent
         let ext = URL(fileURLWithPath: fileName).pathExtension.lowercased()
-        guard ["sqlite", "sqlite3", "s3db", "db"].contains(ext) else {
+        guard !name.isEmpty,
+              !name.contains("/"),
+              !name.contains("\\"),
+              fileName == name,
+              Self.supportedDatabaseExtensions.contains(ext) else {
             throw CocoaError(.fileReadUnsupportedScheme, userInfo: [
                 NSLocalizedDescriptionKey: "不支持的数据库文件类型：\(fileName)"
             ])
@@ -235,6 +301,94 @@ final class LocalDataStore: @unchecked Sendable {
         return target
     }
 
+    private func activeDatabaseURLLocked(directory: URL) -> URL? {
+        let marker = directory.appendingPathComponent(activeDatabaseMarkerName)
+        guard fileManager.fileExists(atPath: marker.path),
+              let data = try? Data(contentsOf: marker),
+              !data.isEmpty,
+              data.count <= 512,
+              let rawName = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let target = try? databaseFileURLLocked(name: name, directory: directory),
+              fileManager.fileExists(atPath: target.path),
+              ((try? target.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) ?? false) else {
+            clearActiveDatabaseMarkerLocked(directory: directory)
+            return nil
+        }
+        return target
+    }
+
+    private func persistActiveDatabaseLocked(_ url: URL, directory: URL) throws {
+        let target = try databaseFileURLLocked(name: url.lastPathComponent, directory: directory)
+        guard target.standardizedFileURL == url.standardizedFileURL else {
+            throw CocoaError(.fileWriteNoPermission, userInfo: [
+                NSLocalizedDescriptionKey: "数据库选择路径无效。"
+            ])
+        }
+        let marker = directory.appendingPathComponent(activeDatabaseMarkerName)
+        try Data("\(target.lastPathComponent)\n".utf8).write(to: marker, options: [.atomic])
+#if !os(Windows)
+        try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: marker.path)
+#endif
+    }
+
+    private func clearActiveDatabaseMarkerLocked(directory: URL) {
+        let marker = directory.appendingPathComponent(activeDatabaseMarkerName)
+        if fileManager.fileExists(atPath: marker.path) {
+            try? fileManager.removeItem(at: marker)
+        }
+    }
+
+    private func validateDatabaseFileLocked(_ source: URL) throws {
+        let fileName = source.lastPathComponent
+        let ext = source.pathExtension.lowercased()
+        guard Self.supportedDatabaseExtensions.contains(ext) else {
+            throw CocoaError(.fileReadUnsupportedScheme, userInfo: [
+                NSLocalizedDescriptionKey: "不支持的数据库文件类型：\(fileName)"
+            ])
+        }
+        let values = try source.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+        guard values.isRegularFile == true else {
+            throw CocoaError(.fileReadInvalidFileName, userInfo: [
+                NSLocalizedDescriptionKey: "数据库来源不是普通文件。"
+            ])
+        }
+        let size = values.fileSize ?? 0
+        guard size > 0, size <= Self.maximumDatabaseBytes else {
+            throw CocoaError(.fileReadTooLarge, userInfo: [
+                NSLocalizedDescriptionKey: "数据库文件大小无效或超过 8 GiB 限制。"
+            ])
+        }
+
+        let candidate = try SQLiteDatabase(path: source)
+        let integrity = try candidate.first(sql: "pragma quick_check(1)")
+        guard String(describing: integrity?.values.first ?? "").lowercased() == "ok" else {
+            throw SQLiteDatabaseError.openFailed("SQLite quick_check 未通过")
+        }
+        let tableRows = try candidate.rows(sql: """
+            select name
+            from sqlite_master
+            where type = 'table'
+              and name in (
+                'tbl_header',
+                'tbl_airports',
+                'tbl_runways',
+                'tbl_enroute_waypoints',
+                'tbl_enroute_airways'
+              )
+            """)
+        let availableTables = Set(tableRows.compactMap { $0["name"] as? String })
+        let missingTables = Self.requiredTables.subtracting(availableTables).sorted()
+        guard missingTables.isEmpty,
+              try candidate.first(sql: "select * from tbl_header limit 1") != nil else {
+            throw SQLiteDatabaseError.openFailed(
+                "不是受支持的 SimNav 导航数据库；缺少表：\(missingTables.joined(separator: ", "))"
+            )
+        }
+    }
+
     private func databaseListPayloadLocked(query: String, limit: Int) throws -> [String: Any] {
         let databaseDirectory = try databaseDirectoryLocked()
         let rawItems = (try? fileManager.contentsOfDirectory(
@@ -245,7 +399,7 @@ final class LocalDataStore: @unchecked Sendable {
         let queryText = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let currentPath = databaseURL?.standardizedFileURL.path ?? ""
         var items = rawItems
-            .filter { ["sqlite", "sqlite3", "s3db", "db"].contains($0.pathExtension.lowercased()) }
+            .filter { Self.supportedDatabaseExtensions.contains($0.pathExtension.lowercased()) }
             .compactMap { databaseFileInfoLocked(url: $0, currentPath: currentPath) }
             .filter { item in
                 guard !queryText.isEmpty else { return true }

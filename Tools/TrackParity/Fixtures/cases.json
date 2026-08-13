@@ -1,0 +1,21 @@
+[
+  {"name": "track KLAX-KPSP airway", "departure": "KLAX", "arrival": "KPSP", "seed_route": "DODGR V370 GARNE"},
+  {"name": "track KLAX-KPSP fill", "departure": "KLAX", "arrival": "KPSP", "seed_route": "DODGR *** GARNE"},
+  {"name": "track ZBAA-ZSPD auto", "departure": "ZBAA", "arrival": "ZSPD", "seed_route": ""},
+  {"name": "track VHHH-WSSS auto", "departure": "VHHH", "arrival": "WSSS", "seed_route": ""},
+  {"name": "track dateline NFFN-NSTU", "departure": "NFFN", "arrival": "NSTU", "seed_route": ""},
+  {
+    "name": "error imported track too short",
+    "departure": "KLAX",
+    "arrival": "KPSP",
+    "track_points": [{"lat": 33.9, "lon": -118.1}]
+  },
+  {
+    "name": "error unresolved departure",
+    "departure": "ZZZZ",
+    "arrival": "KPSP",
+    "seed_departure": "KLAX",
+    "seed_arrival": "KPSP",
+    "seed_route": "DODGR V370 GARNE"
+  }
+]

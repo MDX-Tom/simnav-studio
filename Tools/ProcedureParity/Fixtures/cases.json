@@ -1,0 +1,8 @@
+[
+  {"name": "sid RF BIAR ASKU1D RW19", "type": "sid", "airport": "BIAR", "procedure": "ASKU1D", "transition": "RW19"},
+  {"name": "star RF MTCH NOSO1L RW05", "type": "star", "airport": "MTCH", "procedure": "NOSO1L", "transition": "RW05"},
+  {"name": "approach missed holding 07FA R05-P ALL", "type": "approach", "airport": "07FA", "procedure": "R05-P", "transition": "ALL"},
+  {"name": "approach transition merge 07FA R05-P ADONE", "type": "approach", "airport": "07FA", "procedure": "R05-P", "transition": "ADONE"},
+  {"name": "approach ZULS R10L LS995", "type": "approach", "airport": "ZULS", "procedure": "R10L", "transition": "LS995"},
+  {"name": "empty missing approach", "type": "approach", "airport": "XXXX", "procedure": "NOPE", "transition": "ALL"}
+]

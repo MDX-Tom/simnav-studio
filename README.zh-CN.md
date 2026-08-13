@@ -8,9 +8,9 @@
 
 <p>
   <a href="https://github.com/MDX-Tom/simnav-studio/stargazers"><img src="https://img.shields.io/github/stars/MDX-Tom/simnav-studio?logo=github&label=Stars" alt="GitHub Stars" /></a>
-  <img src="https://img.shields.io/badge/设备-iPhone%20%7C%20iPad%20%7C%20mac-475569" alt="iPhone、iPad与mac" />
+  <img src="https://img.shields.io/badge/平台-iOS%20%7C%20macOS%20%7C%20Local%20Web-475569" alt="iOS、macOS 与 Local Web" />
     <img src="https://img.shields.io/badge/Swift-5.0-F05138?logo=swift&logoColor=white" alt="Swift 5.0" />
-  <img src="https://img.shields.io/badge/版本-0.1.0-0F766E" alt="版本 0.1.0" />
+  <img src="https://img.shields.io/badge/版本-0.1.1-0F766E" alt="版本 0.1.1" />
 </p>
 
 <p>
@@ -22,7 +22,7 @@
 
 <p><strong>Planning &amp; Navigation for Flight Simulation</strong></p>
 <p>从航路规划到地图复盘，一站式、本地计算的模拟飞行工作台。</p>
-<p>原生适配 iPhone & iPad · 航路规划 · Procedure 查看 · 轨迹对照 · 离线地图</p>
+<p>iPhone &amp; iPad App · macOS App · Local Web · 同一套本地优先核心</p>
 
 <p>
   <a href="#overview">项目概览</a> ·
@@ -41,9 +41,15 @@
 
 ## 项目概览 ✈️
 
-SimNav Studio 是一款面向模拟飞行的 iOS 规划工作台。它把 **航路规划**、**机场与 Procedure 查看**、**FR24 轨迹下载、对照与拟合**、**离线地图**、**本地导航数据库**集中在一个 App 中，在核心功能离线可用的基础上，串联从航线构思到地图复盘的完整流程。
+SimNav Studio 是一款本地优先的模拟飞行规划工作台，正式提供 **iPhone / iPad App**、**macOS App** 与运行在同一台电脑浏览器中的 **Local Web**。它把 **航路规划**、**机场与 Procedure 查看**、**FR24 轨迹下载、对照与拟合**、**离线地图**、**本地导航数据库**集中在同一个工作区中，在核心功能离线可用的基础上，串联从航线构思到地图复盘的完整流程。
 
-App 以 SwiftUI 构建原生外壳，以 WKWebView 承载地图工作区，并在 App 内封装 Swift 服务层。导入的数据库、地图包、缓存、偏好设置和轨迹历史均保存在 App 沙盒内。
+Apple App 以 SwiftUI 构建外壳；Local Web 则从 localhost 直接提供完全相同的 `NavPlanner/Resources/Web/` 工作区。两种 transport 都调用同一个 Swift 规划与数据库 runtime，因此不需要维护第二套 UI 或业务后端。Apple 数据保存在 App 沙盒内，Local Web 使用独立数据根。
+
+| 正式平台 | 交付形式 | 当前源码状态 |
+|---|---|---|
+| **iOS / iPadOS App** | Universal App / release 未签名 IPA | 已支持 |
+| **macOS App** | Universal Mac Catalyst App / ad-hoc DMG | 已支持 |
+| **Local Web** | macOS、Windows、Linux 本机 localhost 浏览器 | 共用同一请求处理器与 Swift 核心；macOS/Linux 使用 Hummingbird；Windows 在包含经宿主 smoke 的原生 bundle 时使用 SwiftNIO adapter，否则使用 Docker Desktop fallback。 |
 
 <p align="center">
   <strong>航线构思</strong> → <strong>自动规划</strong> → <strong>Procedure 选择</strong> → <strong>飞行剖面计算</strong> → <strong>地图复盘</strong>
@@ -284,7 +290,7 @@ sqlite3 -readonly custom.s3db \
 | **核心本地优先** | `PlannerService` + `LocalDataStore` + `MapStore` | 航路解析、Procedure、nav-overlay、本地地图和数据库查看在断网时继续工作。 |
 | **Procedure-first 拟合** | 实际机场同步 → 终端 Procedure 拟合 → airway A* → 平滑 | 真实轨迹先保留 SID / STAR / APPROACH 语义，再匹配中间航路。 |
 | **在线仅作增强** | FR24 会话、Open-Meteo、Terrarium DEM 使用虚线可选路径 | 网络或会话失败时降级到本地估算，不替代核心工作流。 |
-| **类型化 payload 边界** | `navplanner://` API 与 JS Bridge | 每一步返回可由地图或当前工作台面板直接渲染的 payload，不泄漏存储内部实现。 |
+| **类型化 payload 边界** | `navplanner://` 与 localhost HTTP adapter 后的共享 `SimNavRuntimeRouter` | 每一步通过 WebKit 或 HTTP 返回同一类 payload，不泄漏存储内部实现。 |
 | **缓存域分离** | SQLite 导航库、离线地图包、在线瓦片缓存、FR24 缓存 | 导入、刷新、清理和回滚只作用于各自负责的资源。 |
 
 <a id="build-from-source"></a>
@@ -293,10 +299,10 @@ sqlite3 -readonly custom.s3db \
 
 ### 环境要求
 
-- macOS 与 Xcode
-- iOS 17.0 及以上部署目标
-- 目标可选 iPhone / iPad Simulator / macOS 或真机
-- 私有构建可选用本地导航数据库
+- Apple App：macOS 与 Xcode、iOS 17.0 及以上部署目标，以及 iPhone / iPad Simulator、Mac Catalyst 或真机目标
+- Local Web 源码运行：macOS 14 及以上、Swift 6.1 及以上和 `curl`
+- Local Web 发布包：macOS 使用随包原生 server；Windows 在包含经 Windows smoke 的原生 bundle 时直接运行 SwiftNIO `.exe` 与 Swift/SQLite DLL，否则使用 Docker Desktop；Linux 需要 Docker Engine 与 Compose v2
+- 私有 App 或 Local Web 构建可选用本地导航数据库
 
 ### 快速开始
 
@@ -334,6 +340,38 @@ Debug 或私有构建可把本地数据库放在
 `e_dfd_PMDG_release.s3db`，完成校验后临时把它作为 IPA 与 DMG 内的
 `Database/navdata.sqlite` （请注意，这两个数据库位置均被 Git 忽略）。
 
+### 运行 Local Web
+
+Local Web 开发入口会在 `http://127.0.0.1:8010` 启动原生 server，直接提供 App 的
+唯一 Web 资源源，并把选定数据库复制到独立的 Local Web 数据目录：
+
+```bash
+Tools/LocalWeb/run.sh
+```
+
+在开发 checkout 中，如果被 Git 忽略的
+`database/e_dfd_PMDG_release.s3db` 存在，脚本会自动检测；也可以显式指定：
+
+```bash
+Tools/LocalWeb/run.sh \
+  --database /path/to/navigation.s3db \
+  --data-dir /path/to/simnav-web-data \
+  --port 8010
+```
+
+按 Control-C 停止 server。它只绑定 `127.0.0.1`；Host 与 Origin 只允许 loopback，
+会改变状态的请求必须带页面注入的单进程 token。在设置中导入或选择的数据库，会在原生
+进程或容器重启后继续保持启用。受跟踪封包工具会生成带 macOS、Windows、Linux 启动器
+的 `releases/release-<version>/web/`。Windows 在包含经宿主 smoke 的原生 bundle 时直接
+运行 `simnav-local-web.exe` 与 runtime DLL，无需安装 Swift，也不启动 Linux、WSL 或
+Docker；原生 bundle 缺失时回退 Docker Desktop。Linux 在固定容器中构建并运行原生 Swift
+可执行文件。v0.1.1 候选与 Apple 工件从同一个已审查源码 commit 生成。
+
+浏览器本身并不执行 Swift；各平台启动器会先启动一个只监听回环地址的 HTTP 进程。
+Hummingbird 2.22.0 用于 macOS/Linux，但它不支持 Windows，因此 Windows `.exe` 在同一
+请求处理器和 `SimNavRuntimeRouter` 上使用薄 SwiftNIO 2.101.3 transport。这是原生
+Windows 进程，不是 Linux server。
+
 <details>
 <summary><strong>命令行构建</strong></summary>
 
@@ -360,7 +398,7 @@ xcodebuild -project NavPlanner.xcodeproj \
 
 </details>
 
-### 安装 Releases 中的 IPA 与 DMG
+### 安装 Releases 中的 iOS、macOS 与 Web
 
 <details>
 <summary><strong>查看原因</strong></summary>
@@ -383,7 +421,7 @@ App Store 签名，只能在受保护 CI 中从 Secret 临时导入。详见
 或其他可信签名流程，使用自己的账号重新签名。**
 
 <details>
-<summary><strong>在 iPhone、iPad 与 Mac 上安装</strong></summary>
+<summary><strong>在 iPhone、iPad、Mac 与 Local Web 上安装</strong></summary>
 
 #### iPhone 与 iPad
 
@@ -411,6 +449,17 @@ provisioning profile，不能直接安装。
 签名且未 notarize，因此不具备 Developer ID/Gatekeeper 公开分发信任；它也不是
 原生 AppKit App 或 Designed-for-iPad Wrapper。
 
+#### Local Web
+
+Local Web 是第三个正式 release 平台。完成 Web 集成的 release 会把启动脚本和必要
+payload 放在 `web/`：macOS 使用 `run-macos.command`，Linux 使用
+`run-linux.sh`，Windows 使用 `run-windows.ps1`。macOS 优先使用 universal 原生
+binary；Windows 优先使用随包原生 SwiftNIO `.exe`，只在缺失时使用 Docker；Linux 在
+Docker 中以 Hummingbird transport 构建同一个 Swift 核心。所有容器端口都只发布到 `127.0.0.1`；stop 脚本既能处理已记录
+的原生进程，也能停止 Docker，并保留 Local Web 数据根 / 命名 volume。`web/` 不携带数据库、地图、轨迹、会话、缓存或 token，用户应从浏览器
+导入自己有权使用的数据。受跟踪 release builder 与 audit 会在 v0.1.1 候选中生成并校验
+该 payload。
+
 </details>
 
 <a id="validation"></a>
@@ -422,12 +471,17 @@ provisioning profile，不能直接安装。
 
 ```bash
 node --check NavPlanner/Resources/Web/app.js
+node --check NavPlanner/Resources/Web/runtime.js
 node --check NavPlanner/Resources/Web/vendor/maplibre-gl/maplibre-gl.js
 plutil -lint NavPlanner.xcodeproj/project.pbxproj NavPlanner/Support/PrivacyInfo.xcprivacy
 python3 Tools/Parity/run_all_parity.py
+swift test
+swift build --product simnav-local-web
+Tools/LocalWeb/package_web_release.sh --output /tmp/SimNav-Web-check
+Tools/LocalWeb/audit_web_release.sh /tmp/SimNav-Web-check --docker-smoke
 ```
 
-`Tools/Parity` 用于在修改航路规划、轨迹拟合或 Procedure 几何后，对照 Swift 本地服务层和只读 Web 参考实现。
+`Tools/Parity` 会直接编译共享 Swift 核心，并在修改航路规划、轨迹拟合或 Procedure 几何后校验版本化的 Route 22、Track 10 与 Procedure 6 行为 fixture。
 
 </details>
 
@@ -441,6 +495,7 @@ python3 Tools/Parity/run_all_parity.py
 - 在 iPhone 小屏、iPhone 横屏、iPad 竖屏和 iPad 横屏分别测试。
 - 验证飞行模式下的启动、机场搜索、机场详情、航路规划、Procedure 绘制、nav-overlay 和离线地图。
 - 验证 FR24 会话缺失、Cloudflare 验证、flightId、GPX 导入、剖面滑动、下载失败、轨迹绘制、拟合、分享和缓存管理流程。
+- 验证三套 Web 启动器、随包 Windows 原生 SwiftNIO 工件 smoke、两种 HTTP transport、Docker 回环发布、数据 volume 持久化，以及发布包不含数据库或用户数据。
 - 排查 Xcode 日志时优先过滤 `NavPlanner` 进程；beta 模拟器可能输出无关的系统服务错误。
 
 </details>
@@ -453,11 +508,13 @@ python3 Tools/Parity/run_all_parity.py
 NavPlanner.xcodeproj/          Xcode 工程
 NavPlanner/
   App/                         SwiftUI App 入口和外壳
-  Core/                        本地数据库、规划服务、地图存储和 WebBridge
+  Core/                        共享数据库、规划服务、地图存储、runtime 和 WebBridge
   Features/                    SwiftUI 功能容器
-  Resources/Web/               WKWebView 地图工作区资源
+  Resources/Web/               App + Local Web 唯一工作区源
   Support/                     Asset Catalog 与隐私清单
-Tools/                         图标生成和 parity 校验工具
+LocalWeb/                      共享 HTTP 处理器、Hummingbird/SwiftNIO adapter 与 SwiftPM 测试
+Package.swift                  共享核心与 Local Web 的 SwiftPM 依赖图
+Tools/                         Local Web、发布、签名、图标和 parity 工具
 Media/                         README 截图与视觉素材
 ```
 
@@ -471,5 +528,8 @@ SimNav Studio 可能使用第三方或用户自行提供的内容，包括地图
 
 GitHub 公开源码仓库不包含导航数据库：根目录 `database/` 和开发用 bundle 资源均被 Git 忽略。Releases 中发布的
 IPA 与 DMG 带有一份示例数据库，供首次启动体验示例数据，把用途限制为地面娱乐飞行模拟软件。维护者不得发布包含该示例库的 IPA 或 DMG。
+
+Local Web 的可写数据库与缓存和 Apple App 完全分离。在 Web 再分发权利得到明确确认前，
+Web release 不得携带开发数据库；用户应通过文档说明的导入或 mount 流程提供自己的兼容数据库。
 
 本 App 不保证第三方数据的准确性、完整性、可用性或法律状态。你需要自行确认拥有每项数据的使用、导入、缓存和分发权利。

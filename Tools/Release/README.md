@@ -79,20 +79,41 @@ DMG staging 和其他构建中间产物只写入 `releases/.navplanner-build-*` 
 正常结束、失败或收到可捕获的中断信号时都会自动删除。不得在仓库中重新创建或保留 `target/`，
 也不得在 `releases/` 下保存旧候选、失败尝试、调试 App、截图或原始日志。
 
-最终公开候选只包含：
+新生成的最终公开候选包含三个正式平台：
 
 - unsigned Universal IPA；
 - ad-hoc Catalyst App 与未 notarize DMG；
+- `web/` Local Web 部署目录（macOS / Windows / Linux 启停脚本、单一 Web/Swift 源、
+  固定 Dockerfile/Compose、内部 manifest/checksums；不含数据库或用户数据）；
 - 脱敏 manifest 和双语公开说明；
 - SHA-256 checksums。
 
 脚本在封包前核对 Web、Database 和 PrivacyInfo bundle parity，并在结束前强制
-执行独立审计。IPA 与 DMG 会带上该示例数据库，构建成功证明文件完整性与封包一致性。
+执行独立审计。IPA 与 DMG 会带上该示例数据库；Web 包明确不携带数据库。Web 审计会
+复验唯一 UI/Swift core、每个文件 checksum、localhost 端口、非 root/read-only 容器边界，
+并实际构建和启动 Linux Swift 镜像完成 shared tests、health、首页、Host 拒绝、容器权限、
+真实 HTTP 数据库导入与容器重启持久化 smoke；同一镜像还会强制运行 SwiftNIO transport，
+验证 Host、PMTiles Range、数据库导入与重启持久化。
+
+Web 的受跟踪封包入口为：
+
+```bash
+Tools/LocalWeb/package_web_release.sh --output /tmp/SimNav-Web --build-macos-native
+Tools/LocalWeb/audit_web_release.sh /tmp/SimNav-Web --docker-smoke
+```
+
+正式 release build 会自动执行这两步并把 manifest schema 升级为 5，顶层
+`SHA256SUMS.txt` 逐文件覆盖 `web/`。如要随 release 加入 Windows 原生 Swift server，
+先从 `.github/workflows/local-web-windows.yml` 或 Windows 本机脚本得到已 smoke 的 bundle，
+再设置 `SIMNAV_WINDOWS_NATIVE_BUNDLE=/path/to/bundle`。Windows 启动器发现 `.exe` 时会直接
+运行其原生 SwiftNIO transport 与随包 Swift/SQLite runtime DLL，不要求用户安装 Swift，也不启动 Linux / WSL /
+Docker；没有原生 bundle 时才使用 Docker Desktop 兜底。该 bundle 必须先在 Windows
+完成 loopback、HTTP 数据库导入和 `.exe` 重启持久化 smoke。
 
 也可独立复跑审计：
 
 ```bash
-Tools/Release/audit_public_release.sh releases/release-0.1.0
+Tools/Release/audit_public_release.sh releases/release-0.1.1
 ```
 
 审计遇到以下情况会失败：已跟踪或未跟踪但未忽略的公开源码含 signing

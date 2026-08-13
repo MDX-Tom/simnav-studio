@@ -4126,6 +4126,13 @@ html[data-theme="day"] .selection-leg-turn {
   font-size: calc(11px - var(--device-font-size-reduction));
 }
 
+.offline-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .offline-resource-list {
   display: grid;
   gap: 10px;

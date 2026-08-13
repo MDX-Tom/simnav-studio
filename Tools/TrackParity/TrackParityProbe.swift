@@ -4,14 +4,69 @@ struct TrackParityCase: Decodable {
     let name: String
     let departure: String
     let arrival: String
-    let trackPoints: [[String: Double]]
+    let trackPoints: [[String: Double]]?
+    let seedDeparture: String?
+    let seedArrival: String?
+    let seedRoute: String?
 
     enum CodingKeys: String, CodingKey {
         case name
         case departure
         case arrival
         case trackPoints = "track_points"
+        case seedDeparture = "seed_departure"
+        case seedArrival = "seed_arrival"
+        case seedRoute = "seed_route"
     }
+}
+
+func trackParityInputPoints(
+    for trackCase: TrackParityCase,
+    service: PlannerService,
+    maxPoints: Int = 80
+) -> [[String: Any]] {
+    if let trackPoints = trackCase.trackPoints {
+        return trackPoints.map { point in
+            point.reduce(into: [String: Any]()) { output, item in
+                output[item.key] = item.value
+            }
+        }
+    }
+
+    let seedPayload = service.routeResolvePayload(
+        departure: trackCase.seedDeparture ?? trackCase.departure,
+        arrival: trackCase.seedArrival ?? trackCase.arrival,
+        route: trackCase.seedRoute ?? "",
+        departureRunway: "ALL",
+        arrivalRunway: "ALL"
+    )
+    let routePoints = seedPayload["points"] as? [[String: Any]] ?? []
+    var points: [[String: Any]] = []
+    var previous: (lat: Double, lon: Double)?
+    for item in routePoints {
+        guard
+            let lat = trackParityDouble(item["lat"]),
+            let lon = trackParityDouble(item["lon"])
+        else {
+            continue
+        }
+        if let previous,
+           (previous.lat * 10_000_000).rounded() == (lat * 10_000_000).rounded(),
+           (previous.lon * 10_000_000).rounded() == (lon * 10_000_000).rounded() {
+            continue
+        }
+        points.append(["lat": lat, "lon": lon])
+        previous = (lat, lon)
+    }
+
+    guard points.count > maxPoints, maxPoints > 1 else {
+        return points
+    }
+    let lastIndex = points.count - 1
+    let indices = Set((0..<maxPoints).map { index in
+        Int((Double(index * lastIndex) / Double(maxPoints - 1)).rounded())
+    })
+    return indices.sorted().map { points[$0] }
 }
 
 func trackParityString(_ value: Any?) -> String {
@@ -171,24 +226,19 @@ func trackParitySelectedProcedureItems(
 struct TrackParityProbe {
     static func main() throws {
         guard CommandLine.arguments.count == 3 else {
-            fputs("usage: TrackParityProbe <workspace-root> <cases-json>\n", stderr)
+            fputs("usage: TrackParityProbe <database-path> <cases-json>\n", stderr)
             Foundation.exit(2)
         }
 
-        let root = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
+        let databaseURL = URL(fileURLWithPath: CommandLine.arguments[1])
         let casesURL = URL(fileURLWithPath: CommandLine.arguments[2])
         let cases = try JSONDecoder().decode([TrackParityCase].self, from: Data(contentsOf: casesURL))
-        let databaseURL = root.appendingPathComponent("NavPlanner/Resources/Database/navdata.sqlite")
         let dataStore = LocalDataStore(databaseURL: databaseURL)
         let service = PlannerService(dataStore: dataStore)
         var results: [String: Any] = [:]
 
         for trackCase in cases {
-            let trackPoints = trackCase.trackPoints.map { point in
-                point.reduce(into: [String: Any]()) { output, item in
-                    output[item.key] = item.value
-                }
-            }
+            let trackPoints = trackParityInputPoints(for: trackCase, service: service)
             let payload = service.trackMatchPayload(
                 departure: trackCase.departure,
                 arrival: trackCase.arrival,

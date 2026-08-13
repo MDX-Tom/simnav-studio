@@ -1,11 +1,18 @@
 import Foundation
+#if canImport(os.signpost)
 import os.signpost
+#endif
+
+#if canImport(os.signpost)
+private typealias PlannerPerformanceSignpostID = OSSignpostID
+#else
+private struct PlannerPerformanceSignpostID {}
+#endif
 
 final class PlannerService: @unchecked Sendable {
-    private static let performanceLog = OSLog(
-        subsystem: Bundle.main.bundleIdentifier ?? "NavPlanner",
-        category: "PlannerPerformance"
-    )
+#if canImport(os.signpost)
+    private let performanceLog: OSLog
+#endif
     private let dataStore: LocalDataStore
     private let planningCacheLock = NSLock()
     private var planningCacheDatabaseKey: String?
@@ -30,18 +37,33 @@ final class PlannerService: @unchecked Sendable {
         "贡嘎": ["ZULS"]
     ]
 
-    init(dataStore: LocalDataStore) {
+    init(
+        dataStore: LocalDataStore,
+        performanceSubsystem: String = Bundle.main.bundleIdentifier ?? "com.mdxtom.simnavstudio"
+    ) {
         self.dataStore = dataStore
+#if canImport(os.signpost)
+        self.performanceLog = OSLog(
+            subsystem: performanceSubsystem,
+            category: "PlannerPerformance"
+        )
+#endif
     }
 
-    private func beginPerformanceSignpost(_ name: StaticString) -> OSSignpostID {
-        let signpostID = OSSignpostID(log: Self.performanceLog)
-        os_signpost(.begin, log: Self.performanceLog, name: name, signpostID: signpostID)
+    private func beginPerformanceSignpost(_ name: StaticString) -> PlannerPerformanceSignpostID {
+#if canImport(os.signpost)
+        let signpostID = OSSignpostID(log: performanceLog)
+        os_signpost(.begin, log: performanceLog, name: name, signpostID: signpostID)
         return signpostID
+#else
+        return PlannerPerformanceSignpostID()
+#endif
     }
 
-    private func endPerformanceSignpost(_ name: StaticString, signpostID: OSSignpostID) {
-        os_signpost(.end, log: Self.performanceLog, name: name, signpostID: signpostID)
+    private func endPerformanceSignpost(_ name: StaticString, signpostID: PlannerPerformanceSignpostID) {
+#if canImport(os.signpost)
+        os_signpost(.end, log: performanceLog, name: name, signpostID: signpostID)
+#endif
     }
 
     /// 在用户首次输入前以低优先级打开 SQLite 并触碰机场主索引。
@@ -118,6 +140,12 @@ final class PlannerService: @unchecked Sendable {
 
     func selectDatabasePayload(name: String) throws -> [String: Any] {
         let payload = try dataStore.selectDatabase(named: name)
+        invalidatePlanningCaches()
+        return payload
+    }
+
+    func importDatabasePayload(from source: URL) throws -> [String: Any] {
+        let payload = try dataStore.importDatabase(from: source)
         invalidatePlanningCaches()
         return payload
     }
@@ -805,13 +833,6 @@ final class PlannerService: @unchecked Sendable {
             )
         }
         return ["items": items]
-    }
-
-    func unavailableOnlinePayload(feature: String) -> [String: Any] {
-        [
-            "error": "\(feature) 属于在线增强能力，当前 iOS 离线版本暂未接入。",
-            "offline": true
-        ]
     }
 
     func fr24RouteAirportsPayload(departure: String, arrival: String) -> [String: Any] {

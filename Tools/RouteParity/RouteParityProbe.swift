@@ -135,14 +135,13 @@ func routeParityPayloadSummary(_ payload: [String: Any]) -> [String: Any] {
 struct RouteParityProbe {
     static func main() throws {
         guard CommandLine.arguments.count == 3 else {
-            fputs("usage: RouteParityProbe <workspace-root> <cases-json>\n", stderr)
+            fputs("usage: RouteParityProbe <database-path> <cases-json>\n", stderr)
             Foundation.exit(2)
         }
 
-        let root = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
+        let databaseURL = URL(fileURLWithPath: CommandLine.arguments[1])
         let casesURL = URL(fileURLWithPath: CommandLine.arguments[2])
         let cases = try JSONDecoder().decode([RouteParityCase].self, from: Data(contentsOf: casesURL))
-        let databaseURL = root.appendingPathComponent("NavPlanner/Resources/Database/navdata.sqlite")
         let dataStore = LocalDataStore(databaseURL: databaseURL)
         let service = PlannerService(dataStore: dataStore)
         var results: [String: Any] = [:]

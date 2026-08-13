@@ -1,5 +1,14 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+#if canImport(SQLite3)
 import SQLite3
+#elseif canImport(CSQLite)
+import CSQLite
+#else
+#error("SQLite3 or CSQLite is required to build SimNavCore")
+#endif
 
 struct OfflineTileResult {
     let data: Data
@@ -126,12 +135,57 @@ private struct OfflineTileFetchOutcome {
     let result: Result<Data, Error>
 }
 
+private final class OfflineTileOutcomeBuffer: @unchecked Sendable {
+    private let condition = NSCondition()
+    private var outcomes: [OfflineTileFetchOutcome] = []
+
+    func append(_ outcome: OfflineTileFetchOutcome) {
+        condition.lock()
+        outcomes.append(outcome)
+        condition.signal()
+        condition.unlock()
+    }
+
+    func drain(waitingUntil deadline: Date) -> [OfflineTileFetchOutcome] {
+        condition.lock()
+        if outcomes.isEmpty {
+            _ = condition.wait(until: deadline)
+        }
+        let drained = outcomes
+        outcomes.removeAll(keepingCapacity: true)
+        condition.unlock()
+        return drained
+    }
+}
+
+private final class OfflineTileRequestResultBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var result: Result<Data, Error>?
+
+    func store(_ result: Result<Data, Error>) {
+        lock.lock()
+        self.result = result
+        lock.unlock()
+    }
+
+    func snapshot() -> Result<Data, Error>? {
+        lock.lock()
+        defer { lock.unlock() }
+        return result
+    }
+}
+
 private struct OfflineTileHTTPError: LocalizedError {
     let statusCode: Int
 
     var errorDescription: String? {
         "HTTP \(statusCode)"
     }
+}
+
+private struct OfflineMapImportError: LocalizedError {
+    let message: String
+    var errorDescription: String? { message }
 }
 
 private final class OfflineDownloadJobState {
@@ -286,6 +340,61 @@ final class MapStore {
     func statusPayload() -> [String: Any] {
         queue.sync {
             statusPayloadLocked(resources: scanResources())
+        }
+    }
+
+    func importResource(from sourceURL: URL) throws -> [String: Any] {
+        try queue.sync {
+            let supportedExtensions = Set(["pmtiles", "mbtiles", "sqlite", "sqlite3"])
+            let source = sourceURL.standardizedFileURL
+            let values = try source.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+            let fileSize = Int64(values.fileSize ?? 0)
+            guard values.isRegularFile == true else {
+                throw OfflineMapImportError(message: "离线地图导入源不是普通文件。")
+            }
+            guard fileSize > 0 else {
+                throw OfflineMapImportError(message: "离线地图文件为空。")
+            }
+            guard fileSize <= 64 * 1_024 * 1_024 * 1_024 else {
+                throw OfflineMapImportError(message: "离线地图文件超过 64 GiB 上限。")
+            }
+            let pathExtension = source.pathExtension.lowercased()
+            guard supportedExtensions.contains(pathExtension) else {
+                throw OfflineMapImportError(message: "仅支持 PMTiles、MBTiles、SQLite 或 SQLite3 地图包。")
+            }
+
+            try fileManager.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
+            let stagingRoot = rootDirectory.appendingPathComponent(
+                ".import-\(UUID().uuidString)",
+                isDirectory: true
+            )
+            try fileManager.createDirectory(at: stagingRoot, withIntermediateDirectories: true)
+            defer { try? fileManager.removeItem(at: stagingRoot) }
+
+            let baseName = safeResourceName(source.deletingPathExtension().lastPathComponent)
+            var targetName = "\(baseName).\(pathExtension)"
+            var suffix = 2
+            while fileManager.fileExists(atPath: rootDirectory.appendingPathComponent(targetName).path) {
+                targetName = "\(baseName)-\(suffix).\(pathExtension)"
+                suffix += 1
+            }
+            let stagedURL = stagingRoot.appendingPathComponent(targetName)
+            try fileManager.copyItem(at: source, to: stagedURL)
+            try validateImportedMap(at: stagedURL, pathExtension: pathExtension)
+
+            let targetURL = rootDirectory.appendingPathComponent(targetName)
+            try fileManager.moveItem(at: stagedURL, to: targetURL)
+            tileCache.removeAllObjects()
+            let resources = scanResources()
+            guard let imported = resources.first(where: { $0.url.standardizedFileURL == targetURL.standardizedFileURL }) else {
+                try? fileManager.removeItem(at: targetURL)
+                throw OfflineMapImportError(message: "地图包已复制，但无法识别其瓦片布局。")
+            }
+            writeActiveResourceName(imported.name)
+            var payload = statusPayloadLocked(resources: resources)
+            payload["imported"] = imported.payload(active: true)
+            payload["message"] = "已导入并启用离线地图：\(imported.name)"
+            return payload
         }
     }
 
@@ -799,8 +908,7 @@ final class MapStore {
             var consecutiveFailures = 0
             let abortThreshold = min(50, max(12, downloadWorkers * 2, request.total / 100))
             let maxInflight = downloadInflightLimit
-            let resultCondition = NSCondition()
-            var completed: [OfflineTileFetchOutcome] = []
+            let completed = OfflineTileOutcomeBuffer()
             var pendingCount = 0
             var shouldAbort = false
             var rangeIndex = 0
@@ -887,10 +995,7 @@ final class MapStore {
                         } catch {
                             result = .failure(error)
                         }
-                        resultCondition.lock()
                         completed.append(OfflineTileFetchOutcome(coordinate: coordinate, result: result))
-                        resultCondition.signal()
-                        resultCondition.unlock()
                     }
                 }
                 return false
@@ -898,13 +1003,7 @@ final class MapStore {
 
             var exhausted = try queueRemoteTiles()
             while pendingCount > 0 && !job.isCancelled && !shouldAbort {
-                resultCondition.lock()
-                if completed.isEmpty {
-                    _ = resultCondition.wait(until: Date(timeIntervalSinceNow: 0.25))
-                }
-                let outcomes = completed
-                completed.removeAll(keepingCapacity: true)
-                resultCondition.unlock()
+                let outcomes = completed.drain(waitingUntil: Date(timeIntervalSinceNow: 0.25))
 
                 guard !outcomes.isEmpty else {
                     let now = Date()
@@ -1104,7 +1203,7 @@ final class MapStore {
         timeout: TimeInterval
     ) throws -> Data {
         let semaphore = DispatchSemaphore(value: 0)
-        var result: Result<Data, Error>?
+        let resultBox = OfflineTileRequestResultBox()
         var request = URLRequest(url: url)
         request.timeoutInterval = timeout
         request.cachePolicy = .reloadIgnoringLocalCacheData
@@ -1116,24 +1215,24 @@ final class MapStore {
         let task = session.dataTask(with: request) { data, response, error in
             defer { semaphore.signal() }
             if let error {
-                result = .failure(error)
+                resultBox.store(.failure(error))
                 return
             }
             guard let httpResponse = response as? HTTPURLResponse else {
-                result = .failure(NSError(domain: "NavPlannerOfflineMap", code: -3, userInfo: [NSLocalizedDescriptionKey: "瓦片响应无效"]))
+                resultBox.store(.failure(NSError(domain: "NavPlannerOfflineMap", code: -3, userInfo: [NSLocalizedDescriptionKey: "瓦片响应无效"])))
                 return
             }
             guard (200..<300).contains(httpResponse.statusCode) else {
-                result = .failure(OfflineTileHTTPError(statusCode: httpResponse.statusCode))
+                resultBox.store(.failure(OfflineTileHTTPError(statusCode: httpResponse.statusCode)))
                 return
             }
             guard let data,
                   !data.isEmpty,
                   self.isValidDownloadedTile(data, provider: provider) else {
-                result = .failure(NSError(domain: "NavPlannerOfflineMap", code: -3, userInfo: [NSLocalizedDescriptionKey: "瓦片响应无效"]))
+                resultBox.store(.failure(NSError(domain: "NavPlannerOfflineMap", code: -3, userInfo: [NSLocalizedDescriptionKey: "瓦片响应无效"])))
                 return
             }
-            result = .success(data)
+            resultBox.store(.success(data))
         }
         task.resume()
 
@@ -1141,7 +1240,7 @@ final class MapStore {
             task.cancel()
             throw NSError(domain: "NavPlannerOfflineMap", code: -4, userInfo: [NSLocalizedDescriptionKey: "瓦片请求超时"])
         }
-        switch result {
+        switch resultBox.snapshot() {
         case let .success(data):
             return data
         case let .failure(error):
@@ -1546,6 +1645,44 @@ final class MapStore {
         sqlite3_exec(db, "PRAGMA cache_size=-32768", nil, nil, nil)
         sqlite3_exec(db, "PRAGMA busy_timeout=1000", nil, nil, nil)
         return db
+    }
+
+    private func validateImportedMap(at url: URL, pathExtension: String) throws {
+        if pathExtension == "pmtiles" {
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+            let header = try handle.read(upToCount: 8) ?? Data()
+            guard header.count == 8,
+                  header.starts(with: Data("PMTiles".utf8)),
+                  header[header.index(header.startIndex, offsetBy: 7)] > 0 else {
+                throw OfflineMapImportError(message: "PMTiles 文件头无效。")
+            }
+            return
+        }
+
+        guard let db = openSQLiteReadOnly(url) else {
+            throw OfflineMapImportError(message: "SQLite 地图包无法打开。")
+        }
+        defer { sqlite3_close(db) }
+        guard sqliteQuickCheck(db), sqliteLayout(db) != nil else {
+            throw OfflineMapImportError(
+                message: "SQLite 地图包校验失败，必须包含 MBTiles 或 SimNav tiles 表结构。"
+            )
+        }
+    }
+
+    private func sqliteQuickCheck(_ db: OpaquePointer) -> Bool {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "PRAGMA quick_check(1)", -1, &statement, nil) == SQLITE_OK,
+              let statement else {
+            return false
+        }
+        defer { sqlite3_finalize(statement) }
+        guard sqlite3_step(statement) == SQLITE_ROW,
+              let text = sqlite3_column_text(statement, 0) else {
+            return false
+        }
+        return String(cString: text).lowercased() == "ok"
     }
 
     private func sqliteLayout(_ db: OpaquePointer) -> String? {

@@ -223,6 +223,7 @@ struct MapWebView: UIViewRepresentable {
 
         private enum DocumentPickerPurpose {
             case database
+            case offlineMap
             case fr24GPX
         }
 
@@ -232,6 +233,9 @@ struct MapWebView: UIViewRepresentable {
             super.init()
             self.scriptHandler.selectDatabaseHandler = { [weak self] in
                 self?.presentDatabasePicker()
+            }
+            self.scriptHandler.importOfflineMapHandler = { [weak self] in
+                self?.presentOfflineMapPicker()
             }
             self.scriptHandler.importFR24GPXHandler = { [weak self] in
                 self?.presentFR24GPXPicker()
@@ -286,11 +290,29 @@ struct MapWebView: UIViewRepresentable {
             topViewController()?.present(picker, animated: true)
         }
 
+        private func presentOfflineMapPicker() {
+            documentPickerPurpose = .offlineMap
+            let types = [
+                UTType(filenameExtension: "pmtiles") ?? .data,
+                UTType(filenameExtension: "mbtiles") ?? .data,
+                UTType(filenameExtension: "sqlite") ?? .data,
+                UTType(filenameExtension: "sqlite3") ?? .data
+            ]
+            let picker = UIDocumentPickerViewController(forOpeningContentTypes: types, asCopy: true)
+            picker.delegate = self
+            picker.allowsMultipleSelection = false
+            topViewController()?.present(picker, animated: true)
+        }
+
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
             guard let url = urls.first else { return }
             let purpose = documentPickerPurpose
             documentPickerPurpose = .database
             let canAccess = url.startAccessingSecurityScopedResource()
+            if purpose == .offlineMap {
+                importOfflineMap(from: url, canAccessSecurityScopedResource: canAccess)
+                return
+            }
             Task { @MainActor in
                 defer {
                     if canAccess {
@@ -302,6 +324,8 @@ struct MapWebView: UIViewRepresentable {
                     guard let environment = self.environment else { return }
                     let payload = environment.importDatabase(from: url)
                     self.notifyDatabaseSelection(payload)
+                case .offlineMap:
+                    break
                 case .fr24GPX:
                     self.importFR24GPX(from: url)
                 }
@@ -316,6 +340,11 @@ struct MapWebView: UIViewRepresentable {
                 notifyDatabaseSelection([
                     "local_status": "cancelled",
                     "message": "已取消选择数据库文件"
+                ])
+            case .offlineMap:
+                notifyOfflineMapImported([
+                    "local_status": "cancelled",
+                    "message": "已取消选择离线地图文件。"
                 ])
             case .fr24GPX:
                 notifyFR24GPXImported([
@@ -429,6 +458,42 @@ struct MapWebView: UIViewRepresentable {
 
         private func notifyDatabaseSelection(_ payload: [String: Any]) {
             notifyJavaScript(functionName: "window.navplannerNativeDatabaseSelected", payload: payload)
+        }
+
+        private func importOfflineMap(from url: URL, canAccessSecurityScopedResource: Bool) {
+            guard let mapStore = environment?.mapStore else {
+                if canAccessSecurityScopedResource {
+                    url.stopAccessingSecurityScopedResource()
+                }
+                notifyOfflineMapImported([
+                    "error": true,
+                    "message": "离线地图服务不可用。"
+                ])
+                return
+            }
+            DispatchQueue.global(qos: .utility).async { [weak self] in
+                defer {
+                    if canAccessSecurityScopedResource {
+                        url.stopAccessingSecurityScopedResource()
+                    }
+                }
+                let payload: [String: Any]
+                do {
+                    payload = try mapStore.importResource(from: url)
+                } catch {
+                    payload = [
+                        "error": true,
+                        "message": "无法导入离线地图：\(error.localizedDescription)"
+                    ]
+                }
+                DispatchQueue.main.async {
+                    self?.notifyOfflineMapImported(payload)
+                }
+            }
+        }
+
+        private func notifyOfflineMapImported(_ payload: [String: Any]) {
+            notifyJavaScript(functionName: "window.navplannerNativeOfflineMapImported", payload: payload)
         }
 
         private func importFR24GPX(from url: URL) {

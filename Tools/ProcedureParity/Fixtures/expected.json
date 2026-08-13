@@ -1,0 +1,56 @@
+{
+  "baseline": {
+    "captured_commit": "b6018e62088ad70dbe54ae281302ba976ab7408c",
+    "database": {
+      "current_airac": "2603",
+      "revision": "n3",
+      "sha256": "f08e04591a5b78c16b7808aed1ee257922de86e1c02ba6909d1878dd7c935932",
+      "size_bytes": 185647104
+    }
+  },
+  "results": {
+    "approach ZULS R10L LS995": {
+      "item_count": 36,
+      "missed_count": 366,
+      "path_count": 588,
+      "primary_count": 223,
+      "summary_sha256": "063d6c2c2c5df4cfec609383305565f34b0c0fa37566851dfb93338e52ee2beb"
+    },
+    "approach missed holding 07FA R05-P ALL": {
+      "item_count": 7,
+      "missed_count": 45,
+      "path_count": 48,
+      "primary_count": 4,
+      "summary_sha256": "f4b34dc8b87f964e2449e5bdc56b63a0e3693118052f982076fa199d08dfbf38"
+    },
+    "approach transition merge 07FA R05-P ADONE": {
+      "item_count": 9,
+      "missed_count": 45,
+      "path_count": 50,
+      "primary_count": 6,
+      "summary_sha256": "f360789baf1f78cd291a8bb909de291a8de33df02e34165ab39635d1d4eb4240"
+    },
+    "empty missing approach": {
+      "item_count": 0,
+      "missed_count": 0,
+      "path_count": 0,
+      "primary_count": 0,
+      "summary_sha256": "6372109a1da85feccbdeb676c80e8760331929fa2bd0cbc73c632fe3a57f24b5"
+    },
+    "sid RF BIAR ASKU1D RW19": {
+      "item_count": 5,
+      "missed_count": 0,
+      "path_count": 28,
+      "primary_count": 28,
+      "summary_sha256": "38efef0d92ab58b521001d16213b5bb1d4ec2e53674c5fb9ce8ec06f35033e74"
+    },
+    "star RF MTCH NOSO1L RW05": {
+      "item_count": 3,
+      "missed_count": 0,
+      "path_count": 26,
+      "primary_count": 26,
+      "summary_sha256": "b32220f283e2ff41d44e00e1afab041a618f896965bb654cb6e1c69aa4b685de"
+    }
+  },
+  "schema_version": 1
+}

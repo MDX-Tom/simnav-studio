@@ -1,0 +1,516 @@
+{
+  "baseline": {
+    "captured_commit": "b6018e62088ad70dbe54ae281302ba976ab7408c",
+    "database": {
+      "current_airac": "2603",
+      "revision": "n3",
+      "sha256": "f08e04591a5b78c16b7808aed1ee257922de86e1c02ba6909d1878dd7c935932",
+      "size_bytes": 185647104
+    }
+  },
+  "results": {
+    "auto AGGF-AYKM": {
+      "distance_nm": 896.564,
+      "message_kind": "generated",
+      "point_count": 12,
+      "route_display": "MUNDA R213 NIPOK B598 PY H539 STARF H536 EPKED",
+      "selected_procedures": {
+        "approach": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        },
+        "sid": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        },
+        "star": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        }
+      },
+      "selected_runways": {
+        "arrival": "ALL",
+        "departure": "ALL"
+      },
+      "summary_sha256": "64d481eecdb7dfa64c717935ed52a089891b399748e2fc04f457fd8e488165e8"
+    },
+    "auto EGLL-KJFK": {
+      "distance_nm": 2997.608,
+      "message_kind": "generated",
+      "point_count": 10,
+      "route_display": "CPT DCT PVD",
+      "selected_procedures": {
+        "approach": {
+          "procedure": "I04L",
+          "runway": "",
+          "transition": "ALL"
+        },
+        "sid": {
+          "procedure": "CPT3F",
+          "runway": "",
+          "transition": "RW27R"
+        },
+        "star": {
+          "procedure": "PARCH4",
+          "runway": "",
+          "transition": "PVD"
+        }
+      },
+      "selected_runways": {
+        "arrival": "ALL",
+        "departure": "ALL"
+      },
+      "summary_sha256": "be16066f2545139cb73a6088e0a02737211ba215acade8849ff53ed121e54b19"
+    },
+    "auto KLAX-KPSP": {
+      "distance_nm": 151.029,
+      "message_kind": "generated",
+      "point_count": 15,
+      "route_display": "GARDY V210 HESPE V137 PSP",
+      "selected_procedures": {
+        "approach": {
+          "procedure": "VORB",
+          "runway": "",
+          "transition": "ALL"
+        },
+        "sid": {
+          "procedure": "GARDY4",
+          "runway": "",
+          "transition": "ALL"
+        },
+        "star": {
+          "procedure": "SBONO1",
+          "runway": "",
+          "transition": "ALL"
+        }
+      },
+      "selected_runways": {
+        "arrival": "ALL",
+        "departure": "ALL"
+      },
+      "summary_sha256": "e16cac7e2c262c3825badf5cfab6f1aeba1047d69fb56b983b74f12f17cfd68c"
+    },
+    "auto OMDB-EDDF": {
+      "distance_nm": 2676.679,
+      "message_kind": "generated",
+      "point_count": 81,
+      "route_display": "RIDAP M557 TUMAK L557 VELAK L602 GAZ A17 YAVRU A4 ERKAL L615 VADEN L610 UPALA Z744 PETIX",
+      "selected_procedures": {
+        "approach": {
+          "procedure": "I07CX",
+          "runway": "",
+          "transition": "ALL"
+        },
+        "sid": {
+          "procedure": "RIDA2F",
+          "runway": "",
+          "transition": "RW30B"
+        },
+        "star": {
+          "procedure": "SPES5A",
+          "runway": "",
+          "transition": "PETIX"
+        }
+      },
+      "selected_runways": {
+        "arrival": "ALL",
+        "departure": "ALL"
+      },
+      "summary_sha256": "a551b851c7394b888b18d232a4c5500057b96632427209294d0c40d4522b109f"
+    },
+    "auto RJTT-PHNL": {
+      "distance_nm": 3383.342,
+      "message_kind": "generated",
+      "point_count": 11,
+      "route_display": "RUTAS DCT DANNO",
+      "selected_procedures": {
+        "approach": {
+          "procedure": "VORA",
+          "runway": "",
+          "transition": "ALL"
+        },
+        "sid": {
+          "procedure": "RUTAS4",
+          "runway": "",
+          "transition": "RW22"
+        },
+        "star": {
+          "procedure": "KLANI4",
+          "runway": "",
+          "transition": "DANNO"
+        }
+      },
+      "selected_runways": {
+        "arrival": "ALL",
+        "departure": "ALL"
+      },
+      "summary_sha256": "6b024109437595765fb7853a16910234417262726582711d0de276d526a319d0"
+    },
+    "auto VHHH-WSSS": {
+      "distance_nm": 1495.466,
+      "message_kind": "generated",
+      "point_count": 39,
+      "route_display": "PECAN V10 ALLEY V31 IDOSI A1 DAN Q1 BMT W1 AC L644 CN L642 ESPOB Q801 ESBUM Q802 ELALO",
+      "selected_procedures": {
+        "approach": {
+          "procedure": "I02C",
+          "runway": "",
+          "transition": "ALL"
+        },
+        "sid": {
+          "procedure": "PECA1D",
+          "runway": "",
+          "transition": "RW25C"
+        },
+        "star": {
+          "procedure": "ELAL1B",
+          "runway": "",
+          "transition": "RW20B"
+        }
+      },
+      "selected_runways": {
+        "arrival": "ALL",
+        "departure": "ALL"
+      },
+      "summary_sha256": "573677ba023cd7a60f9304fa04f78a8f8aecc81b0346cefaf485889756fab904"
+    },
+    "auto YSSY-NZAA": {
+      "distance_nm": 1171.349,
+      "message_kind": "generated",
+      "point_count": 7,
+      "route_display": "EVONN L521 GEROS DCT LUNBI",
+      "selected_procedures": {
+        "approach": {
+          "procedure": "I05R",
+          "runway": "",
+          "transition": "ALL"
+        },
+        "sid": {
+          "procedure": "KEVIN7",
+          "runway": "",
+          "transition": "EVONN"
+        },
+        "star": {
+          "procedure": "ARAD1N",
+          "runway": "",
+          "transition": "LUNBI"
+        }
+      },
+      "selected_runways": {
+        "arrival": "ALL",
+        "departure": "ALL"
+      },
+      "summary_sha256": "e2a7a65d0bcc6eb0d3b60973a6733182521fe1589a873a8c895b35310446b887"
+    },
+    "auto ZBAA-ZSPD": {
+      "distance_nm": 724.977,
+      "message_kind": "generated",
+      "point_count": 35,
+      "route_display": "IGMOR W244 PAMRU V30 YQG W142 DALIM A593 VMB W161 SASAN",
+      "selected_procedures": {
+        "approach": {
+          "procedure": "I16LY",
+          "runway": "",
+          "transition": "ALL"
+        },
+        "sid": {
+          "procedure": "IGMO2G",
+          "runway": "",
+          "transition": "ALL"
+        },
+        "star": {
+          "procedure": "SAS11A",
+          "runway": "",
+          "transition": "ALL"
+        }
+      },
+      "selected_runways": {
+        "arrival": "ALL",
+        "departure": "ALL"
+      },
+      "summary_sha256": "9069e68da3ac62523efde15188052000bd14c49bd5e3d608e0d53662676d7b5d"
+    },
+    "dateline auto NFFN-NSFA": {
+      "distance_nm": 657.792,
+      "message_kind": "generated",
+      "point_count": 9,
+      "route_display": "GODAP R453 UVUTI",
+      "selected_procedures": {
+        "approach": {
+          "procedure": "VORA",
+          "runway": "",
+          "transition": "ALL"
+        },
+        "sid": {
+          "procedure": "DELTA",
+          "runway": "",
+          "transition": "GODAP"
+        },
+        "star": {
+          "procedure": "UVUT2B",
+          "runway": "",
+          "transition": "RW08"
+        }
+      },
+      "selected_runways": {
+        "arrival": "ALL",
+        "departure": "ALL"
+      },
+      "summary_sha256": "fc87455a9158f7bd2199e09275caedba2ee938aba501fea6cc3c81e7553ea24e"
+    },
+    "dateline auto NFFN-NSTU": {
+      "distance_nm": 721.608,
+      "message_kind": "generated",
+      "point_count": 11,
+      "route_display": "NN G224 TUT",
+      "selected_procedures": {
+        "approach": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        },
+        "sid": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        },
+        "star": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        }
+      },
+      "selected_runways": {
+        "arrival": "ALL",
+        "departure": "ALL"
+      },
+      "summary_sha256": "4b6ab95cbd4cc328bd21beadd1e1f23a648a359cc4e69fe86e0e9983e2e9e636"
+    },
+    "dateline auto NSTU-NFFN": {
+      "distance_nm": 721.608,
+      "message_kind": "generated",
+      "point_count": 11,
+      "route_display": "TUT G224 NN",
+      "selected_procedures": {
+        "approach": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        },
+        "sid": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        },
+        "star": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        }
+      },
+      "selected_runways": {
+        "arrival": "ALL",
+        "departure": "ALL"
+      },
+      "summary_sha256": "c60580ff1b8cb56b34055536d4dc3f9b38e9fc5cb884e3cad9eb452589ee3a98"
+    },
+    "dateline auto PHNL-PGUM": {
+      "distance_nm": 3301.669,
+      "message_kind": "generated",
+      "point_count": 13,
+      "route_display": "HNL V12 KATHS A450 RESEE DCT PGUM",
+      "selected_procedures": {
+        "approach": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        },
+        "sid": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        },
+        "star": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        }
+      },
+      "selected_runways": {
+        "arrival": "ALL",
+        "departure": "ALL"
+      },
+      "summary_sha256": "17ab6921fce5ecf61ee9dc1e0094819fc369dc115c7f187d314080f43f238579"
+    },
+    "dateline manual NN-G224-TUT": {
+      "distance_nm": 721.608,
+      "message_kind": "manual",
+      "point_count": 11,
+      "route_display": "NN G224 TUT",
+      "selected_procedures": {
+        "approach": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        },
+        "sid": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        },
+        "star": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        }
+      },
+      "selected_runways": {},
+      "summary_sha256": "9142b3826c3c3165f1980c0d2333314a9c6ee9ebc45d855de56ea4cd92a344a5"
+    },
+    "dateline manual TUT-G224-NN": {
+      "distance_nm": 721.608,
+      "message_kind": "manual",
+      "point_count": 11,
+      "route_display": "TUT G224 NN",
+      "selected_procedures": {
+        "approach": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        },
+        "sid": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        },
+        "star": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        }
+      },
+      "selected_runways": {},
+      "summary_sha256": "de3c8923fb824f2aaaed73316783c596b9d88a5188571bd78c1276d212b54036"
+    },
+    "error leading DCT": {
+      "error": "DCT must follow a known fix or airport.",
+      "summary_sha256": "4df8619bb8e2e3410cc1512b817419d729f8512249c5c86d29a097dda9a26e69"
+    },
+    "error missing DCT target": {
+      "error": "DCT is missing the target fix.",
+      "summary_sha256": "74f21aef5a6c93fc0b820950b9115eddce86de62a084bd0b97135ac5cfb7ce56"
+    },
+    "error missing airway exit": {
+      "error": "Airway V370 is missing an exit fix.",
+      "summary_sha256": "68b873050346ece2498e7be051c605b0b411cc83cb5246794b84cd5002057ca9"
+    },
+    "error missing fill target": {
+      "error": "*** is missing the target fix.",
+      "summary_sha256": "c3056e989d12fbe68f50a2ef16cd11e7ef1afc59ca881ee55ab9da59f9dbc050"
+    },
+    "manual airway DODGR-V370-GARNE": {
+      "distance_nm": 95.921,
+      "message_kind": "manual",
+      "point_count": 11,
+      "route_display": "DODGR V370 GARNE",
+      "selected_procedures": {
+        "approach": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        },
+        "sid": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        },
+        "star": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        }
+      },
+      "selected_runways": {},
+      "summary_sha256": "01d2a55cc2b458dd266c6c7edc6ca971f21f74fc79e894d272efdd3666aa02ff"
+    },
+    "manual direct DODGR-GARNE": {
+      "distance_nm": 95.916,
+      "message_kind": "manual",
+      "point_count": 4,
+      "route_display": "DODGR DCT GARNE",
+      "selected_procedures": {
+        "approach": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        },
+        "sid": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        },
+        "star": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        }
+      },
+      "selected_runways": {},
+      "summary_sha256": "ea213a8d8f907d3a3b8a991f4ddae8b57cf4f97f894c7e390b7676176522b9d3"
+    },
+    "manual fill DODGR-GARNE": {
+      "distance_nm": 95.921,
+      "message_kind": "manual",
+      "point_count": 11,
+      "route_display": "DODGR V370 GARNE",
+      "selected_procedures": {
+        "approach": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        },
+        "sid": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        },
+        "star": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        }
+      },
+      "selected_runways": {},
+      "summary_sha256": "83cace8c47106d49408515b1ac532633865125b894f7b9ce09e5775189d9c01e"
+    },
+    "manual lookup priority FRE": {
+      "distance_nm": 16338.163,
+      "message_kind": "manual",
+      "point_count": 4,
+      "route_display": "DODGR DCT FRE",
+      "selected_procedures": {
+        "approach": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        },
+        "sid": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        },
+        "star": {
+          "procedure": "",
+          "runway": "",
+          "transition": ""
+        }
+      },
+      "selected_runways": {},
+      "summary_sha256": "e5d75ce1c77f6c7c8d18db213c035aa89d29ed57f93552286b27810a2d254883"
+    }
+  },
+  "schema_version": 1
+}
