@@ -31,6 +31,22 @@ Security defaults are active in development: the socket binds only to `127.0.0.1
 Origin are restricted to loopback, unsafe requests require a per-process token, and static file
 paths cannot escape the shared Web root.
 
+Local Web FR24 uses the same `FR24Service` as the Apple Apps through a thin managed-browser adapter.
+Query opens Chrome, Edge, or Chromium with an isolated profile under the Local Web data root. After
+the user completes any normal FR24 / Cloudflare verification on the FR24 homepage, **Sync Browser
+Session** probes that same profile and enables route queries plus playback downloads. The homepage
+remains the only visible verification target; schedule/playback targets stay in the background and
+close if challenged. Every headed launcher reserves a randomized non-zero loopback DevTools port;
+this keeps `navigator.webdriver=false` instead of activating Chromium's `--remote-debugging-port=0`
+automation signal, while the endpoint remains host-private. No official API credential is
+requested, the normal browser profile is never opened, and cookies are not exported. GPX and FR24
+CSV/KML import plus **Match Current Track** continue to use the same local Swift route engine.
+macOS and native Windows launch the isolated browser directly. Linux Docker keeps that browser on
+the Linux desktop and exposes its loopback CDP only to a relay bound to the private Compose gateway;
+the Windows Docker fallback uses an ephemeral authenticated PowerShell relay. CDP HTTP and WebSocket
+are transported by the pinned SwiftNIO dependency, while every schedule/playback/cache/match decision
+remains in the shared `FR24Service` and `SimNavRuntimeRouter`.
+
 ## Cross-platform release payload
 
 Generate a new, self-contained Web candidate with the release-selected navigation database but
@@ -54,7 +70,9 @@ the ignored `database/e_dfd_PMDG_release.s3db`; packaging fails if it is missing
 first launch the shared data store copies that read-only release input into the independent Web
 data root. Later user imports remain active and are not overwritten by an upgrade. No user maps,
 GPX tracks, session state, cache, tokens, or logs are packaged. Docker publishes only to host
-`127.0.0.1`; only the marked container may bind `0.0.0.0` internally. Native macOS/Windows
+`127.0.0.1`; only the marked container may bind `0.0.0.0` internally. The Linux FR24 relay binds
+only the private Compose gateway; the Windows relay requires a random per-run token and strips it
+before forwarding to the browser. Native macOS/Windows
 launchers record a per-port PID and their stop scripts verify the executable path before stopping
 it; Docker stop scripts preserve the named data volume.
 

@@ -148,6 +148,9 @@ final class PackageBoundaryTests: XCTestCase {
             .init(method: "POST", path: "/fr24/access/probe"),
             .init(method: "POST", path: "/fr24/access/update"),
             .init(method: "POST", path: "/fr24/access/clear"),
+            .init(method: "POST", path: "/fr24/browser/open"),
+            .init(method: "POST", path: "/fr24/browser/sync"),
+            .init(method: "GET", path: "/fr24/browser/status"),
             .init(method: "GET", path: "/fr24/search"),
             .init(method: "GET", path: "/fr24/history"),
             .init(method: "GET", path: "/fr24/manual-history"),
@@ -215,6 +218,127 @@ final class PackageBoundaryTests: XCTestCase {
         XCTAssertFalse(String(decoding: response.body, as: UTF8.self).contains(dataRoot.path))
     }
 
+    func testManagedBrowserFR24CompletesZBAAToZULSQueryDownloadAndTrackMatch() throws {
+        var workspaceRoot = URL(fileURLWithPath: #filePath)
+        for _ in 0..<4 {
+            workspaceRoot.deleteLastPathComponent()
+        }
+        let databaseURL = [
+            workspaceRoot.appendingPathComponent("database/e_dfd_PMDG_release.s3db"),
+            workspaceRoot.appendingPathComponent("NavPlanner/Resources/Database/navdata.sqlite")
+        ].first { FileManager.default.fileExists(atPath: $0.path) }
+        guard let databaseURL else {
+            throw XCTSkip("Local ignored navigation database is not available.")
+        }
+
+        let dataRoot = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "SimNavManagedBrowserFR24Tests-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: dataRoot) }
+        let browser = ManagedBrowserFR24Fixture()
+        let router = SimNavRuntimeRouter(
+            configuration: RuntimeConfiguration(
+                dataRoot: dataRoot,
+                bundledDatabaseURL: databaseURL
+            ),
+            fr24BrowserFetcher: browser
+        )
+
+        let opened = try jsonObject(router.handle(RuntimeRequest(
+            method: "POST",
+            path: "/fr24/browser/open"
+        )))
+        XCTAssertEqual(opened["opened"] as? Bool, true)
+        XCTAssertEqual(opened["access_method"] as? String, "managed_browser")
+        XCTAssertEqual(
+            (opened["access"] as? [String: Any])?["access_method"] as? String,
+            "managed_browser"
+        )
+
+        let synced = try jsonObject(router.handle(RuntimeRequest(
+            method: "POST",
+            path: "/fr24/browser/sync"
+        )))
+        XCTAssertEqual(synced["verified"] as? Bool, true)
+        XCTAssertEqual(synced["access_state"] as? String, "available")
+        XCTAssertEqual(synced["access_method"] as? String, "managed_browser")
+
+        let search = try jsonObject(router.handle(RuntimeRequest(
+            method: "GET",
+            path: "/fr24/search",
+            query: [
+                "departure": ["ZBAA"],
+                "arrival": ["ZULS"],
+                "limit": ["10"]
+            ]
+        )))
+        let flights = try XCTUnwrap(search["flights"] as? [[String: Any]])
+        let flight = try XCTUnwrap(flights.first)
+        XCTAssertEqual(flight["fr24_id"] as? String, ManagedBrowserFR24Fixture.flightID)
+        XCTAssertEqual(flight["flight"] as? String, "CA4123")
+        XCTAssertEqual(flight["origin_icao"] as? String, "ZBAA")
+        XCTAssertEqual(flight["dest_icao"] as? String, "ZULS")
+
+        let downloadBody = try JSONSerialization.data(withJSONObject: [
+            "flight_id": ManagedBrowserFR24Fixture.flightID,
+            "flight": flight
+        ])
+        let downloadResponse = router.handle(RuntimeRequest(
+            method: "POST",
+            path: "/fr24/download",
+            headers: ["Content-Type": "application/json"],
+            body: downloadBody
+        ))
+        XCTAssertEqual(downloadResponse.status, 200)
+        let download = try jsonObject(downloadResponse)
+        let trackPoints = try XCTUnwrap(download["track_points"] as? [[String: Any]])
+        XCTAssertEqual(trackPoints.count, 14)
+        XCTAssertEqual(download["track_point_count"] as? Int, 14)
+        XCTAssertEqual(download["cache_hit"] as? Bool, false)
+
+        let matchBody = try JSONSerialization.data(withJSONObject: [
+            "departure": "ZBAA",
+            "arrival": "ZULS",
+            "track_points": trackPoints
+        ])
+        let matchResponse = router.handle(RuntimeRequest(
+            method: "POST",
+            path: "/route/track-match",
+            headers: ["Content-Type": "application/json"],
+            body: matchBody
+        ))
+        XCTAssertEqual(matchResponse.status, 200)
+        let match = try jsonObject(matchResponse)
+        XCTAssertNil(match["error"])
+        XCTAssertGreaterThanOrEqual((match["points"] as? [[String: Any]])?.count ?? 0, 35)
+        XCTAssertGreaterThanOrEqual((match["legs"] as? [[String: Any]])?.count ?? 0, 7)
+        let matchedDistance = try XCTUnwrap(match["distance_nm"] as? Double)
+        XCTAssertGreaterThan(matchedDistance, 1_500)
+        XCTAssertLessThan(matchedDistance, 1_750)
+        if databaseURL.lastPathComponent == "e_dfd_PMDG_release.s3db" {
+            XCTAssertEqual(matchedDistance, 1674.938876470219, accuracy: 0.01)
+        }
+
+        let cache = try jsonObject(router.handle(RuntimeRequest(
+            method: "GET",
+            path: "/fr24/cache/list",
+            query: ["query": ["CA4123"]]
+        )))
+        let cachedItems = try XCTUnwrap(cache["items"] as? [[String: Any]])
+        XCTAssertEqual(cachedItems.count, 1)
+        XCTAssertEqual(cachedItems.first?["fr24_id"] as? String, ManagedBrowserFR24Fixture.flightID)
+
+        let serializedPayloads = [opened, synced, search, download, match, cache]
+            .compactMap { try? JSONSerialization.data(withJSONObject: $0, options: [.sortedKeys]) }
+            .map { String(decoding: $0, as: UTF8.self) }
+            .joined(separator: "\n")
+        XCTAssertFalse(serializedPayloads.localizedCaseInsensitiveContains("api_token"))
+        XCTAssertFalse(serializedPayloads.localizedCaseInsensitiveContains("bearer"))
+        XCTAssertTrue(browser.requestedPaths.contains("/common/v1/airport.json"))
+        XCTAssertTrue(browser.requestedPaths.contains("/common/v1/flight-playback.json"))
+    }
+
     func testDirectRouterCoreSmokeWithDevelopmentDatabase() throws {
         var workspaceRoot = URL(fileURLWithPath: #filePath)
         for _ in 0..<4 {
@@ -275,4 +399,129 @@ final class PackageBoundaryTests: XCTestCase {
         }
         return String(format: "%016llx", value)
     }
+
+    private func jsonObject(_ response: RuntimeResponse) throws -> [String: Any] {
+        try XCTUnwrap(JSONSerialization.jsonObject(with: response.body) as? [String: Any])
+    }
+}
+
+private final class ManagedBrowserFR24Fixture: FR24BrowserFetching, FR24BrowserSessionManaging {
+    static let flightID = "40fc18c8"
+
+    private(set) var requestedPaths: [String] = []
+    private var opened = false
+
+    func openVerificationPage() throws -> [String: Any] {
+        opened = true
+        return [
+            "opened": true,
+            "access_method": "managed_browser",
+            "isolated_profile": true,
+            "message": "Fixture verification page opened."
+        ]
+    }
+
+    func browserSessionStatusPayload() -> [String: Any] {
+        [
+            "available": true,
+            "running": opened,
+            "isolated_profile": true,
+            "browser": "Fixture Chromium",
+            "verification_opened": opened
+        ]
+    }
+
+    func clearBrowserSession() throws {
+        opened = false
+    }
+
+    func performJSONRequest(path: String, params: [(String, String)]) throws -> [String: Any] {
+        requestedPaths.append(path)
+        if path == "/common/v1/airport.json" {
+            if params.contains(where: { $0.0 == "plugin-setting[schedule][timestamp]" }) {
+                throw NSError(
+                    domain: "ManagedBrowserFR24Fixture",
+                    code: 400,
+                    userInfo: [NSLocalizedDescriptionKey: "FR24 web returned HTTP 400."]
+                )
+            }
+            return Self.schedulePayload
+        }
+        if path == "/common/v1/flight-playback.json" {
+            return Self.playbackPayload
+        }
+        throw NSError(
+            domain: "ManagedBrowserFR24Fixture",
+            code: 404,
+            userInfo: [NSLocalizedDescriptionKey: "Unexpected fixture path: \(path)"]
+        )
+    }
+
+    func performFlightHistoryPageRequest(flightToken: String) throws -> [String: Any] {
+        ["title": flightToken, "url": "https://www.flightradar24.com/data/flights/\(flightToken)", "rows": []]
+    }
+
+    private static let schedulePayload: [String: Any] = [
+        "result": [
+            "response": [
+                "airport": [
+                    "pluginData": [
+                        "schedule": [
+                            "departures": [
+                                "data": [[
+                                    "flight": [
+                                        "identification": [
+                                            "id": flightID,
+                                            "number": ["default": "CA4123"],
+                                            "callsign": "CCA4123"
+                                        ],
+                                        "airline": ["name": "Air China"],
+                                        "aircraft": [
+                                            "model": ["code": "A359"],
+                                            "registration": "B-32NH"
+                                        ],
+                                        "airport": [
+                                            "origin": [
+                                                "code": ["icao": "ZBAA", "iata": "PEK"],
+                                                "name": "Beijing Capital"
+                                            ],
+                                            "destination": [
+                                                "code": ["icao": "ZULS", "iata": "LXA"],
+                                                "name": "Lhasa Gonggar"
+                                            ]
+                                        ],
+                                        "time": [
+                                            "scheduled": ["departure": 1_786_580_000, "arrival": 1_786_591_700],
+                                            "real": ["departure": 1_786_580_000, "arrival": 1_786_591_700]
+                                        ],
+                                        "status": ["text": "Landed"]
+                                    ]
+                                ]]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+    ]
+
+    private static let playbackPayload: [String: Any] = [
+        "flight": schedulePayload,
+        "track": [
+            ["lat": 40.07333333, "lon": 116.59833333, "altitude": 1_000, "speed": 180, "timestamp": 1_786_580_000],
+            ["lat": 38.75888889, "lon": 114.97777778, "altitude": 3_200, "speed": 210, "timestamp": 1_786_580_900],
+            ["lat": 38.31638889, "lon": 113.81555556, "altitude": 6_400, "speed": 240, "timestamp": 1_786_581_800],
+            ["lat": 37.32694444, "lon": 111.73750000, "altitude": 9_600, "speed": 270, "timestamp": 1_786_582_700],
+            ["lat": 34.50472222, "lon": 108.55166667, "altitude": 12_800, "speed": 300, "timestamp": 1_786_583_600],
+            ["lat": 33.41388889, "lon": 108.08805556, "altitude": 16_000, "speed": 330, "timestamp": 1_786_584_500],
+            ["lat": 32.30527778, "lon": 106.67444444, "altitude": 19_200, "speed": 360, "timestamp": 1_786_585_400],
+            ["lat": 31.04805556, "lon": 104.66722222, "altitude": 22_400, "speed": 390, "timestamp": 1_786_586_300],
+            ["lat": 30.64500000, "lon": 103.68666667, "altitude": 25_600, "speed": 420, "timestamp": 1_786_587_200],
+            ["lat": 30.78277778, "lon": 101.90277778, "altitude": 28_800, "speed": 420, "timestamp": 1_786_588_100],
+            ["lat": 31.14666667, "lon": 97.17666667, "altitude": 32_000, "speed": 420, "timestamp": 1_786_589_000],
+            ["lat": 30.51083333, "lon": 94.19805556, "altitude": 35_000, "speed": 420, "timestamp": 1_786_589_900],
+            ["lat": 29.82888889, "lon": 91.82222222, "altitude": 35_000, "speed": 420, "timestamp": 1_786_590_800],
+            ["lat": 29.29666667, "lon": 90.91166667, "altitude": 35_000, "speed": 420, "timestamp": 1_786_591_700]
+        ]
+    ]
 }

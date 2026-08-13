@@ -27,6 +27,19 @@ RUN --mount=type=cache,target=/root/.cache/org.swift.swiftpm \
     > /source/.build/simnav-test-list.txt \
     && test -s /source/.build/simnav-test-list.txt
 
+# Linux Docker launch keeps the visible Chromium process on the host. This
+# tiny relay binds only to the private Compose bridge gateway and forwards CDP
+# to Chromium's loopback-only random port, so no DevTools listener is exposed
+# to the LAN and the application container still uses the shared Swift adapter.
+FROM ubuntu:22.04@sha256:3b06811b2afd352be909dd088a004166d665dc76d38b13eada33522a9d915c6f AS fr24-relay
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends socat \
+    && rm -rf /var/lib/apt/lists/*
+
+USER 65534:65534
+ENTRYPOINT ["socat"]
+
 FROM ubuntu:22.04@sha256:3b06811b2afd352be909dd088a004166d665dc76d38b13eada33522a9d915c6f
 
 RUN apt-get update \

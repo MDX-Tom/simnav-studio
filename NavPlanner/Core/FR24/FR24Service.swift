@@ -3,9 +3,17 @@ import Foundation
 import FoundationNetworking
 #endif
 
-protocol FR24BrowserFetching: AnyObject {
+public protocol FR24BrowserFetching: AnyObject {
     func performJSONRequest(path: String, params: [(String, String)]) throws -> [String: Any]
     func performFlightHistoryPageRequest(flightToken: String) throws -> [String: Any]
+}
+
+/// Optional lifecycle surface implemented by Local Web's isolated browser
+/// adapter. Apple keeps its existing native verification-window callbacks.
+public protocol FR24BrowserSessionManaging: AnyObject {
+    func openVerificationPage() throws -> [String: Any]
+    func browserSessionStatusPayload() -> [String: Any]
+    func clearBrowserSession() throws
 }
 
 struct FR24CacheExport: Sendable {
@@ -179,8 +187,8 @@ enum FR24SessionStore {
         } else if cookieConfigured || frPlConfigured || browserSync > 0 {
             accessState = "configured"
         } else {
-            // FR24 has public endpoints that can work without a copied header.  Keep
-            // this state neutral until a real request has established availability.
+            // Keep the state neutral until the platform adapter has established
+            // a browser session with a real request.
             accessState = "unknown"
         }
         let warmupUntil = browserSync > 0 ? browserSync + browserWarmupWindow : 0
@@ -450,7 +458,17 @@ final class FR24Service: @unchecked Sendable {
     }
 
     func accessStatusPayload() -> [String: Any] {
-        FR24SessionStore.accessStatusPayload(userDefaults: userDefaults)
+        var payload = FR24SessionStore.accessStatusPayload(userDefaults: userDefaults)
+        guard let manager = browserFetcher as? FR24BrowserSessionManaging else {
+            payload["access_method"] = "web_session"
+            return payload
+        }
+        let browser = manager.browserSessionStatusPayload()
+        payload["access_method"] = "managed_browser"
+        payload["managed_browser"] = browser
+        payload["browser_adapter_available"] = browser["available"] as? Bool ?? false
+        payload["browser_running"] = browser["running"] as? Bool ?? false
+        return payload
     }
 
     func updateAccessPayload(webCookie: String?, frPl: String?) -> [String: Any] {
@@ -462,12 +480,42 @@ final class FR24Service: @unchecked Sendable {
     }
 
     func clearAccessPayload() -> [String: Any] {
-        FR24SessionStore.clearAccessPayload(userDefaults: userDefaults)
+        if let manager = browserFetcher as? FR24BrowserSessionManaging {
+            try? manager.clearBrowserSession()
+        }
+        _ = FR24SessionStore.clearAccessPayload(userDefaults: userDefaults)
+        var payload = accessStatusPayload()
+        payload["message"] = "已清除 FR24 浏览器会话与兼容配置。"
+        return payload
+    }
+
+    func openBrowserVerificationPayload() -> [String: Any] {
+        guard let manager = browserFetcher as? FR24BrowserSessionManaging else {
+            return ["error": "FR24 managed browser is unavailable.", "access": accessStatusPayload()]
+        }
+        do {
+            var payload = try manager.openVerificationPage()
+            payload["access"] = accessStatusPayload()
+            return payload
+        } catch {
+            return ["error": error.localizedDescription, "access": accessStatusPayload()]
+        }
+    }
+
+    func syncBrowserSessionPayload() -> [String: Any] {
+        guard browserFetcher is FR24BrowserSessionManaging else {
+            return ["error": "FR24 managed browser is unavailable.", "access": accessStatusPayload()]
+        }
+        FR24SessionStore.markBrowserSync(userDefaults: userDefaults)
+        return probeAccessPayload()
     }
 
     func probeAccessPayload() -> [String: Any] {
         FR24SessionStore.recordProbeAttempt(userDefaults: userDefaults)
-        let configured = !FR24SessionStore.storedWebCookie(userDefaults: userDefaults).isEmpty
+        let managedBrowserConfigured = browserFetcher is FR24BrowserSessionManaging
+            && userDefaults.double(forKey: FR24SessionStore.browserSyncKey) > 0
+        let configured = managedBrowserConfigured
+            || !FR24SessionStore.storedWebCookie(userDefaults: userDefaults).isEmpty
             || !FR24SessionStore.storedFRPl(userDefaults: userDefaults).isEmpty
         guard configured else {
             var payload = accessStatusPayload()
@@ -488,7 +536,7 @@ final class FR24Service: @unchecked Sendable {
                     ("page", "1"),
                     ("limit", "1")
                 ],
-                useBrowser: false,
+                useBrowser: managedBrowserConfigured,
                 retryChallenge: false
             )
             var payload = accessStatusPayload()
@@ -1880,6 +1928,9 @@ final class FR24Service: @unchecked Sendable {
                     }
                     if cancelled {
                         break
+                    }
+                    if browserFetcher is FR24BrowserSessionManaging {
+                        throw serviceError(message)
                     }
                     if Self.shouldSurfaceBrowserRequestError(message) {
                         throw serviceError(message)

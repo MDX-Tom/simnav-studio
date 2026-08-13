@@ -7,6 +7,7 @@ export function registerQueryPage(context) {
     formatCount,
     searchFR24Flights,
     importFR24GPX,
+    matchCurrentFR24Track,
     searchFR24ManualHistory,
     handleFR24FlightAction,
     searchFR24Cache,
@@ -32,6 +33,9 @@ export function registerQueryPage(context) {
     searchFR24Flights().catch(setErrorStatus);
   });
   elements.fr24ImportGPXButton?.addEventListener("click", importFR24GPX);
+  elements.fr24MatchImportedButton?.addEventListener("click", () => {
+    matchCurrentFR24Track().catch(setErrorStatus);
+  });
   elements.fr24ManualHistoryButton?.addEventListener("click", () => {
     searchFR24ManualHistory().catch(setErrorStatus);
   });

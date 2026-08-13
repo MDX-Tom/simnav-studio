@@ -42,6 +42,7 @@ required_files=(
   Dockerfile
   docker-compose.yml
   README.md
+  fr24-browser-bridge.ps1
   SHA256SUMS.txt
   web-manifest.json
   run-macos.command
@@ -56,6 +57,8 @@ required_files=(
   app/NavPlanner/Resources/Web/map.html
   app/NavPlanner/Resources/Web/runtime.js
   app/NavPlanner/Core/Runtime/SimNavRuntimeRouter.swift
+  app/NavPlanner/Core/FR24/FR24BrowserScripts.swift
+  app/LocalWeb/Sources/SimNavLocalWeb/LocalWebFR24BrowserFetch.swift
   app/LocalWeb/Sources/SimNavLocalWeb/LocalWebHTTPServer.swift
   app/LocalWeb/Sources/SimNavLocalWeb/LocalWebRequestProcessor.swift
   app/LocalWeb/Sources/SimNavLocalWeb/NIOHTTPServer.swift
@@ -99,7 +102,7 @@ import sys
 source = open(sys.argv[1], "r", encoding="utf-8").read()
 if 'exact: "2.101.3"' not in source:
     raise SystemExit("The direct SwiftNIO dependency is not pinned to the verified version.")
-if not all(product in source for product in ('NIOCore', 'NIOHTTP1', 'NIOPosix')):
+if not all(product in source for product in ('NIOCore', 'NIOHTTP1', 'NIOPosix', 'NIOWebSocket')):
     raise SystemExit("The portable SwiftNIO HTTP adapter dependencies are incomplete.")
 hummingbird = re.search(
     r'name:\s*"Hummingbird".*?condition:\s*\.when\(platforms:\s*\[(.*?)\]\)',
@@ -182,6 +185,15 @@ if manifest.get("http_transports") != {
     "windows": "swift-nio-2.101.3",
 }:
     raise SystemExit("Web manifest does not pin the platform HTTP transports.")
+if manifest.get("fr24") != {
+    "backend": "shared-FR24Service",
+    "adapter": "managed-Chromium-CDP",
+    "official_api_credential_required": False,
+    "browser_profile": "isolated-and-persistent",
+    "linux_docker_bridge": "private-compose-gateway",
+    "windows_docker_bridge": "ephemeral-authenticated-host-relay",
+}:
+    raise SystemExit("Web manifest does not describe the App-parity FR24 browser bridge.")
 security = manifest.get("security", {})
 if security.get("published_host") != "127.0.0.1":
     raise SystemExit("Web manifest does not enforce loopback publication.")
@@ -197,6 +209,25 @@ if ! rg -q '^USER 10001:10001$' "${package_dir}/Dockerfile" \
     || ! rg -q 'read_only: true' "${package_dir}/docker-compose.yml" \
     || ! rg -q 'no-new-privileges:true' "${package_dir}/docker-compose.yml"; then
   echo "Container non-root/read-only/no-new-privileges gates are incomplete." >&2
+  exit 3
+fi
+if ! rg -q '^FROM .* AS fr24-relay$' "${package_dir}/Dockerfile" \
+    || ! rg -q '^USER 65534:65534$' "${package_dir}/Dockerfile" \
+    || ! rg -q 'SIMNAV_FR24_CDP_ENDPOINT:' "${package_dir}/docker-compose.yml" \
+    || ! rg -q 'bind=\$\{gateway\}' "${package_dir}/run-linux.sh" \
+    || ! rg -q 'X-CDP-Token' "${package_dir}/fr24-browser-bridge.ps1"; then
+  echo "Managed-browser host bridge gates are incomplete." >&2
+  exit 3
+fi
+if rg -Fq -- '--remote-debugging-port=0' \
+    "${package_dir}/run-linux.sh" \
+    "${package_dir}/run-windows.ps1"; then
+  echo "A managed-browser launcher exposes Chromium's automation-identifying zero DevTools port." >&2
+  exit 3
+fi
+if ! rg -Fq -- '--remote-debugging-port=${browser_port}' "${package_dir}/run-linux.sh" \
+    || ! rg -Fq -- '--remote-debugging-port=$BrowserPort' "${package_dir}/run-windows.ps1"; then
+  echo "A managed-browser launcher does not allocate a non-zero private DevTools port." >&2
   exit 3
 fi
 if ! rg -q 'SIMNAV_DATABASE=/opt/simnav/Database/navdata.sqlite' "${package_dir}/Dockerfile" \
@@ -562,6 +593,7 @@ echo "WEB_SINGLE_UI_AND_SWIFT_CORE_PARITY=passed"
 echo "WEB_PACKAGE_CHECKSUMS=passed"
 echo "WEB_BUNDLED_DATABASE_PARITY=passed"
 echo "WEB_LOOPBACK_AND_CONTAINER_SECURITY=passed"
+echo "WEB_FR24_NON_AUTOMATION_BROWSER=passed"
 if ((docker_smoke == 1)); then
   echo "WEB_LINUX_SWIFT_TESTS=passed"
   echo "WEB_LINUX_CONTAINER_SMOKE=passed"

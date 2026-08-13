@@ -53,6 +53,9 @@ public final class SimNavRuntimeRouter: @unchecked Sendable {
         RuntimeRouteDescriptor(method: "POST", path: "/fr24/access/probe"),
         RuntimeRouteDescriptor(method: "POST", path: "/fr24/access/update"),
         RuntimeRouteDescriptor(method: "POST", path: "/fr24/access/clear"),
+        RuntimeRouteDescriptor(method: "POST", path: "/fr24/browser/open"),
+        RuntimeRouteDescriptor(method: "POST", path: "/fr24/browser/sync"),
+        RuntimeRouteDescriptor(method: "GET", path: "/fr24/browser/status"),
         RuntimeRouteDescriptor(method: "GET", path: "/fr24/search"),
         RuntimeRouteDescriptor(method: "GET", path: "/fr24/history"),
         RuntimeRouteDescriptor(method: "GET", path: "/fr24/manual-history"),
@@ -71,7 +74,8 @@ public final class SimNavRuntimeRouter: @unchecked Sendable {
 
     public convenience init(
         configuration: RuntimeConfiguration,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        fr24BrowserFetcher: FR24BrowserFetching? = nil
     ) {
         let dataStore = LocalDataStore(
             fileManager: fileManager,
@@ -95,7 +99,8 @@ public final class SimNavRuntimeRouter: @unchecked Sendable {
             rootDirectory: configuration.dataRoot.appendingPathComponent("FR24", isDirectory: true),
             sessionFileURL: configuration.dataRoot
                 .appendingPathComponent("Config", isDirectory: true)
-                .appendingPathComponent("fr24-session.json")
+                .appendingPathComponent("fr24-session.json"),
+            browserFetcher: fr24BrowserFetcher
         )
         self.init(
             plannerService: plannerService,
@@ -511,6 +516,26 @@ public final class SimNavRuntimeRouter: @unchecked Sendable {
                 return jsonResponse(["error": "FR24 access clear requires POST."], status: 405)
             }
             return jsonResponse(fr24Service.clearAccessPayload())
+        }
+        if path == "/fr24/browser/open" {
+            guard request.method == "POST" else {
+                return jsonResponse(["error": "FR24 browser open requires POST."], status: 405)
+            }
+            let payload = fr24Service.openBrowserVerificationPayload()
+            return jsonResponse(payload, status: payload["error"] == nil ? 200 : 503)
+        }
+        if path == "/fr24/browser/sync" {
+            guard request.method == "POST" else {
+                return jsonResponse(["error": "FR24 browser sync requires POST."], status: 405)
+            }
+            let payload = fr24Service.syncBrowserSessionPayload()
+            return jsonResponse(payload, status: payload["error"] == nil ? 200 : 503)
+        }
+        if path == "/fr24/browser/status" {
+            guard request.method == "GET" else {
+                return jsonResponse(["error": "FR24 browser status requires GET."], status: 405)
+            }
+            return jsonResponse(fr24Service.accessStatusPayload())
         }
         if path == "/fr24/search" || path == "/fr24/history" {
             guard request.method == "GET" else {

@@ -46,6 +46,7 @@
 		B00000000000000000000023 /* RuntimeHTTPRequestAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000023 /* RuntimeHTTPRequestAdapter.swift */; };
 		B00000000000000000000025 /* WeatherProxy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000025 /* WeatherProxy.swift */; };
 		B00000000000000000000026 /* FR24Service.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000026 /* FR24Service.swift */; };
+		B00000000000000000000029 /* FR24BrowserScripts.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000029 /* FR24BrowserScripts.swift */; };
 		B00000000000000000000027 /* SimNavWebResourceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000027 /* SimNavWebResourceStore.swift */; };
 		B00000000000000000000028 /* RuntimeWebKitResponseAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000028 /* RuntimeWebKitResponseAdapter.swift */; };
 		B00000000000000000000022 /* SimNavRuntimeRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000022 /* SimNavRuntimeRouter.swift */; };
@@ -83,6 +84,7 @@
 		F00000000000000000000023 /* RuntimeHTTPRequestAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeHTTPRequestAdapter.swift; sourceTree = "<group>"; };
 		F00000000000000000000025 /* WeatherProxy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherProxy.swift; sourceTree = "<group>"; };
 		F00000000000000000000026 /* FR24Service.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FR24Service.swift; sourceTree = "<group>"; };
+		F00000000000000000000029 /* FR24BrowserScripts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FR24BrowserScripts.swift; sourceTree = "<group>"; };
 		F00000000000000000000027 /* SimNavWebResourceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimNavWebResourceStore.swift; sourceTree = "<group>"; };
 		F00000000000000000000028 /* RuntimeWebKitResponseAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeWebKitResponseAdapter.swift; sourceTree = "<group>"; };
 		F00000000000000000000022 /* SimNavRuntimeRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimNavRuntimeRouter.swift; sourceTree = "<group>"; };
@@ -306,6 +308,7 @@
 		G00000000000000000000018 /* FR24 */ = {
 			isa = PBXGroup;
 			children = (
+				F00000000000000000000029 /* FR24BrowserScripts.swift */,
 				F00000000000000000000026 /* FR24Service.swift */,
 			);
 			path = FR24;
@@ -454,6 +457,7 @@
 				B00000000000000000000023 /* RuntimeHTTPRequestAdapter.swift in Sources */,
 				B00000000000000000000025 /* WeatherProxy.swift in Sources */,
 				B00000000000000000000026 /* FR24Service.swift in Sources */,
+				B00000000000000000000029 /* FR24BrowserScripts.swift in Sources */,
 				B00000000000000000000022 /* SimNavRuntimeRouter.swift in Sources */,
 				B00000000000000000000027 /* SimNavWebResourceStore.swift in Sources */,
 				B00000000000000000000028 /* RuntimeWebKitResponseAdapter.swift in Sources */,

@@ -8,9 +8,12 @@ struct NIOHTTPServer: Sendable {
     let settings: LocalWebSettings
     let processor: LocalWebRequestProcessor
 
-    init(settings: LocalWebSettings) {
+    init(settings: LocalWebSettings, fr24BrowserFetcher: FR24BrowserFetching? = nil) {
         self.settings = settings
-        self.processor = LocalWebRequestProcessor(settings: settings)
+        self.processor = LocalWebRequestProcessor(
+            settings: settings,
+            fr24BrowserFetcher: fr24BrowserFetcher
+        )
     }
 
     func run() async throws {

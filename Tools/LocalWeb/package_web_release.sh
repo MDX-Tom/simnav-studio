@@ -146,6 +146,7 @@ cp -R "${project_root}/LocalWeb/Sources" "${project_root}/LocalWeb/Support" \
 
 for template in \
   Dockerfile docker-compose.yml .dockerignore README.md \
+  fr24-browser-bridge.ps1 \
   run-container.sh run-linux.sh run-macos.command run-windows.ps1 \
   stop-container.sh stop-linux.sh stop-macos.command stop-windows.ps1; do
   cp "${template_root}/${template}" "${package_root}/${template}"
@@ -246,6 +247,14 @@ manifest = {
         "macos": "hummingbird-2.22.0",
         "linux": "hummingbird-2.22.0",
         "windows": "swift-nio-2.101.3",
+    },
+    "fr24": {
+        "backend": "shared-FR24Service",
+        "adapter": "managed-Chromium-CDP",
+        "official_api_credential_required": False,
+        "browser_profile": "isolated-and-persistent",
+        "linux_docker_bridge": "private-compose-gateway",
+        "windows_docker_bridge": "ephemeral-authenticated-host-relay",
     },
     "security": {
         "published_host": "127.0.0.1",

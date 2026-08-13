@@ -76,9 +76,16 @@ struct LocalWebRequestProcessor: Sendable {
     let runtimeRouter: SimNavRuntimeRouter
     let webResourceStore: SimNavWebResourceStore
 
-    init(settings: LocalWebSettings) {
+    init(
+        settings: LocalWebSettings,
+        fr24BrowserFetcher: FR24BrowserFetching? = nil
+    ) {
         self.settings = settings
-        self.runtimeRouter = SimNavRuntimeRouter(configuration: settings.runtimeConfiguration)
+        let browserFetcher = fr24BrowserFetcher ?? LocalWebFR24BrowserFetch(dataRoot: settings.dataRoot)
+        self.runtimeRouter = SimNavRuntimeRouter(
+            configuration: settings.runtimeConfiguration,
+            fr24BrowserFetcher: browserFetcher
+        )
         self.webResourceStore = SimNavWebResourceStore(rootURL: settings.webRoot)
     }
 

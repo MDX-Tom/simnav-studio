@@ -499,10 +499,11 @@ const TRANSLATIONS = {
   "track.stopped": { "zh-Hans": "轨迹匹配已停止。", en: "Track match stopped." },
   "query.title": { "zh-Hans": "FR24 航班查询", en: "FR24 Flight Query" },
   "query.search": { "zh-Hans": "查询", en: "Search" },
-  "query.importGPX": { "zh-Hans": "手动导入", en: "Import GPX" },
-  "query.importGPXOpening": { "zh-Hans": "请选择 GPX 轨迹文件。", en: "Choose a GPX track file." },
-  "query.importGPXCancelled": { "zh-Hans": "已取消选择 GPX 轨迹文件。", en: "GPX file selection cancelled." },
+  "query.importGPX": { "zh-Hans": "手动导入", en: "Import Track" },
+  "query.importGPXOpening": { "zh-Hans": "请选择 GPX、FR24 CSV 或 KML 轨迹文件。", en: "Choose a GPX, FR24 CSV, or KML track file." },
+  "query.importGPXCancelled": { "zh-Hans": "已取消选择轨迹文件。", en: "Track file selection cancelled." },
   "query.importGPXDrawn": { "zh-Hans": "已导入并绘制 {filename}，共 {count} 个点。", en: "Imported and drawn {filename} with {count} points." },
+  "query.matchImported": { "zh-Hans": "拟合当前轨迹", en: "Match Current Track" },
   "query.hint": { "zh-Hans": "", en: "" },
   "query.statusInitial": { "zh-Hans": "填好起飞和到达机场后，可查询该航线的最新 FR24 航班。", en: "Enter departure and arrival first, then search recent FR24 flights on this route." },
   "query.manualHistoryTitle": { "zh-Hans": "手动航班历史", en: "Manual Flight History" },
@@ -632,43 +633,42 @@ const TRANSLATIONS = {
   "query.cacheBrowserList": { "zh-Hans": "Local Web 缓存文件可从下方缓存航班列表直接下载。", en: "Local Web cache files can be downloaded from the cached-flight list below." },
   "query.cacheDirectoryFailed": { "zh-Hans": "无法打开 FR24 缓存目录。", en: "Could not open the FR24 cache folder." },
   "query.access": { "zh-Hans": "FR24 网络访问", en: "FR24 Network Access" },
-  "query.accessInitial": { "zh-Hans": "FR24 尚未探测，可直接查询。", en: "FR24 has not been probed yet; you can query directly." },
-  "query.accessSummary": { "zh-Hans": "FR24 访问状态：{state}。", en: "FR24 access: {state}." },
+  "query.accessInitial": { "zh-Hans": "请打开 FR24 验证页，正常完成验证后同步浏览器会话。", en: "Open FR24 verification, complete it normally, then sync the browser session." },
+  "query.accessSummary": { "zh-Hans": "FR24：{method} · {state}。", en: "FR24: {method} · {state}." },
+  "query.accessMethodManagedBrowser": { "zh-Hans": "SimNav 专用浏览器会话", en: "dedicated SimNav browser session" },
+  "query.accessMethodWeb": { "zh-Hans": "App 内 Web 会话", en: "in-app Web session" },
+  "query.accessMethodNone": { "zh-Hans": "未配置访问方式", en: "no access method configured" },
   "query.accessSyncedState": { "zh-Hans": "已同步", en: "synced" },
   "query.accessUnsyncedState": { "zh-Hans": "未同步", en: "not synced" },
   "query.accessStateAvailable": { "zh-Hans": "最近访问成功", en: "recently available" },
   "query.accessStateChallenge": { "zh-Hans": "需要验证，查询会自动重试", en: "verification required; queries retry automatically" },
   "query.accessStateExpired": { "zh-Hans": "成功记录已过期，等待重新探测", en: "success record expired; awaiting a new probe" },
-  "query.accessStateConfigured": { "zh-Hans": "会话已配置，等待验证", en: "session configured; awaiting verification" },
-  "query.accessStateVerifying": { "zh-Hans": "已保存会话，正在验证", en: "session saved; verifying" },
-  "query.accessStateUnknown": { "zh-Hans": "尚未探测，可直接查询", en: "not yet probed; direct query available" },
+  "query.accessStateConfigured": { "zh-Hans": "凭据已配置，等待验证", en: "credentials configured; awaiting verification" },
+  "query.accessStateVerifying": { "zh-Hans": "正在验证凭据", en: "verifying credentials" },
+  "query.accessStateUnknown": { "zh-Hans": "尚未配置或探测", en: "not configured or probed" },
   "query.accessWarmup": { "zh-Hans": "会话正在生效，{seconds}s 后自动查询...", en: "Session is warming up; querying automatically in {seconds}s..." },
   "query.accessConfigured": { "zh-Hans": "已配置", en: "configured" },
   "query.accessMissing": { "zh-Hans": "未配置", en: "missing" },
   "query.accessOpenBrowser": { "zh-Hans": "打开 FR24 验证页", en: "Open FR24 Verification" },
-  "query.accessSyncBrowser": { "zh-Hans": "同步内置浏览器会话", en: "Sync Browser Session" },
-  "query.accessOpenExternal": { "zh-Hans": "在浏览器中打开 FR24", en: "Open FR24 in Browser" },
-  "query.accessSyncLimitation": { "zh-Hans": "查看会话同步限制", en: "Session Sync Limitation" },
+  "query.accessSyncBrowser": { "zh-Hans": "同步浏览器会话", en: "Sync Browser Session" },
   "query.accessProbe": { "zh-Hans": "验证 / 重试", en: "Verify / Retry" },
-  "query.accessVerifying": { "zh-Hans": "已保存 FR24 会话，正在验证是否可用...", en: "FR24 session saved; verifying availability..." },
-  "query.accessVerified": { "zh-Hans": "FR24 会话已验证，可执行在线查询。", en: "FR24 session verified; online queries are available." },
-  "query.accessProbeFailed": { "zh-Hans": "FR24 尚未接受已保存会话；旧结果已保留，请重新验证后重试。", en: "FR24 has not accepted the saved session. Previous results were kept; verify again and retry." },
-  "query.accessOpening": { "zh-Hans": "已打开 FR24 验证页；完成验证后点“同步会话”。", en: "FR24 verification opened. Complete verification, then tap Sync Session." },
-  "query.accessSyncing": { "zh-Hans": "正在同步内置浏览器中的 FR24 会话...", en: "Syncing the FR24 session from the in-app browser..." },
-  "query.accessSynced": { "zh-Hans": "已从内置浏览器同步 FR24 Web 会话。", en: "FR24 Web session synced from the in-app browser." },
-  "query.accessSyncMissing": { "zh-Hans": "内置浏览器还没有可同步的 FR24 会话。请先完成 FR24 / Cloudflare 验证。", en: "No FR24 session is available in the in-app browser yet. Complete FR24 / Cloudflare verification first." },
-  "query.accessExternalOpened": { "zh-Hans": "已在独立标签页打开 FR24。Local Web 不读取其他标签页 Cookie、不绕过 Cloudflare；如获授权可使用下方手动会话配置。", en: "FR24 opened in a separate tab. Local Web does not read another tab's cookies or bypass Cloudflare; use the manual session fields below only when authorized." },
-  "query.accessExternalBlocked": { "zh-Hans": "浏览器拦截了 FR24 新标签页，请允许弹窗后重试。", en: "The browser blocked the FR24 tab. Allow pop-ups and try again." },
-  "query.accessSyncUnsupported": { "zh-Hans": "Local Web 无法读取其他浏览器标签页的 Cookie，且不会绕过 FR24 / Cloudflare 验证。可在获授权时使用下方手动配置。", en: "Local Web cannot read cookies from another browser tab and does not bypass FR24 or Cloudflare verification. Use the manual fields below only when authorized." },
-  "query.accessManual": { "zh-Hans": "高级：手动会话配置（可选）", en: "Advanced: Manual Session (Optional)" },
+  "query.accessVerifying": { "zh-Hans": "正在验证 FR24 浏览器会话...", en: "Verifying the FR24 browser session..." },
+  "query.accessVerified": { "zh-Hans": "FR24 在线访问已验证，可执行查询与轨迹下载。", en: "FR24 online access verified; queries and track downloads are available." },
+  "query.accessProbeFailed": { "zh-Hans": "FR24 尚未接受当前浏览器会话；旧结果已保留，请在验证窗口完成验证后重新同步。", en: "FR24 has not accepted the current browser session. Previous results were kept; complete verification in the browser window and sync again." },
+  "query.accessOpening": { "zh-Hans": "已打开 FR24 验证页；正常完成验证后点“同步浏览器会话”。", en: "FR24 verification opened. Complete it normally, then select Sync Browser Session." },
+  "query.accessSyncing": { "zh-Hans": "正在同步并验证 FR24 浏览器会话...", en: "Syncing and verifying the FR24 browser session..." },
+  "query.accessSynced": { "zh-Hans": "FR24 浏览器会话已同步。", en: "The FR24 browser session was synced." },
+  "query.accessSyncMissing": { "zh-Hans": "浏览器中还没有可用的 FR24 会话。请先正常完成 FR24 / Cloudflare 验证。", en: "No usable FR24 session is available in the browser yet. Complete FR24 / Cloudflare verification normally first." },
+  "query.accessRequiredForSearch": { "zh-Hans": "请先打开 FR24 验证页，正常完成验证后同步浏览器会话。", en: "Open FR24 verification first, complete it normally, then sync the browser session." },
+  "query.accessManual": { "zh-Hans": "兼容模式：FR24 Web 会话（Apple App）", en: "Compatibility: FR24 Web Session (Apple App)" },
   "query.accessCookie": { "zh-Hans": "FR24 Web Cookie", en: "FR24 Web Cookie" },
   "query.accessFrPl": { "zh-Hans": "_frPl", en: "_frPl" },
   "query.accessSave": { "zh-Hans": "保存手动配置", en: "Save Manual Session" },
-  "query.accessClear": { "zh-Hans": "清除会话配置", en: "Clear Session" },
+  "query.accessClear": { "zh-Hans": "清除访问配置", en: "Clear Access" },
   "query.accessSaved": { "zh-Hans": "已保存 FR24 Web 会话配置。", en: "FR24 Web session saved." },
-  "query.accessCleared": { "zh-Hans": "已清除 FR24 Web 会话配置。", en: "FR24 Web session cleared." },
+  "query.accessCleared": { "zh-Hans": "已清除 FR24 浏览器会话与兼容配置。", en: "FR24 browser-session and compatibility settings cleared." },
   "query.accessHint": { "zh-Hans": "在 App 内打开 FR24 验证页并正常完成验证，然后同步会话，即可查询 FR24 航班。", en: "Open FR24 verification inside the app, complete verification normally, then sync the session to query FR24 flights." },
-  "query.accessHintLocalWeb": { "zh-Hans": "Local Web 可在独立标签页正常打开 FR24，但不会读取其他标签页 Cookie，也不会绕过 FR24 / Cloudflare 验证；仅在获授权时使用下方手动会话配置。", en: "Local Web can open FR24 normally in a separate tab, but it does not read another tab's cookies or bypass FR24 / Cloudflare verification. Use the manual session fields below only when authorized." },
+  "query.accessHintLocalWeb": { "zh-Hans": "Local Web 会打开隔离的 SimNav 专用浏览器配置；正常完成 FR24 验证后同步会话，即可查询航班和下载轨迹，无需填写官方 API。", en: "Local Web opens an isolated SimNav browser profile. Complete FR24 verification normally and sync the session to query flights and download tracks, with no official API entry required." },
   "query.undoTrack": { "zh-Hans": "撤销上一步绘制", en: "Undo Last Drawing" },
   "query.redoTrack": { "zh-Hans": "重做上次撤销", en: "Redo Last Undo" },
   "query.clearTrack": { "zh-Hans": "清除绘制", en: "Clear Drawing" },
@@ -1477,6 +1477,7 @@ const elements = {
   resetAllSettingsButton: document.querySelector("#resetAllSettingsButton"),
   fr24SearchButton: document.querySelector("#fr24SearchButton"),
   fr24ImportGPXButton: document.querySelector("#fr24ImportGPXButton"),
+  fr24MatchImportedButton: document.querySelector("#fr24MatchImportedButton"),
   fr24ManualHistoryInput: document.querySelector("#fr24ManualHistoryInput"),
   fr24ManualHistoryButton: document.querySelector("#fr24ManualHistoryButton"),
   fr24QueryStatus: document.querySelector("#fr24QueryStatus"),
@@ -5208,6 +5209,14 @@ function redoMapDrawing() {
 }
 
 function updateTrackHistoryControlState() {
+  if (elements.fr24MatchImportedButton) {
+    const canMatch = Boolean(
+      state.fr24TrackPayload?.planned !== true
+      && (state.fr24TrackPayload?.track_points?.length || 0) >= 2,
+    );
+    elements.fr24MatchImportedButton.disabled = !canMatch;
+    elements.fr24MatchImportedButton.setAttribute("aria-disabled", String(!canMatch));
+  }
   if (!trackHistoryControlContainer) {
     return;
   }
@@ -8171,20 +8180,18 @@ async function handleNativeOfflineMapImported(payload = {}) {
 }
 
 function updateRuntimeCapabilityLabels() {
-  const usesLocalWebFallback = Boolean(runtime.capabilities?.fr24CompliantFallback);
+  const usesManagedBrowser = Boolean(runtime.capabilities?.fr24ManagedBrowserSession);
   if (elements.fr24OpenBrowserButton) {
-    elements.fr24OpenBrowserButton.textContent = t(
-      usesLocalWebFallback ? "query.accessOpenExternal" : "query.accessOpenBrowser",
-    );
+    elements.fr24OpenBrowserButton.textContent = t("query.accessOpenBrowser");
   }
   if (elements.fr24SyncBrowserButton) {
-    elements.fr24SyncBrowserButton.textContent = t(
-      usesLocalWebFallback ? "query.accessSyncLimitation" : "query.accessSyncBrowser",
-    );
+    elements.fr24SyncBrowserButton.classList.remove("hidden");
+    elements.fr24SyncBrowserButton.textContent = t("query.accessSyncBrowser");
   }
+  document.querySelector(".query-manual-access")?.classList.toggle("hidden", usesManagedBrowser);
   if (elements.fr24AccessHint) {
     elements.fr24AccessHint.textContent = t(
-      usesLocalWebFallback ? "query.accessHintLocalWeb" : "query.accessHint",
+      usesManagedBrowser ? "query.accessHintLocalWeb" : "query.accessHint",
     );
   }
   if (elements.fr24OpenCacheDirectoryButton) {
@@ -8772,6 +8779,7 @@ function localizedErrorMessage(message) {
     [/^Waypoint (.+) not found\.?$/i, (_match, fix) => t("error.waypoint", { fix })],
     [/^No legal airway path could be built from the imported trajectory\.?$/i, () => t("error.trackNoPath")],
     [/^No drawable route points could be built from the imported trajectory\.?$/i, () => t("error.trackNoPoints")],
+    [/^FR24 web access requires verification in the SimNav browser window\.?$/i, () => t("error.fr24Session")],
     [/^FR24 web access was blocked\. Open FR24 verification in Query, complete verification, then sync the session\.?$/i, () => t("error.fr24Session")],
     [/^FR24 web access was blocked by Cloudflare verification\.?$/i, () => t("error.fr24Cloudflare")],
     [/^FR24 web returned an HTML response\.?$/i, () => t("error.fr24Cloudflare")],
@@ -13805,6 +13813,7 @@ function setFR24QueryBusy(isBusy) {
   [
     elements.fr24SearchButton,
     elements.fr24ImportGPXButton,
+    elements.fr24MatchImportedButton,
     elements.fr24ManualHistoryButton,
     elements.fr24CacheSearchButton,
     elements.fr24OpenCacheDirectoryButton,
@@ -13821,6 +13830,9 @@ function setFR24QueryBusy(isBusy) {
   }
   if (elements.fr24CacheSearchInput) {
     elements.fr24CacheSearchInput.disabled = Boolean(isBusy);
+  }
+  if (!isBusy) {
+    updateTrackHistoryControlState();
   }
 }
 
@@ -14237,7 +14249,13 @@ function updateFR24AccessSummary(payload) {
     configured: "query.accessStateConfigured",
     unknown: "query.accessStateUnknown",
   }[accessState] || "query.accessStateUnknown");
+  const methodKey = ({
+    managed_browser: "query.accessMethodManagedBrowser",
+    web_session: "query.accessMethodWeb",
+    none: "query.accessMethodNone",
+  })[String(payload?.access_method || "none")] || "query.accessMethodNone";
   elements.fr24AccessSummary.textContent = t("query.accessSummary", {
+    method: t(methodKey),
     state: t(labelKey),
   });
 }
@@ -14266,25 +14284,36 @@ function fr24NativeSessionMessage(payload = {}) {
   return currentLanguage() === "zh-Hans" && rawMessage ? rawMessage : t("query.accessSaved");
 }
 
-function openFR24VerificationBrowser() {
+async function openFR24VerificationBrowser() {
   try {
-    const payload = runtime.openFR24Verification();
+    const payload = await runtime.openFR24Verification();
+    updateFR24AccessSummary(payload?.access || state.fr24AccessStatus || {});
     if (payload?.pending_native) {
       setFR24QueryStatus(t("query.accessOpening"));
     } else {
-      setFR24QueryStatus(t(payload?.opened ? "query.accessExternalOpened" : "query.accessExternalBlocked"), !payload?.opened);
+      setFR24QueryStatus(t("query.accessOpening"), !payload?.opened);
     }
   } catch (error) {
-    setFR24QueryStatus(cleanErrorMessage(error?.message || t("query.accessExternalBlocked")), true);
+    setFR24QueryStatus(localizedErrorMessage(error?.message || "FR24 browser launch failed."), true);
   }
 }
 
-function syncFR24BrowserSession() {
-  const payload = runtime.syncFR24Session();
-  setFR24QueryStatus(
-    payload?.pending_native ? t("query.accessSyncing") : t("query.accessSyncUnsupported"),
-    Boolean(payload?.unsupported),
-  );
+async function syncFR24BrowserSession() {
+  setFR24QueryStatus(t("query.accessSyncing"));
+  try {
+    const payload = await runtime.syncFR24Session();
+    if (payload?.pending_native) {
+      return;
+    }
+    updateFR24AccessSummary(payload || {});
+    setFR24QueryStatus(
+      payload?.verified ? t("query.accessSynced") : t("query.accessProbeFailed"),
+      !payload?.verified,
+    );
+  } catch (error) {
+    setFR24QueryStatus(localizedErrorMessage(error?.message || "FR24 session sync failed."), true);
+    await refreshFR24AccessStatus().catch(() => null);
+  }
 }
 
 function openFR24CacheDirectory() {
@@ -14306,7 +14335,7 @@ async function importFR24GPX() {
   } catch (error) {
     handleNativeFR24GPXImported({
       error: true,
-      message: cleanErrorMessage(error?.message || "GPX import failed."),
+      message: cleanErrorMessage(error?.message || "Track import failed."),
     });
   }
 }
@@ -14518,7 +14547,12 @@ async function searchFR24Flights() {
     if (!state.fr24AccessStatus) {
       await refreshFR24AccessStatus();
     }
-    await maybeProbeFR24Access({ announce: true });
+    if (runtime.capabilities.fr24ManagedBrowserSession
+      && !fr24SessionIsConfigured(state.fr24AccessStatus)) {
+      setFR24QueryStatus(t("query.accessRequiredForSearch"), true, requestVersion);
+      return;
+    }
+    const accessProbe = await maybeProbeFR24Access({ announce: true });
     if (requestVersion !== state.fr24QueryRequestVersion) {
       return;
     }
@@ -14567,6 +14601,14 @@ async function searchFR24ManualHistory() {
   const query = elements.fr24ManualHistoryInput?.value.trim() || "";
   if (!query) {
     setFR24QueryStatus(t("query.manualHistoryMissing"), true);
+    return;
+  }
+  if (!state.fr24AccessStatus) {
+    await refreshFR24AccessStatus();
+  }
+  if (runtime.capabilities.fr24ManagedBrowserSession
+    && !fr24SessionIsConfigured(state.fr24AccessStatus)) {
+    setFR24QueryStatus(t("query.accessRequiredForSearch"), true);
     return;
   }
   const route = optionalQueryRouteInputs();
@@ -15338,6 +15380,58 @@ async function matchFR24FlightTrack(key) {
   }
 }
 
+async function matchCurrentFR24Track() {
+  const route = currentQueryRouteInputs();
+  const trackPoints = state.fr24TrackPayload?.track_points || [];
+  if (!route || trackPoints.length < 2 || state.fr24TrackPayload?.planned === true) {
+    setFR24QueryStatus(t("query.noFR24Track"), true);
+    return;
+  }
+  const controller = beginRouteOperation(t("track.operation"));
+  setFR24QueryBusy(true);
+  setFR24QueryStatus(t("query.matching"));
+  try {
+    if (state.currentRoutePayload && !state.preTrackMatchRoutePayload) {
+      state.preTrackMatchRoutePayload = cloneJSON(state.currentRoutePayload);
+      state.preTrackMatchAirports = cloneJSON(state.currentRouteAirports);
+      state.preTrackMatchRouteLayerKind = state.currentRouteLayerKind;
+    }
+    const payload = await fetchJson("/api/route/track-match", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        departure: route.departure,
+        arrival: route.arrival,
+        track_points: trackPoints,
+      }),
+      signal: controller.signal,
+    });
+    throwIfAborted(controller.signal);
+    await applyRoutePayload(payload, route.departure, route.arrival, {
+      signal: controller.signal,
+      routeLayerKind: "route",
+    });
+    const message = t("query.matched", {
+      message: currentLanguage() === "zh-Hans" && payload.message
+        ? payload.message
+        : t("track.importMatchedFallback"),
+      distance: Math.round(payload.distance_nm || 0),
+    });
+    setFR24QueryStatus(message);
+    setStatus(message, false, "success");
+  } catch (error) {
+    if (isAbortError(error)) {
+      setFR24QueryStatus(t("query.cancelled"));
+      setStatus(t("track.stopped"));
+    } else {
+      setFR24QueryStatus(localizedErrorMessage(error.message), true);
+    }
+  } finally {
+    setFR24QueryBusy(false);
+    endRouteOperation(controller);
+  }
+}
+
 function clearFR24TrackDrawing(options = {}) {
   const eventLike = options && typeof options === "object" && "target" in options;
   const recordHistory = eventLike ? true : options.recordHistory !== false;
@@ -15585,6 +15679,7 @@ registerQueryPage({
   formatCount,
   searchFR24Flights,
   importFR24GPX,
+  matchCurrentFR24Track,
   searchFR24ManualHistory,
   handleFR24FlightAction,
   searchFR24Cache,

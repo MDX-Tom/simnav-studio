@@ -7,7 +7,7 @@
       document.write(`<base href="${window.location.protocol === "navplanner:" ? "navplanner://app/" : "/"}" />`);
     </script>
     <meta name="simnav-write-token" content="__SIMNAV_WRITE_TOKEN__" />
-    <meta name="navplanner-resource-version" content="20260813-ui-zoom-v102" />
+    <meta name="navplanner-resource-version" content="20260813-local-web-fr24-browser-v106" />
     <title>SimNav Studio</title>
     <script>
       (() => {
@@ -341,6 +341,7 @@
               <div class="query-primary-actions">
                 <button id="fr24SearchButton" class="primary-button compact-button" type="button" data-i18n="query.search">查询</button>
                 <button id="fr24ImportGPXButton" class="ghost-button compact-button" type="button" data-i18n="query.importGPX">手动导入</button>
+                <button id="fr24MatchImportedButton" class="ghost-button compact-button" type="button" data-i18n="query.matchImported" disabled>拟合当前轨迹</button>
                 <button id="fr24ClearTrackButton" class="ghost-button compact-button" type="button" data-i18n="query.clearTrack">清除轨迹绘制</button>
                 <button id="fr24RestoreMatchButton" class="ghost-button compact-button multiline-button-label" type="button" data-i18n="query.restoreMatch">还原<br />轨迹匹配</button>
               </div>
@@ -367,11 +368,11 @@
               <button id="fr24OpenBrowserButton" class="ghost-button compact-button" type="button" data-i18n="query.accessOpenBrowser">打开 FR24 验证页</button>
               <button id="fr24SyncBrowserButton" class="ghost-button compact-button" type="button" data-i18n="query.accessSyncBrowser">同步内置浏览器会话</button>
               <button id="fr24RefreshAccessButton" class="ghost-button compact-button" type="button" data-i18n="query.accessProbe">验证 / 重试</button>
-              <button id="fr24ClearAccessButton" class="ghost-button compact-button" type="button" data-i18n="query.accessClear">清除会话配置</button>
+              <button id="fr24ClearAccessButton" class="ghost-button compact-button" type="button" data-i18n="query.accessClear">清除访问配置</button>
             </div>
             <div id="fr24AccessHint" class="helper-text" data-i18n="query.accessHint">在 App 内打开 FR24 验证页并正常完成验证，然后同步会话，即可查询 FR24 航班。</div>
             <details class="query-manual-access">
-              <summary data-i18n="query.accessManual">高级：手动会话配置（可选）</summary>
+              <summary data-i18n="query.accessManual">兼容模式：FR24 Web 会话（Apple App）</summary>
               <div class="query-access-grid">
                 <label class="query-cookie-field">
                   <span data-i18n="query.accessCookie">FR24 Web Cookie</span>

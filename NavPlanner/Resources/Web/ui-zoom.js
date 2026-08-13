@@ -15,6 +15,12 @@
 
   function deviceBaseScale() {
     const root = document.documentElement;
+    // Local Web uses the browser's 90% rendering size as its level-0 (100%)
+    // baseline.  The user-facing levels remain relative to this baseline, so
+    // -1/0/+1/+2 still read as 92/100/108/116% without changing Apple layouts.
+    if (window.location.protocol === "http:" || window.location.protocol === "https:") {
+      return 0.9;
+    }
     if (root.dataset.device !== "pad") {
       return 1;
     }

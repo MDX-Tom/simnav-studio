@@ -147,8 +147,10 @@ final class LocalWebHTTPServerTests: XCTestCase {
             )
             XCTAssertEqual(uiZoomScript.status, .ok)
             XCTAssertEqual(uiZoomData, sourceUIZoom)
-            XCTAssertTrue(String(decoding: uiZoomData, as: UTF8.self)
-                .contains("window.SimNavUIZoom"))
+            let uiZoomSource = String(decoding: uiZoomData, as: UTF8.self)
+            XCTAssertTrue(uiZoomSource.contains("window.SimNavUIZoom"))
+            XCTAssertTrue(uiZoomSource.contains("return 0.9"))
+            XCTAssertTrue(uiZoomSource.contains("1 + normalizeLevel(value) * 0.08"))
             XCTAssertLessThan(
                 try XCTUnwrap(html.range(of: "src=\"/ui-zoom.js\"")?.lowerBound),
                 try XCTUnwrap(html.range(of: "href=\"/styles.css\"")?.lowerBound)
@@ -159,6 +161,456 @@ final class LocalWebHTTPServerTests: XCTestCase {
             )
         }
     }
+
+    func testManagedBrowserFR24RoutesRequireWriteTokenAndPreserveTransportPayload() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.dataRoot) }
+        let browser = HTTPManagedBrowserFR24Fixture()
+        let server = LocalWebHTTPServer(
+            settings: fixture.settings,
+            fr24BrowserFetcher: browser
+        )
+        let app = Application(router: server.buildRouter())
+
+        try await app.test(.router) { client in
+            let rejected = try await client.execute(
+                uri: "/api/fr24/browser/open",
+                method: .post
+            )
+            XCTAssertEqual(rejected.status, .forbidden)
+
+            var headers: HTTPFields = [:]
+            headers[try XCTUnwrap(HTTPField.Name("X-SimNav-Token"))] = token
+            let opened = try await client.execute(
+                uri: "/api/fr24/browser/open",
+                method: .post,
+                headers: headers
+            )
+            XCTAssertEqual(opened.status, .ok)
+            let openedPayload = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: Data(opened.body.readableBytesView)) as? [String: Any]
+            )
+            XCTAssertEqual(openedPayload["opened"] as? Bool, true)
+            XCTAssertEqual(openedPayload["access_method"] as? String, "managed_browser")
+
+            let synced = try await client.execute(
+                uri: "/api/fr24/browser/sync",
+                method: .post,
+                headers: headers
+            )
+            XCTAssertEqual(synced.status, .ok)
+            let syncedPayload = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: Data(synced.body.readableBytesView)) as? [String: Any]
+            )
+            XCTAssertEqual(syncedPayload["verified"] as? Bool, true)
+            XCTAssertEqual(syncedPayload["access_method"] as? String, "managed_browser")
+
+            let status = try await client.execute(
+                uri: "/api/fr24/browser/status",
+                method: .get
+            )
+            XCTAssertEqual(status.status, .ok)
+            let statusBody = String(decoding: status.body.readableBytesView, as: UTF8.self)
+            XCTAssertTrue(statusBody.contains("managed_browser"))
+            XCTAssertFalse(statusBody.localizedCaseInsensitiveContains("api_token"))
+            XCTAssertEqual(browser.openCount, 1)
+            XCTAssertGreaterThanOrEqual(browser.requestCount, 1)
+        }
+    }
+
+#if os(macOS)
+    func testRealChromiumAdapterCompletesZBAAToZULSChainAgainstLocalUpstream() async throws {
+        let executable = [
+            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium"
+        ].first { FileManager.default.isExecutableFile(atPath: $0) }
+        guard let executable else {
+            throw XCTSkip("Chrome, Edge, or Chromium is not installed for the CDP integration probe.")
+        }
+
+        let upstreamRouter = Router()
+        upstreamRouter.get("/**") { request, _ -> Response in
+            let target = request.uri.string
+            let body: String
+            let contentType: String
+            let status: HTTPResponse.Status
+            let isDataRequest = target.contains("/common/v1/flight-playback.json")
+                || target.contains("/common/v1/airport.json")
+            let hasWebKitEquivalentHeaders = request.headers[.referer]?.contains("localhost:") == true
+                && request.headers[.cacheControl]?.localizedCaseInsensitiveContains("no-cache") == true
+            if isDataRequest && !hasWebKitEquivalentHeaders {
+                body = #"{"error":"missing WebKit-equivalent navigation headers"}"#
+                contentType = "application/json; charset=utf-8"
+                status = .forbidden
+            } else if target.contains("/common/v1/flight-playback.json") {
+                body = CDPFR24Fixture.playbackJSON
+                contentType = "application/json; charset=utf-8"
+                status = .ok
+            } else if target.contains("plugin-setting%5Bschedule%5D%5Btimestamp%5D")
+                || target.contains("plugin-setting[schedule][timestamp]") {
+                body = #"{"error":"pagination end"}"#
+                contentType = "application/json; charset=utf-8"
+                status = .badRequest
+            } else if target.contains("/common/v1/airport.json") {
+                body = CDPFR24Fixture.scheduleJSON
+                contentType = "application/json; charset=utf-8"
+                status = .ok
+            } else {
+                body = "<html><head><title>Fixture FR24</title></head><body>FR24 fixture ready</body></html>"
+                contentType = "text/html; charset=utf-8"
+                status = .ok
+            }
+            var headers: HTTPFields = [:]
+            headers[.contentType] = contentType
+            return Response(
+                status: status,
+                headers: headers,
+                body: .init(byteBuffer: ByteBuffer(string: body))
+            )
+        }
+        let upstream = Application(router: upstreamRouter)
+
+        try await upstream.test(.live) { client in
+            let port = try XCTUnwrap(client.port)
+            let baseURL = try XCTUnwrap(URL(string: "http://localhost:\(port)"))
+            let dataRoot = FileManager.default.temporaryDirectory.appendingPathComponent(
+                "SimNavCDPFR24Tests-\(UUID().uuidString)",
+                isDirectory: true
+            )
+            defer { try? FileManager.default.removeItem(at: dataRoot) }
+            let browser = LocalWebFR24BrowserFetch(configuration: .init(
+                profileRoot: dataRoot.appendingPathComponent("FR24Browser", isDirectory: true),
+                browserExecutableURL: URL(fileURLWithPath: executable),
+                apiBaseURL: baseURL,
+                websiteBaseURL: baseURL,
+                launchHeadless: true
+            ))
+            defer { try? browser.clearBrowserSession() }
+
+            let databaseURL = [
+                workspaceRoot().appendingPathComponent("database/e_dfd_PMDG_release.s3db"),
+                workspaceRoot().appendingPathComponent("NavPlanner/Resources/Database/navdata.sqlite")
+            ].first { FileManager.default.fileExists(atPath: $0.path) }
+            guard let databaseURL else {
+                throw XCTSkip("Local ignored navigation database is not available.")
+            }
+            let router = SimNavRuntimeRouter(
+                configuration: RuntimeConfiguration(
+                    dataRoot: dataRoot,
+                    bundledDatabaseURL: databaseURL
+                ),
+                fr24BrowserFetcher: browser
+            )
+
+            func payload(_ request: RuntimeRequest) throws -> [String: Any] {
+                let response = router.handle(request)
+                XCTAssertEqual(response.status, 200, String(decoding: response.body, as: UTF8.self))
+                return try XCTUnwrap(
+                    JSONSerialization.jsonObject(with: response.body) as? [String: Any]
+                )
+            }
+
+            let opened = try payload(RuntimeRequest(method: "POST", path: "/fr24/browser/open"))
+            XCTAssertEqual(opened["opened"] as? Bool, true)
+            let synced = try payload(RuntimeRequest(method: "POST", path: "/fr24/browser/sync"))
+            XCTAssertEqual(synced["verified"] as? Bool, true)
+
+            let search = try payload(RuntimeRequest(
+                method: "GET",
+                path: "/fr24/search",
+                query: [
+                    "departure": ["ZBAA"],
+                    "arrival": ["ZULS"],
+                    "limit": ["10"]
+                ]
+            ))
+            let flight = try XCTUnwrap((search["flights"] as? [[String: Any]])?.first)
+            XCTAssertEqual(flight["fr24_id"] as? String, "40fc18c8")
+
+            let downloadBody = try JSONSerialization.data(withJSONObject: [
+                "flight_id": "40fc18c8",
+                "flight": flight
+            ])
+            let download = try payload(RuntimeRequest(
+                method: "POST",
+                path: "/fr24/download",
+                headers: ["Content-Type": "application/json"],
+                body: downloadBody
+            ))
+            let trackPoints = try XCTUnwrap(download["track_points"] as? [[String: Any]])
+            XCTAssertEqual(trackPoints.count, 14)
+
+            let matchBody = try JSONSerialization.data(withJSONObject: [
+                "departure": "ZBAA",
+                "arrival": "ZULS",
+                "track_points": trackPoints
+            ])
+            let match = try payload(RuntimeRequest(
+                method: "POST",
+                path: "/route/track-match",
+                headers: ["Content-Type": "application/json"],
+                body: matchBody
+            ))
+            XCTAssertGreaterThanOrEqual((match["points"] as? [[String: Any]])?.count ?? 0, 35)
+            XCTAssertGreaterThanOrEqual((match["legs"] as? [[String: Any]])?.count ?? 0, 7)
+            XCTAssertGreaterThan(try XCTUnwrap(match["distance_nm"] as? Double), 1_500)
+        }
+    }
+
+    func testRealChromiumAdapterKeepsHomepageVisibleAndClosesDataChallenge() async throws {
+        let executable = [
+            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium"
+        ].first { FileManager.default.isExecutableFile(atPath: $0) }
+        guard let executable else {
+            throw XCTSkip("Chrome, Edge, or Chromium is not installed for the CDP challenge probe.")
+        }
+
+        let fixtureResponse: @Sendable (HTTPResponse.Status, String, String) -> Response = {
+            status, contentType, body in
+            var headers: HTTPFields = [:]
+            headers[.contentType] = contentType
+            return Response(
+                status: status,
+                headers: headers,
+                body: .init(byteBuffer: ByteBuffer(string: body))
+            )
+        }
+        let upstreamRouter = Router()
+        upstreamRouter.get("/") { _, _ in
+            fixtureResponse(
+                .ok,
+                "text/html; charset=utf-8",
+                "<html><head><title>FR24 Homepage Fixture</title><script>document.title='webdriver-'+String(navigator.webdriver)</script></head><body>FR24 homepage ready</body></html>"
+            )
+        }
+        upstreamRouter.get("/**") { request, _ in
+            if request.uri.path.hasSuffix("/common/v1/airport.json") {
+                return fixtureResponse(
+                    .forbidden,
+                    "text/html; charset=utf-8",
+                    "<html><head><title>Just a moment</title></head><body>Cloudflare challenge-platform verification</body></html>"
+                )
+            }
+            return fixtureResponse(
+                .ok,
+                "text/html; charset=utf-8",
+                "<html><head><title>FR24 Homepage Fixture</title><script>document.title='webdriver-'+String(navigator.webdriver)</script></head><body>FR24 homepage ready</body></html>"
+            )
+        }
+        let upstream = Application(router: upstreamRouter)
+
+        try await upstream.test(.live) { client in
+            let port = try XCTUnwrap(client.port)
+            let baseURL = try XCTUnwrap(URL(string: "http://localhost:\(port)"))
+            let dataRoot = FileManager.default.temporaryDirectory.appendingPathComponent(
+                "SimNavCDPFR24ChallengeTests-\(UUID().uuidString)",
+                isDirectory: true
+            )
+            defer { try? FileManager.default.removeItem(at: dataRoot) }
+            let profileRoot = dataRoot.appendingPathComponent("FR24Browser", isDirectory: true)
+            let browser = LocalWebFR24BrowserFetch(configuration: .init(
+                profileRoot: profileRoot,
+                browserExecutableURL: URL(fileURLWithPath: executable),
+                apiBaseURL: baseURL,
+                websiteBaseURL: baseURL,
+                launchHeadless: false,
+                additionalBrowserArguments: [
+                    "--window-position=-10000,-10000",
+                    "--window-size=800,600"
+                ]
+            ))
+            defer { try? browser.clearBrowserSession() }
+
+            let databaseURL = [
+                workspaceRoot().appendingPathComponent("database/e_dfd_PMDG_release.s3db"),
+                workspaceRoot().appendingPathComponent("NavPlanner/Resources/Database/navdata.sqlite")
+            ].first { FileManager.default.fileExists(atPath: $0.path) }
+            guard let databaseURL else {
+                throw XCTSkip("Local ignored navigation database is not available.")
+            }
+            let router = SimNavRuntimeRouter(
+                configuration: RuntimeConfiguration(
+                    dataRoot: dataRoot,
+                    bundledDatabaseURL: databaseURL
+                ),
+                fr24BrowserFetcher: browser
+            )
+
+            let opened = router.handle(RuntimeRequest(method: "POST", path: "/fr24/browser/open"))
+            XCTAssertEqual(opened.status, 200, String(decoding: opened.body, as: UTF8.self))
+            let synced = router.handle(RuntimeRequest(method: "POST", path: "/fr24/browser/sync"))
+            XCTAssertEqual(synced.status, 503, String(decoding: synced.body, as: UTF8.self))
+            let syncPayload = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: synced.body) as? [String: Any]
+            )
+            XCTAssertEqual(syncPayload["verified"] as? Bool, false)
+
+            let status = router.handle(RuntimeRequest(method: "GET", path: "/fr24/browser/status"))
+            let statusPayload = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: status.body) as? [String: Any]
+            )
+            let managedBrowser = try XCTUnwrap(statusPayload["managed_browser"] as? [String: Any])
+            XCTAssertEqual(managedBrowser["verification_opened"] as? Bool, true)
+
+            let activePortText = try String(
+                contentsOf: profileRoot.appendingPathComponent(".simnav-control-port"),
+                encoding: .utf8
+            )
+            let browserPort = try XCTUnwrap(Int(activePortText.split(whereSeparator: { $0.isNewline })[0]))
+            let targetsURL = try XCTUnwrap(URL(string: "http://localhost:\(browserPort)/json/list"))
+            let targetsData = try Data(contentsOf: targetsURL)
+            let targets = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: targetsData) as? [[String: Any]]
+            )
+            let pageURLs = targets.compactMap { target -> String? in
+                guard target["type"] as? String == "page" else { return nil }
+                return target["url"] as? String
+            }
+            XCTAssertTrue(pageURLs.contains { $0 == baseURL.absoluteString || $0 == baseURL.absoluteString + "/" })
+            XCTAssertFalse(pageURLs.contains { $0.contains("/common/v1/airport.json") })
+            XCTAssertFalse(pageURLs.contains("about:blank"))
+            let homepageTitles = targets.compactMap { target -> String? in
+                guard target["type"] as? String == "page",
+                      let url = target["url"] as? String,
+                      url == baseURL.absoluteString || url == baseURL.absoluteString + "/" else {
+                    return nil
+                }
+                return target["title"] as? String
+            }
+            XCTAssertTrue(
+                homepageTitles.contains("webdriver-false"),
+                "The headed verification page must not expose Chromium's automation flag."
+            )
+        }
+    }
+
+    func testExternalChromiumEndpointUsesAuthenticatedControlAndPreservesHostProfile() async throws {
+        let executable = [
+            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium"
+        ].first { FileManager.default.isExecutableFile(atPath: $0) }
+        guard let executable else {
+            throw XCTSkip("Chrome, Edge, or Chromium is not installed for the external CDP probe.")
+        }
+
+        let upstreamRouter = Router()
+        upstreamRouter.get("/**") { request, _ -> Response in
+            let isJSON = request.uri.path.hasSuffix("/common/v1/airport.json")
+            var headers: HTTPFields = [:]
+            headers[.contentType] = isJSON
+                ? "application/json; charset=utf-8"
+                : "text/html; charset=utf-8"
+            let body = isJSON
+                ? #"{"result":{"response":{"airport":{}}}}"#
+                : "<html><head><title>External fixture</title></head><body>FR24 fixture ready</body></html>"
+            return Response(
+                status: .ok,
+                headers: headers,
+                body: .init(byteBuffer: ByteBuffer(string: body))
+            )
+        }
+        let upstream = Application(router: upstreamRouter)
+
+        try await upstream.test(.live) { client in
+            let upstreamPort = try XCTUnwrap(client.port)
+            let upstreamURL = try XCTUnwrap(URL(string: "http://localhost:\(upstreamPort)"))
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+                "SimNavExternalCDPTests-\(UUID().uuidString)",
+                isDirectory: true
+            )
+            defer { try? FileManager.default.removeItem(at: root) }
+            let hostProfile = root.appendingPathComponent("HostFR24Browser", isDirectory: true)
+            try FileManager.default.createDirectory(at: hostProfile, withIntermediateDirectories: true)
+            let marker = hostProfile.appendingPathComponent("host-profile-marker")
+            try Data("preserve".utf8).write(to: marker)
+
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: executable)
+            process.arguments = [
+                "--headless=new",
+                "--remote-debugging-port=0",
+                "--remote-debugging-address=127.0.0.1",
+                "--user-data-dir=\(hostProfile.path)",
+                "--no-first-run",
+                "--no-default-browser-check",
+                "--disable-sync",
+                "--disable-background-mode",
+                "--no-startup-window"
+            ]
+            process.standardInput = FileHandle.nullDevice
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+            try process.run()
+            defer {
+                if process.isRunning {
+                    process.terminate()
+                }
+            }
+
+            let activePortFile = hostProfile.appendingPathComponent("DevToolsActivePort")
+            let deadline = Date().addingTimeInterval(15)
+            var browserPort: Int?
+            while Date() < deadline, browserPort == nil {
+                if let text = try? String(contentsOf: activePortFile, encoding: .utf8),
+                   let first = text.split(whereSeparator: { $0.isNewline }).first,
+                   let port = Int(first) {
+                    browserPort = port
+                    break
+                }
+                if !process.isRunning {
+                    break
+                }
+                try await Task.sleep(for: .milliseconds(100))
+            }
+            let endpoint = try XCTUnwrap(
+                URL(string: "http://localhost:\(try XCTUnwrap(browserPort))")
+            )
+            let serverDataRoot = root.appendingPathComponent("ContainerData", isDirectory: true)
+            let browser = LocalWebFR24BrowserFetch(configuration: .init(
+                profileRoot: serverDataRoot.appendingPathComponent("FR24Browser", isDirectory: true),
+                browserExecutableURL: nil,
+                externalEndpointURL: endpoint,
+                externalEndpointToken: "externalendpoint0123456789abcdef",
+                apiBaseURL: upstreamURL,
+                websiteBaseURL: upstreamURL
+            ))
+            let databaseURL = [
+                workspaceRoot().appendingPathComponent("database/e_dfd_PMDG_release.s3db"),
+                workspaceRoot().appendingPathComponent("NavPlanner/Resources/Database/navdata.sqlite")
+            ].first { FileManager.default.fileExists(atPath: $0.path) }
+            guard let databaseURL else {
+                throw XCTSkip("Local ignored navigation database is not available.")
+            }
+            let router = SimNavRuntimeRouter(
+                configuration: RuntimeConfiguration(
+                    dataRoot: serverDataRoot,
+                    bundledDatabaseURL: databaseURL
+                ),
+                fr24BrowserFetcher: browser
+            )
+
+            let opened = router.handle(RuntimeRequest(method: "POST", path: "/fr24/browser/open"))
+            XCTAssertEqual(opened.status, 200, String(decoding: opened.body, as: UTF8.self))
+            let synced = router.handle(RuntimeRequest(method: "POST", path: "/fr24/browser/sync"))
+            XCTAssertEqual(synced.status, 200, String(decoding: synced.body, as: UTF8.self))
+            let payload = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: synced.body) as? [String: Any]
+            )
+            XCTAssertEqual(payload["verified"] as? Bool, true)
+            XCTAssertEqual(payload["access_method"] as? String, "managed_browser")
+
+            try browser.clearBrowserSession()
+            XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path))
+            XCTAssertFalse(FileManager.default.fileExists(
+                atPath: serverDataRoot.appendingPathComponent("FR24Browser").path
+            ))
+        }
+    }
+#endif
 
     func testEveryHTTPAssetMatchesSharedResourceStoreBodyHashAndMIME() async throws {
         let fixture = try makeFixture()
@@ -251,6 +703,47 @@ final class LocalWebHTTPServerTests: XCTestCase {
             }
         }
         XCTAssertTrue(replicas.isEmpty, "Duplicate Web UI roots: \(replicas)")
+    }
+
+    func testFR24LaunchersDoNotExposeChromiumAutomationFlag() throws {
+        let root = workspaceRoot()
+        let nativeURL = root.appendingPathComponent(
+            "LocalWeb/Sources/SimNavLocalWeb/LocalWebFR24BrowserFetch.swift"
+        )
+        let native = try String(contentsOf: nativeURL, encoding: .utf8)
+
+        XCTAssertFalse(
+            native.contains("--remote-debugging-port=0"),
+            "The native adapter must use a non-zero loopback DevTools port so navigator.webdriver remains false."
+        )
+        XCTAssertTrue(native.contains("--remote-debugging-port=\\(browserPort)"))
+
+        // The distributable launchers live above app/ in a packaged release, while
+        // Linux package tests mount only app/ at /source. Check them here in a
+        // source checkout; audit_web_release.sh checks the packaged copies.
+        let trackedReleaseRoot = root.appendingPathComponent(
+            "Tools/LocalWeb/release",
+            isDirectory: true
+        )
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(
+            atPath: trackedReleaseRoot.path,
+            isDirectory: &isDirectory
+        ), isDirectory.boolValue {
+            let launcherExpectations = [
+                ("Linux", "run-linux.sh", "--remote-debugging-port=${browser_port}"),
+                ("Windows", "run-windows.ps1", "--remote-debugging-port=$BrowserPort")
+            ]
+            for (name, fileName, expectedArgument) in launcherExpectations {
+                let launcherURL = trackedReleaseRoot.appendingPathComponent(fileName)
+                let source = try String(contentsOf: launcherURL, encoding: .utf8)
+                XCTAssertFalse(
+                    source.contains("--remote-debugging-port=0"),
+                    "\(name) must use a non-zero loopback DevTools port so navigator.webdriver remains false."
+                )
+                XCTAssertTrue(source.contains(expectedArgument))
+            }
+        }
     }
 
     func testOriginTokenAndPathSecurity() async throws {
@@ -659,5 +1152,83 @@ final class LocalWebHTTPServerTests: XCTestCase {
             )
         }
     }
+}
+
+private final class HTTPManagedBrowserFR24Fixture: FR24BrowserFetching, FR24BrowserSessionManaging {
+    private(set) var openCount = 0
+    private(set) var requestCount = 0
+
+    func openVerificationPage() throws -> [String: Any] {
+        openCount += 1
+        return [
+            "opened": true,
+            "access_method": "managed_browser",
+            "isolated_profile": true
+        ]
+    }
+
+    func browserSessionStatusPayload() -> [String: Any] {
+        [
+            "available": true,
+            "running": openCount > 0,
+            "isolated_profile": true,
+            "browser": "Fixture Chromium",
+            "verification_opened": openCount > 0
+        ]
+    }
+
+    func clearBrowserSession() throws {
+        openCount = 0
+    }
+
+    func performJSONRequest(path: String, params: [(String, String)]) throws -> [String: Any] {
+        requestCount += 1
+        return ["result": [String: Any]()]
+    }
+
+    func performFlightHistoryPageRequest(flightToken: String) throws -> [String: Any] {
+        ["rows": [[String: Any]]()]
+    }
+}
+
+private enum CDPFR24Fixture {
+    static let scheduleJSON = #"""
+    {
+      "result": {"response": {"airport": {"pluginData": {"schedule": {"departures": {"data": [
+        {"flight": {
+          "identification": {"id": "40fc18c8", "number": {"default": "CA4123"}, "callsign": "CCA4123"},
+          "airline": {"name": "Air China"},
+          "aircraft": {"model": {"code": "A359"}, "registration": "B-32NH"},
+          "airport": {
+            "origin": {"code": {"icao": "ZBAA", "iata": "PEK"}, "name": "Beijing Capital"},
+            "destination": {"code": {"icao": "ZULS", "iata": "LXA"}, "name": "Lhasa Gonggar"}
+          },
+          "time": {"scheduled": {"departure": 1786580000, "arrival": 1786591700}, "real": {"departure": 1786580000, "arrival": 1786591700}},
+          "status": {"text": "Landed"}
+        }}
+      ]}}}}}}
+    }
+    """#
+
+    static let playbackJSON = #"""
+    {
+      "track": [
+        {"lat":40.07333333,"lon":116.59833333,"altitude":1000,"speed":180,"timestamp":1786580000},
+        {"lat":38.75888889,"lon":114.97777778,"altitude":3200,"speed":210,"timestamp":1786580900},
+        {"lat":38.31638889,"lon":113.81555556,"altitude":6400,"speed":240,"timestamp":1786581800},
+        {"lat":37.32694444,"lon":111.73750000,"altitude":9600,"speed":270,"timestamp":1786582700},
+        {"lat":34.50472222,"lon":108.55166667,"altitude":12800,"speed":300,"timestamp":1786583600},
+        {"lat":33.41388889,"lon":108.08805556,"altitude":16000,"speed":330,"timestamp":1786584500},
+        {"lat":32.30527778,"lon":106.67444444,"altitude":19200,"speed":360,"timestamp":1786585400},
+        {"lat":31.04805556,"lon":104.66722222,"altitude":22400,"speed":390,"timestamp":1786586300},
+        {"lat":30.64500000,"lon":103.68666667,"altitude":25600,"speed":420,"timestamp":1786587200},
+        {"lat":30.78277778,"lon":101.90277778,"altitude":28800,"speed":420,"timestamp":1786588100},
+        {"lat":31.14666667,"lon":97.17666667,"altitude":32000,"speed":420,"timestamp":1786589000},
+        {"lat":30.51083333,"lon":94.19805556,"altitude":35000,"speed":420,"timestamp":1786589900},
+        {"lat":29.82888889,"lon":91.82222222,"altitude":35000,"speed":420,"timestamp":1786590800},
+        {"lat":29.29666667,"lon":90.91166667,"altitude":35000,"speed":420,"timestamp":1786591700}
+      ]
+    }
+    """#
 }
 #endif

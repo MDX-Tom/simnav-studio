@@ -5,3 +5,4 @@ web-manifest.json
 run-*
 stop-*
 build-windows-native.ps1
+fr24-browser-bridge.ps1

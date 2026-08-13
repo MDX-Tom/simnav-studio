@@ -28,6 +28,10 @@ jobs:
         with:
           swift-version: "6.1.3"
 
+      - name: Smoke authenticated FR24 host bridge
+        shell: pwsh
+        run: Tools/LocalWeb/test_fr24_browser_bridge.ps1
+
       - name: Build and smoke native Windows server
         shell: pwsh
         run: >-
