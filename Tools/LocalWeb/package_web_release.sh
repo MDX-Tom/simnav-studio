@@ -7,6 +7,7 @@ template_root="${script_dir}/release"
 output_path=""
 build_macos_native=0
 windows_native=""
+database_source="${project_root}/database/e_dfd_PMDG_release.s3db"
 
 usage() {
   cat <<'USAGE'
@@ -15,6 +16,8 @@ usage: Tools/LocalWeb/package_web_release.sh --output <new-directory> [options]
 Options:
   --build-macos-native       Build and include a universal arm64+x86_64 macOS server.
   --windows-native <dir>     Include a prebuilt Windows bundle containing simnav-local-web.exe.
+  --database <file>          Bundle this release-selected SQLite/S3DB navigation database.
+                             Defaults to database/e_dfd_PMDG_release.s3db.
   --help                     Show this help.
 USAGE
 }
@@ -33,6 +36,11 @@ while (($#)); do
     --windows-native)
       (($# >= 2)) || { echo "Missing value after --windows-native." >&2; exit 2; }
       windows_native="$2"
+      shift 2
+      ;;
+    --database)
+      (($# >= 2)) || { echo "Missing value after --database." >&2; exit 2; }
+      database_source="$2"
       shift 2
       ;;
     --help|-h)
@@ -68,6 +76,46 @@ if [[ ! -f "${project_root}/NavPlanner/Resources/Web/map.html" ]]; then
   echo "The canonical Web source is missing." >&2
   exit 2
 fi
+if [[ ! -f "${database_source}" ]]; then
+  echo "The Web release database is missing: ${database_source}" >&2
+  exit 2
+fi
+database_source="$(cd -- "$(dirname -- "${database_source}")" && pwd)/$(basename -- "${database_source}")"
+case "${database_source##*.}" in
+  db|s3db|sqlite|sqlite3) ;;
+  *) echo "Unsupported Web release database: ${database_source}" >&2; exit 2 ;;
+esac
+if ! command -v sqlite3 >/dev/null 2>&1; then
+  echo "sqlite3 is required to validate the Web release database." >&2
+  exit 2
+fi
+database_quick_check="$(sqlite3 -readonly "${database_source}" 'PRAGMA quick_check;')"
+if [[ "${database_quick_check}" != "ok" ]]; then
+  echo "Web release database failed SQLite PRAGMA quick_check: ${database_quick_check}" >&2
+  exit 2
+fi
+required_database_tables=(
+  tbl_header
+  tbl_airports
+  tbl_runways
+  tbl_enroute_waypoints
+  tbl_enroute_airways
+)
+for table_name in "${required_database_tables[@]}"; do
+  if [[ "$(sqlite3 -readonly "${database_source}" \
+      "select count(*) from sqlite_master where type = 'table' and name = '${table_name}';")" != "1" ]]; then
+    echo "Web release database is missing required table: ${table_name}" >&2
+    exit 2
+  fi
+done
+database_airac="$(sqlite3 -readonly "${database_source}" 'select current_airac from tbl_header limit 1;')"
+database_revision="$(sqlite3 -readonly "${database_source}" 'select revision from tbl_header limit 1;')"
+if [[ -z "${database_airac}" || -z "${database_revision}" ]]; then
+  echo "Web release database header is incomplete." >&2
+  exit 2
+fi
+database_sha="$(shasum -a 256 "${database_source}" | awk '{print $1}')"
+database_size="$(wc -c < "${database_source}" | tr -d '[:space:]')"
 if rg -n 'NavPlanner-web' "${project_root}/Package.swift" \
     "${project_root}/LocalWeb/Sources" "${project_root}/LocalWeb/Support" >/dev/null; then
   echo "Local Web packaging must not depend on the deleted NavPlanner-web project." >&2
@@ -89,6 +137,9 @@ cp "${project_root}/Package.swift" "${project_root}/Package.resolved" "${package
 cp -R "${project_root}/NavPlanner/Core" "${package_root}/app/NavPlanner/"
 mkdir -p "${package_root}/app/NavPlanner/Resources"
 cp -R "${project_root}/NavPlanner/Resources/Web" "${package_root}/app/NavPlanner/Resources/"
+mkdir -p "${package_root}/app/NavPlanner/Resources/Database"
+cp "${database_source}" \
+  "${package_root}/app/NavPlanner/Resources/Database/navdata.sqlite"
 cp -R "${project_root}/LocalWeb/Sources" "${project_root}/LocalWeb/Support" \
   "${project_root}/LocalWeb/Tests" \
   "${package_root}/app/LocalWeb/"
@@ -165,18 +216,27 @@ version="$(awk -F'= ' '/MARKETING_VERSION = / {gsub(/;/, "", $2); print $2; exit
   "${project_root}/NavPlanner.xcodeproj/project.pbxproj")"
 source_head="$(git -C "${project_root}" rev-parse HEAD)"
 python3 - "${package_root}/web-manifest.json" "${version}" "${source_head}" \
-  "${macos_native_included}" "${windows_native_included}" <<'PY'
+  "${macos_native_included}" "${windows_native_included}" \
+  "${database_sha}" "${database_size}" "${database_airac}" "${database_revision}" <<'PY'
 import json
 import sys
 
 manifest = {
-    "schema_version": 1,
+    "schema_version": 2,
     "platform": "web",
     "version": sys.argv[2],
     "source_head": sys.argv[3],
     "ui_source": "app/NavPlanner/Resources/Web",
     "swift_core_source": "app/NavPlanner/Core",
-    "database_included": False,
+    "database_included": True,
+    "bundled_database": {
+        "path": "app/NavPlanner/Resources/Database/navdata.sqlite",
+        "sha256": sys.argv[6],
+        "size_bytes": int(sys.argv[7]),
+        "current_airac": sys.argv[8],
+        "revision": sys.argv[9],
+        "sqlite_quick_check": "passed",
+    },
     "native_bundles": {
         "macos_universal": sys.argv[4] == "true",
         "windows_x86_64": sys.argv[5] == "true",

@@ -456,8 +456,9 @@ payload 放在 `web/`：macOS 使用 `run-macos.command`，Linux 使用
 `run-linux.sh`，Windows 使用 `run-windows.ps1`。macOS 优先使用 universal 原生
 binary；Windows 优先使用随包原生 SwiftNIO `.exe`，只在缺失时使用 Docker；Linux 在
 Docker 中以 Hummingbird transport 构建同一个 Swift 核心。所有容器端口都只发布到 `127.0.0.1`；stop 脚本既能处理已记录
-的原生进程，也能停止 Docker，并保留 Local Web 数据根 / 命名 volume。`web/` 不携带数据库、地图、轨迹、会话、缓存或 token，用户应从浏览器
-导入自己有权使用的数据。受跟踪 release builder 与 audit 会在 v0.1.1 候选中生成并校验
+的原生进程，也能停止 Docker，并保留 Local Web 数据根 / 命名 volume。`web/` 自动携带并
+启用与 IPA/DMG 完全同 SHA-256 的 release 导航数据库，但不携带用户地图、轨迹、会话、
+缓存或 token；用户仍可从浏览器导入自己有权使用的数据。受跟踪 release builder 与 audit 会在 v0.1.1 候选中生成并校验
 该 payload。
 
 </details>
@@ -495,7 +496,8 @@ Tools/LocalWeb/audit_web_release.sh /tmp/SimNav-Web-check --docker-smoke
 - 在 iPhone 小屏、iPhone 横屏、iPad 竖屏和 iPad 横屏分别测试。
 - 验证飞行模式下的启动、机场搜索、机场详情、航路规划、Procedure 绘制、nav-overlay 和离线地图。
 - 验证 FR24 会话缺失、Cloudflare 验证、flightId、GPX 导入、剖面滑动、下载失败、轨迹绘制、拟合、分享和缓存管理流程。
-- 验证三套 Web 启动器、随包 Windows 原生 SwiftNIO 工件 smoke、两种 HTTP transport、Docker 回环发布、数据 volume 持久化，以及发布包不含数据库或用户数据。
+- 验证三套 Web 启动器、随包 Windows 原生 SwiftNIO 工件 smoke、两种 HTTP transport、Docker 回环发布、数据 volume 持久化、IPA/DMG/Web 数据库逐字节一致，以及发布包不含用户数据。
+- 构建时保留所有不同版本的 `releases/release-<version>/`。同版本重建只能在新候选通过全部审计后原子替换该版本，不得触碰其他版本。
 - 排查 Xcode 日志时优先过滤 `NavPlanner` 进程；beta 模拟器可能输出无关的系统服务错误。
 
 </details>
@@ -526,10 +528,12 @@ Media/                         README 截图与视觉素材
 
 SimNav Studio 可能使用第三方或用户自行提供的内容，包括地图底图、机场与 Procedure 数据、AIRAC / 导航数据库、PMTiles / MBTiles / SQLite 地图包，以及 FR24 航班数据。这些内容可能受版权、数据库权利、商标、平台条款或再分发限制约束。
 
-GitHub 公开源码仓库不包含导航数据库：根目录 `database/` 和开发用 bundle 资源均被 Git 忽略。Releases 中发布的
-IPA 与 DMG 带有一份示例数据库，供首次启动体验示例数据，把用途限制为地面娱乐飞行模拟软件。维护者不得发布包含该示例库的 IPA 或 DMG。
+GitHub 公开源码仓库不包含导航数据库：根目录 `database/` 和开发用 bundle 资源均被 Git
+忽略。每个本地生成的 release candidate 会把同一份选定示例数据库逐字节放入 IPA、DMG
+与 Web，使三个平台首次启动时使用相同示例数据。其随附 notice 要求取得书面再分发许可；
+权限确认前，维护者不得公开发布任何包含该数据库的工件。
 
-Local Web 的可写数据库与缓存和 Apple App 完全分离。在 Web 再分发权利得到明确确认前，
-Web release 不得携带开发数据库；用户应通过文档说明的导入或 mount 流程提供自己的兼容数据库。
+Local Web 的可写数据库与缓存和 Apple App 完全分离。Web 首次启动会复制并启用随 release
+携带的数据库；用户之后仍可通过文档说明的导入或 mount 流程选择自己的兼容数据库。
 
 本 App 不保证第三方数据的准确性、完整性、可用性或法律状态。你需要自行确认拥有每项数据的使用、导入、缓存和分发权利。

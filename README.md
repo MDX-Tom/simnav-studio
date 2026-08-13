@@ -522,7 +522,8 @@ Tools/LocalWeb/audit_web_release.sh /tmp/SimNav-Web-check --docker-smoke
 - Test iPhone compact width, iPhone landscape, iPad portrait, and iPad landscape.
 - Verify airplane-mode launch, airport search, airport detail, route planning, procedure drawing, nav-overlay rendering, and offline maps.
 - Verify FR24 missing-session, Cloudflare-verification, flightId, GPX import, profile scrubbing, failed-download, drawing, matching, sharing, and cache-management paths.
-- Verify all three Web launchers, native Windows SwiftNIO artifact smoke when included, both HTTP transports, Docker loopback publication, data-volume persistence, and the absence of bundled databases or user data.
+- Verify all three Web launchers, native Windows SwiftNIO artifact smoke when included, both HTTP transports, Docker loopback publication, data-volume persistence, exact IPA/DMG/Web database parity, and the absence of user data.
+- Preserve every different `releases/release-<version>/` directory when building. A same-version rebuild may replace only that version, atomically and only after the new candidate passes all audits.
 - Filter Xcode logs by the `NavPlanner` process; beta simulators may print unrelated system-service errors.
 
 </details>
@@ -555,13 +556,14 @@ SimNav Studio may use third-party or user-supplied materials, including basemaps
 
 The public GitHub source
 repository does **not** include a navigation database: the root `database/`
-directory and the development bundle resource are Git-ignored. The IPA and
-DMG published under Releases include an example database and stored inside the app, so the app has usable sample data on first launch.
-No IPA or DMG containing this sample may be published by the maintainers.
+directory and the development bundle resource are Git-ignored. Each locally generated release
+candidate bundles one release-selected example database byte-for-byte in its IPA, DMG, and Web
+artifacts, so all three platforms have the same first-launch sample data. The accompanying notice
+requires written redistribution permission; the maintainers must not publish any artifact containing
+that database until permission is confirmed.
 
 Local Web keeps its writable database and caches separate from the Apple App.
-Until Web redistribution rights are explicitly confirmed, a Web release must
-not bundle the development database; users supply their own compatible database
-through the documented import or mount flow.
+The Web server copies and activates its bundled release database on first launch. Users may later
+select their own compatible database through the documented import or mount flow.
 
 This app does not guarantee the accuracy, completeness, availability, or legal status of third-party data. You are responsible for confirming your right to use, import, cache, and distribute each data source.

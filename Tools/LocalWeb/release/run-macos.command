@@ -3,6 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 native_binary="${script_dir}/native/macos-universal/simnav-local-web"
+bundled_database="${script_dir}/app/NavPlanner/Resources/Database/navdata.sqlite"
 port="${SIMNAV_WEB_PORT:-8010}"
 state_dir="${TMPDIR:-/tmp}/simnav-studio-local-web-${UID}"
 pid_file="${state_dir}/server-${port}.pid"
@@ -16,6 +17,10 @@ if [[ ! -x "${native_binary}" ]]; then
   echo "The native macOS server is unavailable; using the Docker package."
   exec "${script_dir}/run-container.sh"
 fi
+if [[ ! -f "${bundled_database}" ]]; then
+  echo "The bundled navigation database is missing: ${bundled_database}" >&2
+  exit 1
+fi
 
 if lsof -nP -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1; then
   echo "Port ${port} is already in use; nothing was changed." >&2
@@ -24,6 +29,7 @@ fi
 
 export SIMNAV_WEB_PORT="${port}"
 export SIMNAV_WEB_ROOT="${script_dir}/app/NavPlanner/Resources/Web"
+export SIMNAV_DATABASE="${bundled_database}"
 url="http://127.0.0.1:${port}"
 umask 077
 mkdir -p -- "${state_dir}"

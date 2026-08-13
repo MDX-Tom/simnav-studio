@@ -37,16 +37,18 @@ RUN apt-get update \
         tzdata \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --home-dir /var/lib/simnav --uid 10001 simnav \
-    && mkdir -p /opt/simnav/Web /var/lib/simnav/data \
+    && mkdir -p /opt/simnav/Web /opt/simnav/Database /var/lib/simnav/data \
     && chown -R simnav:simnav /var/lib/simnav
 
 COPY --from=builder /source/.build/release/simnav-local-web /usr/local/bin/simnav-local-web
 COPY app/NavPlanner/Resources/Web /opt/simnav/Web
+COPY app/NavPlanner/Resources/Database/navdata.sqlite /opt/simnav/Database/navdata.sqlite
 
 ENV SIMNAV_CONTAINER=1 \
     SIMNAV_BIND_HOST=0.0.0.0 \
     SIMNAV_WEB_PORT=8010 \
     SIMNAV_WEB_ROOT=/opt/simnav/Web \
+    SIMNAV_DATABASE=/opt/simnav/Database/navdata.sqlite \
     SIMNAV_DATA_DIR=/var/lib/simnav/data
 
 USER 10001:10001

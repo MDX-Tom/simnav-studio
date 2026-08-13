@@ -65,16 +65,30 @@ struct LocalWebSettings: Sendable {
             throw LocalWebSettingsError.missingWebRoot(resolvedWebRoot?.path ?? "")
         }
 
-        if databaseURL == nil, let projectRoot {
-            let candidates = [
-                projectRoot.appendingPathComponent("database/e_dfd_PMDG_release.s3db"),
-                projectRoot.appendingPathComponent("NavPlanner/Resources/Database/navdata.sqlite")
-            ]
+        if databaseURL == nil {
+            let packagedDatabase = resolvedWebRoot.deletingLastPathComponent()
+                .appendingPathComponent("Database/navdata.sqlite")
+            var candidates = [packagedDatabase]
+            if let projectRoot {
+                let canonicalDevelopmentWebRoot = projectRoot.appendingPathComponent(
+                    "NavPlanner/Resources/Web",
+                    isDirectory: true
+                ).standardizedFileURL
+                let developmentCandidates = [
+                    projectRoot.appendingPathComponent("database/e_dfd_PMDG_release.s3db"),
+                    projectRoot.appendingPathComponent("NavPlanner/Resources/Database/navdata.sqlite")
+                ]
+                candidates = resolvedWebRoot == canonicalDevelopmentWebRoot
+                    ? developmentCandidates + [packagedDatabase]
+                    : [packagedDatabase] + developmentCandidates
+            }
             databaseURL = candidates.first { fileManager.fileExists(atPath: $0.path) }
         }
         if let databaseURL {
             let allowedExtensions = Set(["db", "s3db", "sqlite", "sqlite3"])
-            guard fileManager.fileExists(atPath: databaseURL.path),
+            var isDirectory: ObjCBool = false
+            guard fileManager.fileExists(atPath: databaseURL.path, isDirectory: &isDirectory),
+                  !isDirectory.boolValue,
                   allowedExtensions.contains(databaseURL.pathExtension.lowercased()) else {
                 throw LocalWebSettingsError.invalidDatabase(databaseURL.path)
             }

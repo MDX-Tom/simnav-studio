@@ -54,6 +54,34 @@ final class LocalWebHTTPServerTests: XCTestCase {
         }
     }
 
+    func testPackagedDatabaseIsDiscoveredBesideCanonicalWebRoot() throws {
+        let packageRoot = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "SimNavPackagedDatabaseTests-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: packageRoot) }
+        let resourcesRoot = packageRoot.appendingPathComponent("Resources", isDirectory: true)
+        let webRoot = resourcesRoot.appendingPathComponent("Web", isDirectory: true)
+        let databaseRoot = resourcesRoot.appendingPathComponent("Database", isDirectory: true)
+        let bundledDatabase = databaseRoot.appendingPathComponent("navdata.sqlite")
+        try FileManager.default.createDirectory(at: webRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: databaseRoot, withIntermediateDirectories: true)
+        try Data("<title>SimNav Studio</title>".utf8).write(
+            to: webRoot.appendingPathComponent("map.html")
+        )
+        try Data().write(to: bundledDatabase)
+
+        let settings = try LocalWebSettings.load(
+            arguments: ["--web-root", webRoot.path],
+            environment: [
+                "SIMNAV_DATA_DIR": packageRoot.appendingPathComponent("Data").path,
+                "SIMNAV_WRITE_TOKEN": token
+            ]
+        )
+
+        XCTAssertEqual(settings.bundledDatabaseURL, bundledDatabase.standardizedFileURL)
+    }
+
     func testHTTPAdapterMatchesDirectRuntimeBodyAndHeaders() async throws {
         let fixture = try makeFixture()
         defer { try? FileManager.default.removeItem(at: fixture.dataRoot) }

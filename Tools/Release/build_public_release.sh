@@ -113,17 +113,23 @@ if [ "$(basename "$FINAL_OUTPUT_DIR")" != "release-$VERSION" ]; then
 fi
 
 mkdir -p "$RELEASES_ROOT"
-if [ -e "$FINAL_OUTPUT_DIR" ]; then
-  echo "Release output already exists; move it aside explicitly before rebuilding." >&2
-  echo "OUTPUT_DIR=$FINAL_OUTPUT_DIR" >&2
-  exit 2
+REPLACE_EXISTING_RELEASE=0
+if [ -e "$FINAL_OUTPUT_DIR" ] || [ -L "$FINAL_OUTPUT_DIR" ]; then
+  if [ ! -d "$FINAL_OUTPUT_DIR" ] || [ -L "$FINAL_OUTPUT_DIR" ]; then
+    echo "Existing same-version output is not a real directory; refusing replacement." >&2
+    echo "OUTPUT_DIR=$FINAL_OUTPUT_DIR" >&2
+    exit 2
+  fi
+  REPLACE_EXISTING_RELEASE=1
+  echo "Same-version release exists and will remain untouched until the replacement passes all audits:"
+  echo "$FINAL_OUTPUT_DIR"
 fi
-EXTRA_RELEASE_ENTRY="$(
+INVALID_RELEASE_ENTRY="$(
   find "$RELEASES_ROOT" -mindepth 1 -maxdepth 1 \
-    ! -name "$(basename "$FINAL_OUTPUT_DIR")" -print -quit
+    \( ! -type d -o ! -name 'release-*' \) -print -quit
 )"
-if [ -n "$EXTRA_RELEASE_ENTRY" ]; then
-  echo "releases/ may retain only the current release directory: $EXTRA_RELEASE_ENTRY" >&2
+if [ -n "$INVALID_RELEASE_ENTRY" ]; then
+  echo "releases/ may contain only preserved release-<version>/ directories: $INVALID_RELEASE_ENTRY" >&2
   exit 2
 fi
 
@@ -278,12 +284,14 @@ diskutil image create from \
 WEB_PACKAGE_ARGS=(
   --output "$OUTPUT_DIR/web"
   --build-macos-native
+  --database "$RELEASE_DATABASE_SOURCE"
 )
 if [ -n "${SIMNAV_WINDOWS_NATIVE_BUNDLE:-}" ]; then
   WEB_PACKAGE_ARGS+=(--windows-native "$SIMNAV_WINDOWS_NATIVE_BUNDLE")
 fi
 "$PROJECT_ROOT/Tools/LocalWeb/package_web_release.sh" "${WEB_PACKAGE_ARGS[@]}"
-"$PROJECT_ROOT/Tools/LocalWeb/audit_web_release.sh" "$OUTPUT_DIR/web" --docker-smoke
+"$PROJECT_ROOT/Tools/LocalWeb/audit_web_release.sh" "$OUTPUT_DIR/web" \
+  --expected-database "$RELEASE_DATABASE_SOURCE" --docker-smoke
 
 IPA_PATH="$OUTPUT_DIR/ios/$IPA_FILENAME"
 APP_TREE_SHA="$(
@@ -331,7 +339,7 @@ database_sha = sys.argv[6]
 source_dirty = $SOURCE_DIRTY
 
 manifest = {
-    "schema_version": 5,
+    "schema_version": 6,
     "release": {
         "name": "$PRODUCT_NAME",
         "display_name": "$APP_DISPLAY_NAME",
@@ -370,8 +378,12 @@ manifest = {
     },
     "bundled_database": {
         "source": "database/e_dfd_PMDG_release.s3db",
-        "bundle_path": "Database/navdata.sqlite",
-        "role": "example navigation database bundled with release artifacts",
+        "bundle_paths": {
+            "ios": "Database/navdata.sqlite",
+            "macos": "Database/navdata.sqlite",
+            "web": "app/NavPlanner/Resources/Database/navdata.sqlite",
+        },
+        "role": "example navigation database bundled identically with all three release platforms",
         "current_airac": database_airac,
         "revision": database_revision,
         "size_bytes": database_size,
@@ -428,7 +440,9 @@ manifest = {
             "sha256_scope": "sha256-of-sorted-relative-file-sha256-list",
             "ui_source": "NavPlanner/Resources/Web",
             "swift_core_source": "NavPlanner/Core",
-            "database_included": False,
+            "database_included": True,
+            "database_sha256": database_sha,
+            "database_path": "app/NavPlanner/Resources/Database/navdata.sqlite",
             "macos_native_server": True,
             "windows_native_server": "$WEB_WINDOWS_NATIVE" == "True",
             "linux_server": "native Swift executable built inside the pinned Docker image",
@@ -492,7 +506,7 @@ notes = """## 🚀 $PRODUCT_NAME v$VERSION
 
 主要能力：
 
-  * 🌐 **Local Web 第三正式平台**：macOS、Windows、Linux 使用同一套网页资源、Swift 业务核心和 runtime router；平台脚本只在本机回环地址启动服务，Web 包不携带数据库或用户数据。
+  * 🌐 **Local Web 第三正式平台**：macOS、Windows、Linux 使用同一套网页资源、Swift 业务核心和 runtime router；平台脚本只在本机回环地址启动服务，并自动启用与 Apple 工件完全相同的 release 导航数据库。
   * 🧭 **本地航路规划**：支持手动航路、整条航路自动规划，以及使用 \x60***\x60 自动规划航点之间的单段航路。
   * 🛬 **机场与程序查看**：查看跑道、通信频率、 \x60SID\x60、 \x60STAR\x60、 \x60APPROACH\x60，并绘制 RF / AF 弧线、复飞段和等待航线几何。
   * 🗺️ **多图层地图工作区**：统一查看底图、航路、程序、FR24 轨迹、航点、导航台、跑道、ILS 和 airway 标签，支持绘制撤销与重做。
@@ -522,10 +536,10 @@ notes = """## 🚀 $PRODUCT_NAME v$VERSION
 
   * \x60SimNav-Studio-$VERSION-unsigned.ipa\x60：iPhone / iPad 侧载包。必须由 AltStore、SideStore、Sideloadly 或其他可信工具使用安装者自己的 Apple Account 重新签名。
   * \x60SimNav-Studio-$VERSION-catalyst-adhoc.dmg\x60：Mac Catalyst 通用包，仅 ad-hoc 签名，未 notarize；不提供 Developer ID / Gatekeeper 公开分发信任。
-  * \x60web/\x60：Local Web 正式平台包。macOS/Linux 使用 Hummingbird 与同一 Swift 核心；Windows 包含经宿主 smoke 的原生 SwiftNIO \x60.exe\x60 时直接运行且不启动 Linux/WSL/Docker，未包含时使用 Docker Desktop fallback。三者都只发布到 \x60127.0.0.1\x60。
+  * \x60web/\x60：Local Web 正式平台包，内含与 IPA/DMG 相同 SHA-256 的 \x60Database/navdata.sqlite\x60。macOS/Linux 使用 Hummingbird 与同一 Swift 核心；Windows 包含经宿主 smoke 的原生 SwiftNIO \x60.exe\x60 时直接运行且不启动 Linux/WSL/Docker，未包含时使用 Docker Desktop fallback。三者都只发布到 \x60127.0.0.1\x60。
   * \x60SHA256SUMS.txt\x60：公开工件与元数据校验和。
 
-⚠️ 公开源码仓库不包含导航数据库。发布候选会把本机 \x60database/e_dfd_PMDG_release.s3db\x60 作为 \x60Database/navdata.sqlite\x60 放入 IPA 与 DMG；本次输入库 AIRAC 为 \x60$DATABASE_AIRAC\x60，SHA-256 为 \x60$DATABASE_SHA\x60。当前示例数据库的随附 notice 将其用途限制为地面娱乐飞行模拟软件，并要求取得 Navigraph 的书面许可后才能再分发；未取得许可前，不得发布包含该库的 IPA 或 DMG。详细安装与发布边界见 [README](https://github.com/MDX-Tom/simnav-studio/blob/main/README.md#install-the-ipa-and-dmg-from-releases) 和 [public release packaging](https://github.com/MDX-Tom/simnav-studio/blob/main/Tools/Release/README.md)。
+⚠️ 公开源码仓库不包含导航数据库。发布候选会把本机 \x60database/e_dfd_PMDG_release.s3db\x60 作为 \x60Database/navdata.sqlite\x60 同字节放入 IPA、DMG 与 Web；本次输入库 AIRAC 为 \x60$DATABASE_AIRAC\x60，SHA-256 为 \x60$DATABASE_SHA\x60。当前示例数据库的随附 notice 将其用途限制为地面娱乐飞行模拟软件，并要求取得 Navigraph 的书面许可后才能再分发；未取得许可前，不得发布任何包含该库的工件。详细安装与发布边界见 [README](https://github.com/MDX-Tom/simnav-studio/blob/main/README.md#install-the-ipa-and-dmg-from-releases) 和 [public release packaging](https://github.com/MDX-Tom/simnav-studio/blob/main/Tools/Release/README.md)。
 
 * * *
 ### English
@@ -534,7 +548,7 @@ notes = """## 🚀 $PRODUCT_NAME v$VERSION
 
 Key capabilities:
 
-  * 🌐 **Local Web as the third formal platform**: macOS, Windows, and Linux use the same Web resources, Swift business core, and runtime router; platform launchers bind only to loopback, and the Web package contains no database or user data.
+  * 🌐 **Local Web as the third formal platform**: macOS, Windows, and Linux use the same Web resources, Swift business core, and runtime router; platform launchers bind only to loopback and automatically activate the exact release database used by the Apple artifacts.
   * 🧭 **Local route planning**: support manual routes, full-route auto-planning, and \x60***\x60 segment auto-planning between fixes.
   * 🛬 **Airport and procedure inspection**: inspect runways, frequencies, \x60SID\x60, \x60STAR\x60, and \x60APPROACH\x60 paths, including RF / AF arcs, missed approaches, and holding geometry.
   * 🗺️ **Layered map workspace**: view basemaps, routes, procedures, FR24 tracks, waypoints, navaids, runways, ILS, and airway labels with undo / redo for drawn tracks.
@@ -564,10 +578,10 @@ Key capabilities:
 
   * \x60SimNav-Studio-$VERSION-unsigned.ipa\x60: iPhone / iPad sideload package. It must be re-signed with the installer's own Apple Account through AltStore, SideStore, Sideloadly, or another trusted tool.
   * \x60SimNav-Studio-$VERSION-catalyst-adhoc.dmg\x60: universal Mac Catalyst package, ad-hoc signed and not notarized; it does not provide Developer ID / Gatekeeper public-distribution trust.
-  * \x60web/\x60: the formal Local Web platform package. macOS/Linux use Hummingbird with the shared Swift core; Windows runs the host-smoked native SwiftNIO \x60.exe\x60 directly without Linux/WSL/Docker when that bundle is included, and otherwise uses the Docker Desktop fallback. Every launcher publishes only to \x60127.0.0.1\x60.
+  * \x60web/\x60: the formal Local Web platform package, including \x60Database/navdata.sqlite\x60 with the same SHA-256 as the IPA/DMG copy. macOS/Linux use Hummingbird with the shared Swift core; Windows runs the host-smoked native SwiftNIO \x60.exe\x60 directly without Linux/WSL/Docker when that bundle is included, and otherwise uses the Docker Desktop fallback. Every launcher publishes only to \x60127.0.0.1\x60.
   * \x60SHA256SUMS.txt\x60: checksums for public artifacts and metadata.
 
-⚠️ The public source repository does not contain a navigation database. The release candidate bundles the local \x60database/e_dfd_PMDG_release.s3db\x60 as \x60Database/navdata.sqlite\x60 in both the IPA and DMG; this input database is AIRAC \x60$DATABASE_AIRAC\x60 with SHA-256 \x60$DATABASE_SHA\x60. The accompanying notice limits the current example database to ground-based recreational flight-simulation software and requires written permission from Navigraph for redistribution; do not publish an IPA or DMG containing it without that permission. See the [README](https://github.com/MDX-Tom/simnav-studio/blob/main/README.md#install-the-ipa-and-dmg-from-releases) and [public release packaging guide](https://github.com/MDX-Tom/simnav-studio/blob/main/Tools/Release/README.md) for installation and publication boundaries.
+⚠️ The public source repository does not contain a navigation database. The release candidate bundles the local \x60database/e_dfd_PMDG_release.s3db\x60 byte-for-byte as \x60Database/navdata.sqlite\x60 in the IPA, DMG, and Web package; this input database is AIRAC \x60$DATABASE_AIRAC\x60 with SHA-256 \x60$DATABASE_SHA\x60. The accompanying notice limits the current example database to ground-based recreational flight-simulation software and requires written permission from Navigraph for redistribution; do not publish any artifact containing it without that permission. See the [README](https://github.com/MDX-Tom/simnav-studio/blob/main/README.md#install-the-ipa-and-dmg-from-releases) and [public release packaging guide](https://github.com/MDX-Tom/simnav-studio/blob/main/Tools/Release/README.md) for installation and publication boundaries.
 """
 with open(sys.argv[2], "w", encoding="utf-8") as handle:
     handle.write(notes)
@@ -588,8 +602,50 @@ PY
 
 "$SCRIPT_DIR/audit_public_release.sh" "$OUTPUT_DIR"
 
-mv "$OUTPUT_DIR" "$FINAL_OUTPUT_DIR"
+# A new version uses RENAME_EXCL. An explicitly allowed same-version rebuild uses RENAME_SWAP so the
+# old candidate stays intact until the replacement has passed every audit, then swaps atomically and
+# is removed only as this build's private staging content.
+python3 - "$OUTPUT_DIR" "$FINAL_OUTPUT_DIR" "$REPLACE_EXISTING_RELEASE" <<'PY'
+import ctypes
+import errno
+import os
+import sys
 
-echo "Public-safe release candidate created:"
+source = os.fsencode(sys.argv[1])
+destination = os.fsencode(sys.argv[2])
+libc = ctypes.CDLL(None, use_errno=True)
+rename_atomic = libc.renamex_np
+rename_atomic.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
+rename_atomic.restype = ctypes.c_int
+
+RENAME_SWAP = 0x00000002
+RENAME_EXCL = 0x00000004
+replace_existing = sys.argv[3] == "1"
+if replace_existing and (not os.path.isdir(destination) or os.path.islink(destination)):
+    print(
+        f"Same-version release changed during the build; refusing replacement: {sys.argv[2]}",
+        file=sys.stderr,
+    )
+    sys.exit(2)
+
+flags = RENAME_SWAP if replace_existing else RENAME_EXCL
+if rename_atomic(source, destination, flags) != 0:
+    error_number = ctypes.get_errno()
+    if not replace_existing and error_number in (errno.EEXIST, errno.ENOTEMPTY):
+        print(
+            f"A release with this new version appeared during the build and was left unchanged: {sys.argv[2]}",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    if replace_existing and error_number in (errno.ENOENT, errno.ENOTDIR, errno.EINVAL):
+        print(
+            f"Same-version release changed during the build and was left untouched: {sys.argv[2]}",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    raise OSError(error_number, os.strerror(error_number), sys.argv[2])
+PY
+
+echo "Public-safe release candidate created or atomically replaced:"
 echo "$FINAL_OUTPUT_DIR"
 echo "Temporary build logs and intermediates were removed."

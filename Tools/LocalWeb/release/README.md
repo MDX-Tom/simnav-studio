@@ -21,11 +21,14 @@ Linux 用户运行 `./run-linux.sh`。Windows 包含原生 bundle 时会直接�
 不会启动 Linux/WSL；仅在原生 bundle 缺失时才回退到 Docker Desktop。默认地址为
 <http://127.0.0.1:8010>，不会监听局域网或公网。
 
-The Web data root is independent from the apps. No navigation database, user map, cookie,
-FR24 session, cache, or log is bundled. Import a permitted SQLite/S3DB database and offline map
-packages from the browser UI. The selected navigation database remains active across native
-process or container restarts. FR24 browser-session sync is Apple WebKit-only; ordinary browsers
-show a compliant external-browser/import fallback and do not bypass CAPTCHA or Cloudflare.
+The Web data root is independent from the apps. This release includes the same permitted example
+`Database/navdata.sqlite` selected for its iOS/iPadOS and macOS artifacts. On first launch the
+server copies that read-only release database into the Local Web data root and activates it, so
+airport search and planning work immediately. A database later imported or selected in the browser
+remains active across native-process or container restarts; **Restore bundled database** returns to
+the release copy. No user map, GPX track, cookie, FR24 session, cache, log, or token is bundled.
+FR24 browser-session sync is Apple WebKit-only; ordinary browsers show a compliant
+external-browser/import fallback and do not bypass CAPTCHA or Cloudflare.
 
 Use the matching `stop-*` script for either a recorded native process or the Docker fallback.
 Closing a native-server terminal or pressing Control-C also stops that native process. Stop scripts

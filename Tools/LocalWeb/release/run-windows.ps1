@@ -10,17 +10,22 @@ if ($Port -lt 1 -or $Port -gt 65535) {
 $Url = "http://127.0.0.1:$Port"
 $NativeExe = Join-Path $PSScriptRoot "native\windows-x86_64\simnav-local-web.exe"
 $WebRoot = Join-Path $PSScriptRoot "app\NavPlanner\Resources\Web"
+$BundledDatabase = Join-Path $PSScriptRoot "app\NavPlanner\Resources\Database\navdata.sqlite"
 $StateRoot = Join-Path $env:LOCALAPPDATA "SimNav Studio Web\Runtime"
 $PidFile = Join-Path $StateRoot "server-$Port.pid"
 $PortBusy = $null -ne (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
     Select-Object -First 1)
 
 if (Test-Path -LiteralPath $NativeExe -PathType Leaf) {
+    if (-not (Test-Path -LiteralPath $BundledDatabase -PathType Leaf)) {
+        throw "The bundled navigation database is missing: $BundledDatabase"
+    }
     if ($PortBusy) {
         throw "Port $Port is already in use; nothing was changed."
     }
     $env:SIMNAV_WEB_PORT = "$Port"
     $env:SIMNAV_WEB_ROOT = $WebRoot
+    $env:SIMNAV_DATABASE = $BundledDatabase
     New-Item -ItemType Directory -Force -Path $StateRoot | Out-Null
     $Process = Start-Process -FilePath $NativeExe -WorkingDirectory (Split-Path $NativeExe) `
         -NoNewWindow -PassThru

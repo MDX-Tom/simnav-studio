@@ -159,19 +159,23 @@ fi
 
 IOS_DATABASE="$IOS_APP/Database/navdata.sqlite"
 MAC_DATABASE="$MAC_APP/Contents/Resources/Database/navdata.sqlite"
-if [ ! -f "$IOS_DATABASE" ] || [ ! -f "$MAC_DATABASE" ]; then
-  echo "IPA or Mac app is missing Database/navdata.sqlite." >&2
+WEB_DATABASE="$WEB_DIR/app/NavPlanner/Resources/Database/navdata.sqlite"
+if [ ! -f "$IOS_DATABASE" ] || [ ! -f "$MAC_DATABASE" ] || [ ! -f "$WEB_DATABASE" ]; then
+  echo "An iOS, macOS, or Web artifact is missing Database/navdata.sqlite." >&2
   exit 4
 fi
 IOS_DATABASE_SHA="$(shasum -a 256 "$IOS_DATABASE" | awk '{print $1}')"
 MAC_DATABASE_SHA="$(shasum -a 256 "$MAC_DATABASE" | awk '{print $1}')"
+WEB_DATABASE_SHA="$(shasum -a 256 "$WEB_DATABASE" | awk '{print $1}')"
 IOS_DATABASE_SIZE="$(stat -f '%z' "$IOS_DATABASE")"
 IOS_DATABASE_AIRAC="$(sqlite3 -readonly "$IOS_DATABASE" 'select current_airac from tbl_header limit 1;')"
-if [ "$IOS_DATABASE_SHA" != "$MAC_DATABASE_SHA" ]; then
-  echo "IPA and Mac app contain different default navigation databases." >&2
+IOS_DATABASE_REVISION="$(sqlite3 -readonly "$IOS_DATABASE" 'select revision from tbl_header limit 1;')"
+if [ "$IOS_DATABASE_SHA" != "$MAC_DATABASE_SHA" ] || [ "$IOS_DATABASE_SHA" != "$WEB_DATABASE_SHA" ]; then
+  echo "The iOS, macOS, and Web artifacts do not contain the exact same navigation database." >&2
   exit 4
 fi
-if [ "$(sqlite3 -readonly "$IOS_DATABASE" 'PRAGMA quick_check;')" != "ok" ]; then
+if [ "$(sqlite3 -readonly "$IOS_DATABASE" 'PRAGMA quick_check;')" != "ok" ] \
+    || [ "$(sqlite3 -readonly "$WEB_DATABASE" 'PRAGMA quick_check;')" != "ok" ]; then
   echo "Bundled default navigation database failed SQLite PRAGMA quick_check." >&2
   exit 4
 fi
@@ -285,7 +289,7 @@ python3 - \
   "$CURRENT_BRANCH" "$CURRENT_HEAD" \
   "$IPA_SHA" "$IPA_SIZE" "$APP_TREE_SHA" "$APP_SIZE" "$DMG_SHA" "$DMG_SIZE" \
   "$WEB_TREE_SHA" "$WEB_SIZE" \
-  "$IOS_DATABASE_SHA" "$IOS_DATABASE_SIZE" "$IOS_DATABASE_AIRAC" <<'PY'
+  "$IOS_DATABASE_SHA" "$IOS_DATABASE_SIZE" "$IOS_DATABASE_AIRAC" "$IOS_DATABASE_REVISION" <<'PY'
 import json
 import sys
 
@@ -311,13 +315,14 @@ import sys
     database_sha,
     database_size,
     database_airac,
+    database_revision,
 ) = sys.argv[1:]
 
 with open(manifest_path, "r", encoding="utf-8") as handle:
     manifest = json.load(handle)
 
-if manifest.get("schema_version") != 5:
-    raise SystemExit("Public manifest schema is not version 5.")
+if manifest.get("schema_version") != 6:
+    raise SystemExit("Public manifest schema is not version 6.")
 
 release = manifest.get("release", {})
 expected_release = {
@@ -356,13 +361,26 @@ if artifacts["web/"].get("http_transports") != {
     "windows": "swift-nio-2.101.3",
 }:
     raise SystemExit("Public manifest Web HTTP transport pins do not match the release package.")
+expected_web_database = {
+    "database_included": True,
+    "database_sha256": database_sha,
+    "database_path": "app/NavPlanner/Resources/Database/navdata.sqlite",
+}
+for key, expected in expected_web_database.items():
+    if artifacts["web/"].get(key) != expected:
+        raise SystemExit(f"Public manifest Web {key} does not match the release database.")
 
 database = manifest.get("bundled_database", {})
 expected_database = {
     "source": "database/e_dfd_PMDG_release.s3db",
-    "bundle_path": "Database/navdata.sqlite",
-    "role": "example navigation database bundled with release artifacts",
+    "bundle_paths": {
+        "ios": "Database/navdata.sqlite",
+        "macos": "Database/navdata.sqlite",
+        "web": "app/NavPlanner/Resources/Database/navdata.sqlite",
+    },
+    "role": "example navigation database bundled identically with all three release platforms",
     "current_airac": database_airac,
+    "revision": database_revision,
     "size_bytes": int(database_size),
     "sha256": database_sha,
     "sqlite_quick_check": "passed",

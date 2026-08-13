@@ -14,6 +14,7 @@ services:
       SIMNAV_BIND_HOST: "0.0.0.0"
       SIMNAV_WEB_PORT: "${SIMNAV_WEB_PORT:-8010}"
       SIMNAV_WEB_ROOT: /opt/simnav/Web
+      SIMNAV_DATABASE: /opt/simnav/Database/navdata.sqlite
       SIMNAV_DATA_DIR: /var/lib/simnav/data
     ports:
       - "127.0.0.1:${SIMNAV_WEB_PORT:-8010}:${SIMNAV_WEB_PORT:-8010}"

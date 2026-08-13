@@ -33,18 +33,27 @@ paths cannot escape the shared Web root.
 
 ## Cross-platform release payload
 
-Generate a new, self-contained Web candidate without a navigation database or user data:
+Generate a new, self-contained Web candidate with the release-selected navigation database but
+without user data:
 
 ```bash
 Tools/LocalWeb/package_web_release.sh \
   --output /tmp/SimNav-Web-package \
-  --build-macos-native
-Tools/LocalWeb/audit_web_release.sh /tmp/SimNav-Web-package --docker-smoke
+  --build-macos-native \
+  --database database/e_dfd_PMDG_release.s3db
+Tools/LocalWeb/audit_web_release.sh /tmp/SimNav-Web-package \
+  --expected-database database/e_dfd_PMDG_release.s3db \
+  --docker-smoke
 ```
 
 The package contains one canonical `app/NavPlanner/Resources/Web` tree, one shared Swift core, and
+the same byte-for-byte `Database/navdata.sqlite` selected for the iOS and macOS release artifacts,
 the SwiftPM transport/security tests declared by its unchanged `Package.swift`, plus pinned
-Docker/Compose and macOS, Windows, and Linux run/stop scripts. Docker publishes only to host
+Docker/Compose and macOS, Windows, and Linux run/stop scripts. The database argument defaults to
+the ignored `database/e_dfd_PMDG_release.s3db`; packaging fails if it is missing or invalid. On the
+first launch the shared data store copies that read-only release input into the independent Web
+data root. Later user imports remain active and are not overwritten by an upgrade. No user maps,
+GPX tracks, session state, cache, tokens, or logs are packaged. Docker publishes only to host
 `127.0.0.1`; only the marked container may bind `0.0.0.0` internally. Native macOS/Windows
 launchers record a per-port PID and their stop scripts verify the executable path before stopping
 it; Docker stop scripts preserve the named data volume.

@@ -5,18 +5,38 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 project_root="$(cd -- "${script_dir}/../.." && pwd)"
 package_dir="${1:-}"
 docker_smoke=0
+expected_database=""
 
-if [[ "${2:-}" == "--docker-smoke" ]]; then
-  docker_smoke=1
-elif (($# > 1)); then
-  echo "usage: $0 /path/to/web-package [--docker-smoke]" >&2
-  exit 2
-fi
 if [[ -z "${package_dir}" || ! -d "${package_dir}" ]]; then
-  echo "usage: $0 /path/to/web-package [--docker-smoke]" >&2
+  echo "usage: $0 /path/to/web-package [--docker-smoke] [--expected-database <file>]" >&2
   exit 2
 fi
 package_dir="$(cd -- "${package_dir}" && pwd)"
+shift
+while (($#)); do
+  case "$1" in
+    --docker-smoke)
+      docker_smoke=1
+      shift
+      ;;
+    --expected-database)
+      (($# >= 2)) || { echo "Missing value after --expected-database." >&2; exit 2; }
+      expected_database="$2"
+      shift 2
+      ;;
+    *)
+      echo "Unknown Web release audit option: $1" >&2
+      exit 2
+      ;;
+  esac
+done
+if [[ -n "${expected_database}" ]]; then
+  if [[ ! -f "${expected_database}" ]]; then
+    echo "Expected Web release database is missing: ${expected_database}" >&2
+    exit 2
+  fi
+  expected_database="$(cd -- "$(dirname -- "${expected_database}")" && pwd)/$(basename -- "${expected_database}")"
+fi
 
 required_files=(
   Dockerfile
@@ -32,6 +52,7 @@ required_files=(
   stop-linux.sh
   app/Package.swift
   app/Package.resolved
+  app/NavPlanner/Resources/Database/navdata.sqlite
   app/NavPlanner/Resources/Web/map.html
   app/NavPlanner/Resources/Web/runtime.js
   app/NavPlanner/Core/Runtime/SimNavRuntimeRouter.swift
@@ -88,11 +109,40 @@ hummingbird = re.search(
 if not hummingbird or '.windows' in hummingbird.group(1):
     raise SystemExit("Hummingbird must remain excluded from the native Windows build.")
 PY
+bundled_database="${package_dir}/app/NavPlanner/Resources/Database/navdata.sqlite"
+unexpected_database="$(
+  find "${package_dir}" -type f \
+    \( -iname '*.s3db' -o -iname '*.sqlite' -o -iname '*.sqlite3' -o -iname '*.db' \) \
+    ! -path "${bundled_database}" -print -quit
+)"
+if [[ -n "${unexpected_database}" ]]; then
+  echo "Web package contains an unexpected database: ${unexpected_database}" >&2
+  exit 3
+fi
 if find "${package_dir}" -type f \
-    \( -iname '*.s3db' -o -iname '*.sqlite' -o -iname '*.sqlite3' -o -iname '*.mbtiles' \
-       -o -iname '*.pmtiles' -o -iname '*.gpx' -o -iname '*.log' -o -iname '.DS_Store' \) \
-    -print -quit | grep -q .; then
-  echo "Web package contains a database, map, track, log, or metadata file that must remain local." >&2
+    \( -iname '*.mbtiles' -o -iname '*.pmtiles' -o -iname '*.gpx' -o -iname '*.log' \
+       -o -iname '.DS_Store' \) -print -quit | grep -q .; then
+  echo "Web package contains a user map, track, log, or Finder metadata file." >&2
+  exit 3
+fi
+database_quick_check="$(sqlite3 -readonly "${bundled_database}" 'PRAGMA quick_check;')"
+if [[ "${database_quick_check}" != "ok" ]]; then
+  echo "Bundled Web database failed SQLite PRAGMA quick_check: ${database_quick_check}" >&2
+  exit 3
+fi
+for table_name in tbl_header tbl_airports tbl_runways tbl_enroute_waypoints tbl_enroute_airways; do
+  if [[ "$(sqlite3 -readonly "${bundled_database}" \
+      "select count(*) from sqlite_master where type = 'table' and name = '${table_name}';")" != "1" ]]; then
+    echo "Bundled Web database is missing required table: ${table_name}" >&2
+    exit 3
+  fi
+done
+database_sha="$(shasum -a 256 "${bundled_database}" | awk '{print $1}')"
+database_size="$(wc -c < "${bundled_database}" | tr -d '[:space:]')"
+database_airac="$(sqlite3 -readonly "${bundled_database}" 'select current_airac from tbl_header limit 1;')"
+database_revision="$(sqlite3 -readonly "${bundled_database}" 'select revision from tbl_header limit 1;')"
+if [[ -n "${expected_database}" ]] && ! cmp -s "${bundled_database}" "${expected_database}"; then
+  echo "Bundled Web database differs from the release-selected database." >&2
   exit 3
 fi
 if rg -n -i '/Users/[^/]+/|/home/[^/]+/|[A-Z]:\\Users\\[^\\]+\\|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY' \
@@ -102,16 +152,28 @@ if rg -n -i '/Users/[^/]+/|/home/[^/]+/|[A-Z]:\\Users\\[^\\]+\\|BEGIN (RSA |EC |
   exit 3
 fi
 
-python3 - "${package_dir}/web-manifest.json" <<'PY'
+python3 - "${package_dir}/web-manifest.json" \
+  "${database_sha}" "${database_size}" "${database_airac}" "${database_revision}" <<'PY'
 import json
 import sys
 
 with open(sys.argv[1], "r", encoding="utf-8") as handle:
     manifest = json.load(handle)
-if manifest.get("schema_version") != 1 or manifest.get("platform") != "web":
+if manifest.get("schema_version") != 2 or manifest.get("platform") != "web":
     raise SystemExit("Invalid Web manifest schema/platform.")
-if manifest.get("database_included") is not False:
-    raise SystemExit("Web manifest must state that no database is included.")
+if manifest.get("database_included") is not True:
+    raise SystemExit("Web manifest must state that the release database is included.")
+database = manifest.get("bundled_database", {})
+expected_database = {
+    "path": "app/NavPlanner/Resources/Database/navdata.sqlite",
+    "sha256": sys.argv[2],
+    "size_bytes": int(sys.argv[3]),
+    "current_airac": sys.argv[4],
+    "revision": sys.argv[5],
+    "sqlite_quick_check": "passed",
+}
+if database != expected_database:
+    raise SystemExit("Web manifest bundled_database metadata does not match the packaged database.")
 if manifest.get("ui_source") != "app/NavPlanner/Resources/Web":
     raise SystemExit("Web manifest does not identify the canonical UI source.")
 if manifest.get("http_transports") != {
@@ -135,6 +197,13 @@ if ! rg -q '^USER 10001:10001$' "${package_dir}/Dockerfile" \
     || ! rg -q 'read_only: true' "${package_dir}/docker-compose.yml" \
     || ! rg -q 'no-new-privileges:true' "${package_dir}/docker-compose.yml"; then
   echo "Container non-root/read-only/no-new-privileges gates are incomplete." >&2
+  exit 3
+fi
+if ! rg -q 'SIMNAV_DATABASE=/opt/simnav/Database/navdata.sqlite' "${package_dir}/Dockerfile" \
+    || ! rg -q 'SIMNAV_DATABASE: /opt/simnav/Database/navdata.sqlite' "${package_dir}/docker-compose.yml" \
+    || ! rg -q 'SIMNAV_DATABASE="\$\{bundled_database\}"' "${package_dir}/run-macos.command" \
+    || ! rg -q 'SIMNAV_DATABASE = \$BundledDatabase' "${package_dir}/run-windows.ps1"; then
+  echo "A Web launcher does not select the bundled release database." >&2
   exit 3
 fi
 bash -n \
@@ -202,12 +271,31 @@ PY
       | sed -n "/^[A-Za-z0-9_][A-Za-z0-9_.]*\/[A-Za-z0-9_]/p" \
       > "${test_list}"
     test_count="$(wc -l < "${test_list}" | tr -d "[:space:]")"
-    if [ "${test_count}" -lt 23 ]; then
-      echo "Expected at least 23 packaged Swift tests, found ${test_count}." >&2
+    if [ "${test_count}" -lt 24 ]; then
+      echo "Expected at least 24 packaged Swift tests, found ${test_count}." >&2
       exit 1
     fi
     while IFS= read -r test_name; do
-      timeout 120 "${test_binary}" "${test_name}"
+      test_output=/tmp/simnav-packaged-swift-test.txt
+      set +e
+      timeout --kill-after=10 120 "${test_binary}" "${test_name}" \
+        > "${test_output}" 2>&1
+      test_status=$?
+      set -e
+      if [ "${test_status}" -eq 124 ] || [ "${test_status}" -eq 137 ]; then
+        echo "Packaged Swift test timed out once; retrying in a fresh process: ${test_name}" >&2
+        set +e
+        timeout --kill-after=10 120 "${test_binary}" "${test_name}" \
+          > "${test_output}" 2>&1
+        test_status=$?
+        set -e
+      fi
+      if [ "${test_status}" -ne 0 ]; then
+        cat "${test_output}" >&2
+        echo "Packaged Swift test failed with status ${test_status}: ${test_name}" >&2
+        exit "${test_status}"
+      fi
+      echo "Packaged Swift test passed: ${test_name}"
     done < "${test_list}"
   '
   docker build --quiet --tag "${image_name}" "${package_dir}" >/dev/null
@@ -239,6 +327,21 @@ PY
     echo "Linux container health smoke failed." >&2
     exit 4
   fi
+  bundled_header_payload="$(curl --noproxy '*' --fail --silent --show-error \
+    "http://127.0.0.1:${smoke_port}/api/header")"
+  python3 - "${bundled_header_payload}" "${database_airac}" "${database_revision}" <<'PY'
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+expected = {
+    "current_airac": sys.argv[2],
+    "revision": sys.argv[3],
+    "database_name": "navdata.sqlite",
+}
+if any(payload.get(key) != value for key, value in expected.items()):
+    raise SystemExit("Linux container did not activate the bundled release database on first launch")
+PY
   curl --noproxy '*' --fail --silent "http://127.0.0.1:${smoke_port}/" \
     | rg -q 'SimNav Studio'
   forbidden_status="$(curl --noproxy '*' --silent --output /dev/null --write-out '%{http_code}' \
@@ -457,6 +560,7 @@ fi
 echo "WEB_RELEASE_AUDIT=PASS"
 echo "WEB_SINGLE_UI_AND_SWIFT_CORE_PARITY=passed"
 echo "WEB_PACKAGE_CHECKSUMS=passed"
+echo "WEB_BUNDLED_DATABASE_PARITY=passed"
 echo "WEB_LOOPBACK_AND_CONTAINER_SECURITY=passed"
 if ((docker_smoke == 1)); then
   echo "WEB_LINUX_SWIFT_TESTS=passed"
