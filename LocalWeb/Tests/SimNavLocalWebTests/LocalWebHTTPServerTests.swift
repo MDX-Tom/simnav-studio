@@ -139,6 +139,20 @@ final class LocalWebHTTPServerTests: XCTestCase {
             XCTAssertEqual(runtimeData, sourceRuntime)
             XCTAssertTrue(String(decoding: runtimeData, as: UTF8.self)
                 .contains("window.SimNavRuntime"))
+
+            let uiZoomScript = try await client.execute(uri: "/ui-zoom.js", method: .get)
+            let uiZoomData = Data(uiZoomScript.body.readableBytesView)
+            let sourceUIZoom = try Data(
+                contentsOf: fixture.settings.webRoot.appendingPathComponent("ui-zoom.js")
+            )
+            XCTAssertEqual(uiZoomScript.status, .ok)
+            XCTAssertEqual(uiZoomData, sourceUIZoom)
+            XCTAssertTrue(String(decoding: uiZoomData, as: UTF8.self)
+                .contains("window.SimNavUIZoom"))
+            XCTAssertLessThan(
+                try XCTUnwrap(html.range(of: "src=\"/ui-zoom.js\"")?.lowerBound),
+                try XCTUnwrap(html.range(of: "href=\"/styles.css\"")?.lowerBound)
+            )
             XCTAssertLessThan(
                 try XCTUnwrap(html.range(of: "src=\"/runtime.js\"")?.lowerBound),
                 try XCTUnwrap(html.range(of: "src=\"/app.js\"")?.lowerBound)

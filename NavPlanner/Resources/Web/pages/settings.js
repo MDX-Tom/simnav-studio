@@ -12,6 +12,7 @@ export function registerSettingsPage(context) {
     clearMapCache,
     resetAllSettingsAndCaches,
     applyThemeMode,
+    applyUIZoomLevel,
     applyLanguageMode,
     applyWeightUnit,
     applyPressureUnit,
@@ -55,6 +56,12 @@ export function registerSettingsPage(context) {
   });
   elements.themeChoiceButtons.forEach((button) => {
     button.addEventListener("click", () => applyThemeMode(button.dataset.themeChoice));
+  });
+  elements.uiZoomInput?.addEventListener("input", () => {
+    applyUIZoomLevel(elements.uiZoomInput.value, { announce: false });
+  });
+  elements.uiZoomInput?.addEventListener("change", () => {
+    applyUIZoomLevel(elements.uiZoomInput.value, { announce: true });
   });
   elements.languageChoiceButtons.forEach((button) => {
     button.addEventListener("click", () => applyLanguageMode(button.dataset.languageChoice));

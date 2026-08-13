@@ -1,6 +1,8 @@
 :root {
   color-scheme: dark;
   --device-font-size-reduction: 0px;
+  --ui-zoom-scale: 1;
+  --ui-viewport-height: 100vh;
   --bg: #070b14;
   --panel: rgba(10, 16, 28, 0.94);
   --panel-soft: rgba(17, 27, 44, 0.92);
@@ -210,6 +212,7 @@ body {
 body {
   overflow: hidden;
   font-size: calc(13px - var(--device-font-size-reduction));
+  zoom: var(--ui-zoom-scale);
   -webkit-text-size-adjust: 100%;
   -webkit-user-select: none;
   user-select: none;
@@ -275,7 +278,7 @@ svg {
   grid-template-rows: 1fr;
   grid-template-areas:
     "planner left-rail map right-rail detail";
-  height: 100vh;
+  height: var(--ui-viewport-height);
   column-gap: 0;
   row-gap: 12px;
   padding: 12px;
@@ -3011,6 +3014,10 @@ body.left-panel-expanded .selection-table {
   padding-top: 9px;
 }
 
+.ui-zoom-control {
+  margin-top: 10px;
+}
+
 .map-zoom-offset-slider-frame {
   --zoom-offset-progress: 33.333%;
   --zoom-offset-track-fill-top: rgba(8, 86, 151, 0.99);
@@ -5456,8 +5463,7 @@ html[data-theme="day"] .offline-progress {
 }
 
 @media (max-width: 1024px), (orientation: portrait) {
-  html[data-mobile-layout="true"],
-  html[data-mobile-layout="true"] body {
+  html[data-mobile-layout="true"] {
     width: 100%;
     height: 100%;
     max-height: 100%;
@@ -5467,6 +5473,12 @@ html[data-theme="day"] .offline-progress {
   }
 
   html[data-mobile-layout="true"] body {
+    width: 100%;
+    height: 100%;
+    max-height: 100%;
+    min-height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
     font-size: calc(10px - var(--device-font-size-reduction));
   }
 
@@ -6241,6 +6253,10 @@ html[data-theme="day"] .offline-progress {
 
   html[data-mobile-layout="true"] .map-zoom-offset-control {
     gap: 6px;
+  }
+
+  html[data-mobile-layout="true"] .ui-zoom-control {
+    margin-top: 6px;
   }
 
   html[data-mobile-layout="true"] .map-zoom-offset-slider-frame {
@@ -7124,7 +7140,15 @@ html[data-theme="day"] .offline-progress {
 }
 
 @media (max-width: 1024px) and (orientation: landscape) {
-  html[data-device="phone"],
+  html[data-device="phone"] {
+    width: 100%;
+    height: 100%;
+    max-height: 100%;
+    min-height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
   html[data-device="phone"] body {
     width: 100%;
     height: 100%;
@@ -7400,34 +7424,20 @@ html[data-theme="day"] .offline-progress {
   }
 }
 
-/* Keep the established 0.80 geometry on iPad. Mac receives its own 0.90 scale
-   below, while phones retain their original size. */
-html[data-device="pad"] body {
-  zoom: 0.80;
-}
-
-html[data-device="pad"] .shell {
-  height: 125vh;
-}
-
 html[data-device="pad"][data-platform="ios"] {
   --device-font-size-reduction: 1px;
 }
 
 /* Relative to v84, Mac typography grows by 1.5 CSS points: the former 1px
-   reduction becomes a 0.5px addition. The shell height compensates 0.90 zoom
-   so the workbench still fills exactly one visible viewport. */
+   reduction becomes a 0.5px addition. Device geometry is supplied by the
+   shared UI zoom bootstrap so user levels can layer on top without changing
+   these established typography choices. */
 html[data-device="pad"][data-platform="mac"] {
   --device-font-size-reduction: -0.5px;
 }
 
-html[data-device="pad"][data-platform="mac"] body {
-  zoom: 0.90;
-}
-
 /* Mac keeps its established pre-scale side-panel variables. */
 html[data-device="pad"][data-platform="mac"] .shell {
-  height: 111.1111vh;
   --planner-panel-width: 381.6px;
   --detail-panel-width: 462px;
 }
@@ -7480,10 +7490,6 @@ html[data-device="pad"][data-platform="mac"] .shell {
 @media (orientation: portrait) {
   html[data-device="pad"][data-platform="ios"][data-mobile-layout="true"] {
     --device-font-size-reduction: 0px;
-  }
-
-  html[data-device="pad"][data-platform="ios"][data-mobile-layout="true"] body {
-    zoom: 1;
   }
 
   html[data-device="pad"][data-platform="ios"][data-mobile-layout="true"] .shell {

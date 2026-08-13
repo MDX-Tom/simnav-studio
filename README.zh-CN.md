@@ -213,6 +213,12 @@ Apple App 以 SwiftUI 构建外壳；Local Web 则从 localhost 直接提供完�
 2. 从 Files 中选择 `.s3db`、`.sqlite`、`.sqlite3` 或 `.db` 文件，格式须符合 [导入自定义导航数据库兼容格式](#nav-db-compatible-format) 部分所述。
 3. SimNav Studio 切换到导入的数据库，并刷新航路、Procedure 和 nav-overlay 缓存。
 
+**外观与 UI 缩放**
+
+1. 打开 **设置** → **外观**，可跟随系统主题或选择日间/夜间模式。
+2. UI 缩放提供 `-1`、`0`、`+1`、`+2`，默认等级为 `0`，每档以当前设备布局为基准相差 8%。
+3. 文字、控件、面板与地图界面会一起缩放，不改变地图的地理缩放级别；Apple App 与 Local Web 共用同一偏好。
+
 <a id="nav-db-compatible-format"></a>
 <details>
 <summary><strong>导入自定义导航数据库兼容格式</strong></summary>

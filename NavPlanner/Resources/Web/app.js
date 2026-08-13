@@ -8,6 +8,10 @@ const runtime = window.SimNavRuntime;
 if (!runtime) {
   throw new Error("SimNav runtime.js must load before app.js.");
 }
+const uiZoomRuntime = window.SimNavUIZoom;
+if (!uiZoomRuntime) {
+  throw new Error("SimNav ui-zoom.js must load before app.js.");
+}
 const savedThemeMode = readLocalStorageValue("navplannerThemeMode");
 const savedAppIconChoice = readLocalStorageValue("navplannerAppIconChoice");
 const savedLanguageMode = readLocalStorageValue("navplannerLanguageMode");
@@ -16,6 +20,7 @@ const savedOnlineMapProvider = readLocalStorageValue("navplannerOnlineMapProvide
 const savedMapTileZoomOffset = readLocalStorageValue("navplannerMapTileZoomOffset");
 const savedWeightUnit = readLocalStorageValue("navplannerWeightUnit");
 const savedPressureUnit = readLocalStorageValue("navplannerPressureUnit");
+const savedUIZoomLevel = uiZoomRuntime.current().level;
 const NAVPLANNER_API_ORIGIN = (window.location.protocol === "navplanner:"
   || window.location.protocol === "about:"
   || window.location.protocol === "file:"
@@ -50,6 +55,7 @@ const LOCAL_SETTING_KEYS = Object.freeze([
   "navplannerMapSourceMode",
   "navplannerOnlineMapProvider",
   "navplannerMapTileZoomOffset",
+  "navplannerUIZoomLevel",
   "navplannerWeightUnit",
   "navplannerPressureUnit",
 ]);
@@ -159,6 +165,11 @@ const TRANSLATIONS = {
   "settings.databaseHint": { "zh-Hans": "支持从“文件”中选择 .s3db / .sqlite / .db，导入后核心查询会切换到新的本地数据库。", en: "Choose .s3db / .sqlite / .db from Files. Core local queries switch to the imported database after import." },
   "settings.appearance": { "zh-Hans": "外观", en: "Appearance" },
   "settings.appearanceMode": { "zh-Hans": "外观模式", en: "Appearance mode" },
+  "settings.uiZoomTitle": { "zh-Hans": "UI 缩放", en: "UI Zoom" },
+  "settings.uiZoomValue": { "zh-Hans": "当前 {level}（{percent}%）", en: "Current {level} ({percent}%)" },
+  "settings.uiZoomAria": { "zh-Hans": "UI 缩放等级", en: "UI zoom level" },
+  "settings.uiZoomHint": { "zh-Hans": "默认等级为 0，每档以当前设备布局为基准调整 8%；文字、控件和地图界面会一起缩放，地图缩放级别不变。", en: "Level 0 is the default. Each step changes the current device layout by 8%; text, controls, and map chrome scale together without changing the geographic map zoom." },
+  "settings.uiZoomChanged": { "zh-Hans": "UI 缩放已设为 {level}（{percent}%）。", en: "UI zoom set to {level} ({percent}%)." },
   "settings.language": { "zh-Hans": "语言", en: "Language" },
   "settings.languageHint": { "zh-Hans": "默认跟随系统语言；无论选择哪种语言，SID / STAR / APPROACH、DCT、IFR、AIRAC 等航空标识保持英文。", en: "Default follows the system language. SID / STAR / APPROACH, DCT, IFR, AIRAC, and other aviation identifiers remain in English." },
   "settings.weightUnit": { "zh-Hans": "重量单位", en: "Weight Unit" },
@@ -176,9 +187,9 @@ const TRANSLATIONS = {
   "settings.offlineMaps": { "zh-Hans": "离线地图", en: "Offline Maps" },
   "settings.mapCache": { "zh-Hans": "在线地图缓存", en: "Online Map Cache" },
   "settings.resetAll": { "zh-Hans": "重置与清理", en: "Reset & Cleanup" },
-  "settings.resetAllHint": { "zh-Hans": "恢复外观、语言、重量单位、修正海压单位、图标和地图设置默认值，并清理在线地图缓存与 FR24 轨迹缓存；不会删除导航数据库或离线地图包。", en: "Restore appearance, language, weight unit, altimeter unit, icon, and map settings to defaults, and clear online map plus FR24 track caches. Navigation databases and offline map packages are kept." },
+  "settings.resetAllHint": { "zh-Hans": "恢复外观、UI 缩放、语言、重量单位、修正海压单位、图标和地图设置默认值，并清理在线地图缓存与 FR24 轨迹缓存；不会删除导航数据库或离线地图包。", en: "Restore appearance, UI zoom, language, weight unit, altimeter unit, icon, and map settings to defaults, and clear online map plus FR24 track caches. Navigation databases and offline map packages are kept." },
   "settings.resetAllButton": { "zh-Hans": "重置所有设置并删除全部缓存", en: "Reset All Settings & Delete All Caches" },
-  "settings.resetAllConfirm": { "zh-Hans": "确认重置所有设置并删除全部缓存？\n\n将恢复默认外观、语言、重量单位、修正海压单位、图标和地图设置，并清理在线地图缓存与 FR24 轨迹缓存；不会删除导航数据库或离线地图包。", en: "Reset all settings and delete all caches?\n\nThis restores default appearance, language, weight unit, altimeter unit, icon, and map settings, and clears online map plus FR24 track caches. Navigation databases and offline map packages are kept." },
+  "settings.resetAllConfirm": { "zh-Hans": "确认重置所有设置并删除全部缓存？\n\n将恢复默认外观、UI 缩放、语言、重量单位、修正海压单位、图标和地图设置，并清理在线地图缓存与 FR24 轨迹缓存；不会删除导航数据库或离线地图包。", en: "Reset all settings and delete all caches?\n\nThis restores default appearance, UI zoom, language, weight unit, altimeter unit, icon, and map settings, and clears online map plus FR24 track caches. Navigation databases and offline map packages are kept." },
   "settings.resetAllWorking": { "zh-Hans": "正在重置...", en: "Resetting..." },
   "settings.resetAllDone": { "zh-Hans": "已重置所有设置，并清理在线地图与 FR24 缓存。", en: "All settings reset. Online map and FR24 caches cleared." },
   "settings.copyright": { "zh-Hans": "版权与声明", en: "Copyright & Notices" },
@@ -983,6 +994,8 @@ const state = {
   detailLayoutExecutionCount: 0,
   detailScrollIdleTimer: 0,
   themeMode: THEME_MODES.has(savedThemeMode) ? savedThemeMode : "system",
+  uiZoomLevel: uiZoomRuntime.normalizeLevel(savedUIZoomLevel),
+  uiZoomLayoutFrame: 0,
   languageMode: normalizeLanguageMode(savedLanguageMode),
   effectiveLanguage: resolveLanguageMode(savedLanguageMode),
   appIconChoice: normalizeAppIconChoice(savedAppIconChoice),
@@ -1435,6 +1448,10 @@ const elements = {
   restoreBundledDatabaseButton: document.querySelector("#restoreBundledDatabaseButton"),
   databaseList: document.querySelector("#databaseList"),
   themeChoiceButtons: document.querySelectorAll("[data-theme-choice]"),
+  uiZoomSliderFrame: document.querySelector("#uiZoomSliderFrame"),
+  uiZoomInput: document.querySelector("#uiZoomInput"),
+  uiZoomValue: document.querySelector("#uiZoomValue"),
+  uiZoomScaleLabels: document.querySelectorAll("[data-ui-zoom-value]"),
   languageChoiceButtons: document.querySelectorAll("[data-language-choice]"),
   weightUnitButtons: document.querySelectorAll("[data-weight-unit-choice]"),
   pressureUnitButtons: document.querySelectorAll("[data-pressure-unit-choice]"),
@@ -4314,6 +4331,95 @@ function refreshOnlineBaseLayer({ bumpVersion = false } = {}) {
   }
 }
 
+function uiZoomLevelLabel(value = state.uiZoomLevel) {
+  const normalized = uiZoomRuntime.normalizeLevel(value);
+  return normalized > 0 ? `+${normalized}` : String(normalized);
+}
+
+function uiZoomPercentage(value = state.uiZoomLevel) {
+  return Math.round(uiZoomRuntime.factorForLevel(value) * 100);
+}
+
+function uiZoomProgress(value = state.uiZoomLevel) {
+  const normalized = uiZoomRuntime.normalizeLevel(value);
+  return `${((normalized + 1) / 3) * 100}%`;
+}
+
+function updateUIZoomControl() {
+  const progress = uiZoomProgress();
+  if (elements.uiZoomInput) {
+    elements.uiZoomInput.value = String(state.uiZoomLevel);
+    elements.uiZoomInput.style.setProperty("--zoom-offset-progress", progress);
+  }
+  if (elements.uiZoomSliderFrame) {
+    elements.uiZoomSliderFrame.style.setProperty("--zoom-offset-progress", progress);
+    elements.uiZoomSliderFrame.dataset.zoomLevel = String(state.uiZoomLevel);
+  }
+  elements.uiZoomScaleLabels?.forEach((item) => {
+    item.classList.toggle(
+      "active",
+      Number.parseInt(item.dataset.uiZoomValue || "", 10) === state.uiZoomLevel,
+    );
+  });
+  if (elements.uiZoomValue) {
+    elements.uiZoomValue.textContent = t("settings.uiZoomValue", {
+      level: uiZoomLevelLabel(),
+      percent: uiZoomPercentage(),
+    });
+  }
+}
+
+function effectiveUIZoomScale() {
+  const inlineValue = Number.parseFloat(
+    document.documentElement.style.getPropertyValue("--ui-zoom-scale"),
+  );
+  return Number.isFinite(inlineValue) && inlineValue > 0 ? inlineValue : 1;
+}
+
+function syncMobileVisualHeightForUIZoom() {
+  const root = document.documentElement;
+  if (document.body.dataset.mobileKeyboard === "open" && state.mobileVisualHeight > 0) {
+    root.style.setProperty(
+      "--mobile-visual-height",
+      `${(state.mobileVisualHeight / effectiveUIZoomScale()).toFixed(2)}px`,
+    );
+  }
+}
+
+function scheduleUIZoomLayoutRefresh() {
+  if (state.uiZoomLayoutFrame) {
+    window.cancelAnimationFrame(state.uiZoomLayoutFrame);
+  }
+  state.uiZoomLayoutFrame = window.requestAnimationFrame(() => {
+    state.uiZoomLayoutFrame = 0;
+    map.invalidateSize({ animate: false, pan: false });
+    scheduleVectorMapResizeSync();
+    scheduleFR24ProfileChartResize();
+    scheduleCalculateRender();
+  });
+}
+
+function applyUIZoomLevel(value, {
+  persist = true,
+  announce = true,
+  refreshLayout = true,
+} = {}) {
+  const normalized = uiZoomRuntime.normalizeLevel(value);
+  state.uiZoomLevel = normalized;
+  uiZoomRuntime.apply(normalized, { persist });
+  syncMobileVisualHeightForUIZoom();
+  updateUIZoomControl();
+  if (refreshLayout) {
+    scheduleUIZoomLayoutRefresh();
+  }
+  if (announce) {
+    setStatus(t("settings.uiZoomChanged", {
+      level: uiZoomLevelLabel(normalized),
+      percent: uiZoomPercentage(normalized),
+    }));
+  }
+}
+
 function updateMapTileZoomOffsetControl() {
   const label = mapTileZoomOffsetLabel();
   if (elements.mapTileZoomOffsetInput) {
@@ -5386,6 +5492,7 @@ async function resetAllSettingsAndCaches() {
     state.baseMap = "terrain";
     state.mapTileZoomOffset = 0;
     state.themeMode = "system";
+    state.uiZoomLevel = 0;
     state.languageMode = "system";
     state.effectiveLanguage = resolveLanguageMode("system");
     state.weightUnit = "lb";
@@ -5398,6 +5505,7 @@ async function resetAllSettingsAndCaches() {
     renderFR24CacheFlights([]);
     applyLanguageMode("system", { persist: false, refresh: true });
     applyThemeMode("system", { persist: false });
+    applyUIZoomLevel(0, { persist: false, announce: false });
     applyWeightUnit("lb", { persist: false, announce: false });
     applyPressureUnit("in", { persist: false, announce: false });
     applyAppIconChoice("style3-day-medium", { persist: false, notifyNative: true });
@@ -7041,7 +7149,10 @@ function installMobileViewportLock() {
     state.mobileKeyboardLift = roundedOverlap;
     state.mobileVisualHeight = visible;
     root.style.setProperty("--mobile-keyboard-height", `${roundedOverlap}px`);
-    root.style.setProperty("--mobile-visual-height", open ? `${visible}px` : "100%");
+    root.style.setProperty(
+      "--mobile-visual-height",
+      open ? `${(visible / effectiveUIZoomScale()).toFixed(2)}px` : "100%",
+    );
     if (open) {
       document.body.dataset.mobileKeyboard = "open";
     } else {
@@ -8090,6 +8201,7 @@ function refreshLocalizedDynamicText() {
   updateMapTypeOptionLabels();
   updateMapTypeOptionState();
   updateMapTileZoomOffsetControl();
+  updateUIZoomControl();
   updateMapOverlayControlLabels();
   updateTrackHistoryControlLabels();
   syncProcedureOverviewHeadings();
@@ -15509,6 +15621,7 @@ registerSettingsPage({
   clearMapCache,
   resetAllSettingsAndCaches,
   applyThemeMode,
+  applyUIZoomLevel,
   applyLanguageMode,
   applyWeightUnit,
   applyPressureUnit,
@@ -15572,6 +15685,11 @@ elements.mobileBottomTabButtons.forEach((button) => {
 });
 window.addEventListener("resize", () => {
   const mobileLayoutChanged = syncMobileWorkbenchLayout();
+  applyUIZoomLevel(state.uiZoomLevel, {
+    persist: false,
+    announce: false,
+    refreshLayout: false,
+  });
   if (mobileLayoutChanged) {
     document.body.classList.remove("map-expanded", "left-panel-expanded");
     elements.mapExpandButton?.classList.remove("is-expanded");
@@ -15588,6 +15706,11 @@ window.addEventListener("resize", () => {
 window.addEventListener("orientationchange", () => {
   window.setTimeout(() => {
     syncMobileWorkbenchLayout();
+    applyUIZoomLevel(state.uiZoomLevel, {
+      persist: false,
+      announce: false,
+      refreshLayout: false,
+    });
     updateMapTileZoomOffsetControl();
     map.invalidateSize({ animate: false, pan: false });
     scheduleVectorMapResizeSync();
@@ -17489,6 +17612,11 @@ async function applySimulatorDebugLaunch() {
 async function init() {
   applyLanguageMode(state.languageMode, { persist: false, refresh: false });
   applyThemeMode(state.themeMode, { persist: false });
+  applyUIZoomLevel(state.uiZoomLevel, {
+    persist: false,
+    announce: false,
+    refreshLayout: false,
+  });
   applyWeightUnit(state.weightUnit, { persist: false, announce: false });
   applyPressureUnit(state.pressureUnit, { persist: false, announce: false });
   applyAppIconChoice(state.appIconChoice, { persist: false, notifyNative: false });

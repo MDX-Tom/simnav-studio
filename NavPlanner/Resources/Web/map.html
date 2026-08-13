@@ -7,7 +7,7 @@
       document.write(`<base href="${window.location.protocol === "navplanner:" ? "navplanner://app/" : "/"}" />`);
     </script>
     <meta name="simnav-write-token" content="__SIMNAV_WRITE_TOKEN__" />
-    <meta name="navplanner-resource-version" content="20260813-local-web-release-v101" />
+    <meta name="navplanner-resource-version" content="20260813-ui-zoom-v102" />
     <title>SimNav Studio</title>
     <script>
       (() => {
@@ -56,6 +56,7 @@
         document.documentElement.dataset.theme = mode === "system" ? (prefersDay ? "day" : "night") : mode;
       })();
     </script>
+    <script src="/ui-zoom.js"></script>
     <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
     <link rel="stylesheet" href="/vendor/maplibre-gl/maplibre-gl.css" />
     <link rel="stylesheet" href="/styles.css" />
@@ -571,6 +572,24 @@
               <button class="theme-choice" type="button" data-theme-choice="day" data-i18n="theme.day">日间</button>
               <button class="theme-choice" type="button" data-theme-choice="night" data-i18n="theme.night">夜间</button>
             </div>
+            <div class="map-zoom-offset-control ui-zoom-control">
+              <div class="settings-row">
+                <div>
+                  <strong data-i18n="settings.uiZoomTitle">UI 缩放</strong>
+                  <span id="uiZoomValue" data-i18n="settings.uiZoomValue">当前 0（100%）</span>
+                </div>
+              </div>
+              <div id="uiZoomSliderFrame" class="map-zoom-offset-slider-frame">
+                <input id="uiZoomInput" class="map-zoom-offset-slider" type="range" min="-1" max="2" step="1" value="0" aria-label="UI 缩放等级" data-i18n-aria-label="settings.uiZoomAria" />
+                <div class="map-zoom-offset-ticks" aria-hidden="true">
+                  <span data-ui-zoom-value="-1" style="--tick-position: 0%;"><i></i><b>-1</b></span>
+                  <span data-ui-zoom-value="0" style="--tick-position: 33.333%;"><i></i><b>0</b></span>
+                  <span data-ui-zoom-value="1" style="--tick-position: 66.667%;"><i></i><b>+1</b></span>
+                  <span data-ui-zoom-value="2" style="--tick-position: 100%;"><i></i><b>+2</b></span>
+                </div>
+              </div>
+              <div class="helper-text" data-i18n="settings.uiZoomHint">默认等级为 0，每档以当前设备布局为基准调整 8%；文字、控件和地图界面会一起缩放，地图缩放级别不变。</div>
+            </div>
           </div>
 
           <div class="settings-card">
@@ -762,7 +781,7 @@
 
           <div class="settings-card reset-all-card">
             <div class="subheading" data-i18n="settings.resetAll">重置与清理</div>
-            <div class="helper-text" data-i18n="settings.resetAllHint">恢复外观、语言、重量单位、修正海压单位、图标和地图设置默认值，并清理在线地图缓存与 FR24 轨迹缓存；不会删除导航数据库或离线地图包。</div>
+            <div class="helper-text" data-i18n="settings.resetAllHint">恢复外观、UI 缩放、语言、重量单位、修正海压单位、图标和地图设置默认值，并清理在线地图缓存与 FR24 轨迹缓存；不会删除导航数据库或离线地图包。</div>
             <button id="resetAllSettingsButton" class="ghost-button compact-button danger-button reset-all-button" type="button" data-i18n="settings.resetAllButton">重置所有设置并删除全部缓存</button>
           </div>
         </section>

@@ -213,6 +213,12 @@ Online map cache and offline packages are managed separately. Clearing the onlin
 2. Pick a `.s3db`, `.sqlite`, `.sqlite3`, or `.db` file from Files; its format must match the [custom navigation-database compatibility](#nav-db-compatible-format) section below.
 3. SimNav Studio switches to the imported database and refreshes route, procedure, and nav-overlay caches.
 
+**Appearance and UI scale**
+
+1. Open **Settings** → **Appearance** to follow the system theme or select light/dark mode.
+2. UI Zoom provides `-1`, `0`, `+1`, and `+2`; level `0` is the default and every step changes the current device layout by 8%.
+3. Text, controls, panels, and map chrome scale together. The geographic map zoom is unchanged, and the same preference is used by the Apple App and Local Web.
+
 <a id="nav-db-compatible-format"></a>
 <details>
 <summary><strong>Custom navigation-database compatibility</strong></summary>
