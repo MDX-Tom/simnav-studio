@@ -121,6 +121,13 @@ final class LocalWebHTTPServerTests: XCTestCase {
             XCTAssertTrue(html.contains("SimNav Studio"))
             XCTAssertTrue(html.contains(token))
             XCTAssertFalse(html.contains("__SIMNAV_WRITE_TOKEN__"))
+            XCTAssertTrue(html.contains(#"window.location.protocol === "navplanner:""#))
+            XCTAssertTrue(html.contains(#"window.location.protocol === "file:""#))
+            XCTAssertTrue(html.contains(#"usesAppleResourceBridge ? "navplanner://app/" : "/""#))
+            XCTAssertTrue(html.contains("20260814-native-dark-map-style2-v108"))
+            XCTAssertTrue(html.contains(#"href="/app-icons/style2-day-medium.png""#))
+            XCTAssertTrue(html.contains(#"id="darkMapToggle" type="checkbox""#))
+            XCTAssertFalse(html.contains(#"id="darkMapToggle" type="checkbox" checked"#))
 
             let script = try await client.execute(uri: "/app.js", method: .get)
             let scriptData = Data(script.body.readableBytesView)
@@ -129,6 +136,7 @@ final class LocalWebHTTPServerTests: XCTestCase {
             )
             XCTAssertEqual(script.status, .ok)
             XCTAssertEqual(scriptData, sourceScript)
+            XCTAssertTrue(String(decoding: scriptData, as: UTF8.self).contains(#"providerKey: "arcgis-dark""#))
 
             let runtimeScript = try await client.execute(uri: "/runtime.js", method: .get)
             let runtimeData = Data(runtimeScript.body.readableBytesView)

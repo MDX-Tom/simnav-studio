@@ -12,7 +12,7 @@ private let legacyAppIconChoices: [String: String] = [
 ]
 
 private func normalizedAppIconChoice(_ choice: String?) -> String {
-    guard let choice, !choice.isEmpty else { return "style3-day-medium" }
+    guard let choice, !choice.isEmpty else { return "style2-day-medium" }
     if let migrated = legacyAppIconChoices[choice] {
         return migrated
     }
@@ -20,7 +20,7 @@ private func normalizedAppIconChoice(_ choice: String?) -> String {
     let variants = ["day-high", "day-medium", "day-soft", "night-high", "night-medium", "night-soft"]
     return styles.contains { style in variants.contains { choice == "\(style)-\($0)" } }
         ? choice
-        : "style3-day-medium"
+        : "style2-day-medium"
 }
 
 @MainActor
@@ -99,13 +99,13 @@ final class AppEnvironment: ObservableObject {
             "style1-night-medium": ("AppIconStyle1NightMedium", "风格1 · 夜间默认"),
             "style1-night-soft": ("AppIconStyle1NightSoft", "风格1 · 夜间柔和"),
             "style2-day-high": ("AppIconStyle2DayHigh", "风格2 · 日间高饱和"),
-            "style2-day-medium": ("AppIconStyle2DayMedium", "风格2 · 日间默认"),
+            "style2-day-medium": (nil, "风格2 · 日间默认"),
             "style2-day-soft": ("AppIconStyle2DaySoft", "风格2 · 日间柔和"),
             "style2-night-high": ("AppIconStyle2NightHigh", "风格2 · 夜间高饱和"),
             "style2-night-medium": ("AppIconStyle2NightMedium", "风格2 · 夜间默认"),
             "style2-night-soft": ("AppIconStyle2NightSoft", "风格2 · 夜间柔和"),
             "style3-day-high": ("AppIconDayHigh", "风格3 · 日间高饱和"),
-            "style3-day-medium": (nil, "风格3 · 日间默认"),
+            "style3-day-medium": ("AppIconStyle3DayMedium", "风格3 · 日间默认"),
             "style3-day-soft": ("AppIconDaySoft", "风格3 · 日间柔和"),
             "style3-night-high": ("AppIconNightHigh", "风格3 · 夜间高饱和"),
             "style3-night-medium": ("AppIconNightMedium", "风格3 · 夜间默认"),

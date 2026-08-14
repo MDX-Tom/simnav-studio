@@ -4,11 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
     <script>
-      document.write(`<base href="${window.location.protocol === "navplanner:" ? "navplanner://app/" : "/"}" />`);
+      (() => {
+        const usesAppleResourceBridge = window.location.protocol === "navplanner:"
+          || window.location.protocol === "file:";
+        document.write(`<base href="${usesAppleResourceBridge ? "navplanner://app/" : "/"}" />`);
+      })();
     </script>
     <meta name="simnav-write-token" content="__SIMNAV_WRITE_TOKEN__" />
-    <meta name="navplanner-resource-version" content="20260813-local-web-fr24-browser-v106" />
+    <meta name="navplanner-resource-version" content="20260814-native-dark-map-style2-v108" />
     <title>SimNav Studio</title>
+    <link data-simnav-runtime-icon="true" rel="icon" href="/app-icons/style2-day-medium.png" />
     <script>
       (() => {
         const modes = new Set(["system", "zh-Hans", "en"]);
@@ -54,6 +59,13 @@
         const prefersDay = window.matchMedia?.("(prefers-color-scheme: light)")?.matches;
         document.documentElement.dataset.themeMode = mode;
         document.documentElement.dataset.theme = mode === "system" ? (prefersDay ? "day" : "night") : mode;
+        let darkMapEnabled = false;
+        try {
+          darkMapEnabled = window.localStorage.getItem("navplannerDarkMapEnabled") === "true";
+        } catch (_) {
+          darkMapEnabled = false;
+        }
+        document.documentElement.dataset.darkMapEnabled = String(darkMapEnabled);
       })();
     </script>
     <script src="/ui-zoom.js"></script>
@@ -573,6 +585,19 @@
               <button class="theme-choice" type="button" data-theme-choice="day" data-i18n="theme.day">日间</button>
               <button class="theme-choice" type="button" data-theme-choice="night" data-i18n="theme.night">夜间</button>
             </div>
+            <div class="dark-map-setting">
+              <div class="settings-row dark-map-setting-row">
+                <div>
+                  <strong data-i18n="settings.darkMapTitle">暗色模式地图</strong>
+                  <span id="darkMapToggleState" data-i18n="settings.darkMapOff">已关闭</span>
+                </div>
+                <label class="settings-switch" for="darkMapToggle">
+                  <input id="darkMapToggle" type="checkbox" aria-label="暗色模式地图" data-i18n-aria-label="settings.darkMapTitle" />
+                  <span class="settings-switch-track" aria-hidden="true"><i></i></span>
+                </label>
+              </div>
+              <div class="helper-text" data-i18n="settings.darkMapHint">默认关闭：夜间界面继续使用与日间相同的地图。开启后只请求图源原生暗色瓦片，不使用深色滤镜；当前地图不支持时会自动切换到 ArcGIS。</div>
+            </div>
             <div class="map-zoom-offset-control ui-zoom-control">
               <div class="settings-row">
                 <div>
@@ -597,23 +622,23 @@
             <div class="subheading" data-i18n="settings.appIcon">应用图标</div>
             <div class="app-icon-style-group" role="radiogroup" aria-label="图标风格" data-i18n-aria-label="settings.appIconStyle">
               <button class="app-icon-style" type="button" data-app-icon-style="style1" data-i18n="appIcon.style1">风格1</button>
-              <button class="app-icon-style" type="button" data-app-icon-style="style2" data-i18n="appIcon.style2">风格2</button>
-              <button class="app-icon-style active" type="button" data-app-icon-style="style3" data-i18n="appIcon.style3">风格3</button>
+              <button class="app-icon-style active" type="button" data-app-icon-style="style2" data-i18n="appIcon.style2">风格2</button>
+              <button class="app-icon-style" type="button" data-app-icon-style="style3" data-i18n="appIcon.style3">风格3</button>
             </div>
             <div class="app-icon-choice-group" role="radiogroup" aria-label="应用图标" data-i18n-aria-label="settings.appIcon">
               <div class="app-icon-choice-section">
                 <div class="app-icon-choice-heading" data-i18n="theme.day">日间</div>
                 <div class="app-icon-choice-row">
                   <button class="app-icon-choice" type="button" data-app-icon-variant="day-high">
-                    <img class="app-icon-preview" data-app-icon-preview="day-high" src="/app-icons/style3-day-high.png" alt="" />
+                    <img class="app-icon-preview" data-app-icon-preview="day-high" src="/app-icons/style2-day-high.png" alt="" />
                     <span data-i18n="appIcon.highSaturation">高饱和</span>
                   </button>
                   <button class="app-icon-choice active" type="button" data-app-icon-variant="day-medium">
-                    <img class="app-icon-preview" data-app-icon-preview="day-medium" src="/app-icons/style3-day-medium.png" alt="" />
+                    <img class="app-icon-preview" data-app-icon-preview="day-medium" src="/app-icons/style2-day-medium.png" alt="" />
                     <span data-i18n="appIcon.default">默认</span>
                   </button>
                   <button class="app-icon-choice" type="button" data-app-icon-variant="day-soft">
-                    <img class="app-icon-preview" data-app-icon-preview="day-soft" src="/app-icons/style3-day-soft.png" alt="" />
+                    <img class="app-icon-preview" data-app-icon-preview="day-soft" src="/app-icons/style2-day-soft.png" alt="" />
                     <span data-i18n="appIcon.soft">柔和</span>
                   </button>
                 </div>
@@ -622,15 +647,15 @@
                 <div class="app-icon-choice-heading" data-i18n="theme.night">夜间</div>
                 <div class="app-icon-choice-row">
                   <button class="app-icon-choice" type="button" data-app-icon-variant="night-high">
-                    <img class="app-icon-preview" data-app-icon-preview="night-high" src="/app-icons/style3-night-high.png" alt="" />
+                    <img class="app-icon-preview" data-app-icon-preview="night-high" src="/app-icons/style2-night-high.png" alt="" />
                     <span data-i18n="appIcon.highSaturation">高饱和</span>
                   </button>
                   <button class="app-icon-choice" type="button" data-app-icon-variant="night-medium">
-                    <img class="app-icon-preview" data-app-icon-preview="night-medium" src="/app-icons/style3-night-medium.png" alt="" />
+                    <img class="app-icon-preview" data-app-icon-preview="night-medium" src="/app-icons/style2-night-medium.png" alt="" />
                     <span data-i18n="appIcon.default">默认</span>
                   </button>
                   <button class="app-icon-choice" type="button" data-app-icon-variant="night-soft">
-                    <img class="app-icon-preview" data-app-icon-preview="night-soft" src="/app-icons/style3-night-soft.png" alt="" />
+                    <img class="app-icon-preview" data-app-icon-preview="night-soft" src="/app-icons/style2-night-soft.png" alt="" />
                     <span data-i18n="appIcon.soft">柔和</span>
                   </button>
                 </div>
@@ -656,7 +681,7 @@
               <div class="online-map-provider-choice-group" role="radiogroup" aria-label="在线地图来源" data-i18n-aria-label="map.providerTitle">
                 <button class="online-map-provider-choice active" type="button" data-online-map-provider="arcgis" aria-pressed="true">
                   <span data-i18n="map.provider.arcgis">ArcGIS</span>
-                  <small data-i18n="map.provider.arcgisHint">默认在线地形底图</small>
+                  <small data-i18n="map.provider.arcgisHint">默认地形底图 · 支持原生暗色</small>
                 </button>
                 <button class="online-map-provider-choice" type="button" data-online-map-provider="openstreetmap" aria-pressed="false">
                   <span data-i18n="map.provider.openstreetmap">OpenStreetMap</span>

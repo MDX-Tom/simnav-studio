@@ -12,6 +12,105 @@ final class PackageBoundaryTests: XCTestCase {
         XCTAssertNotNil(MapStore.self)
     }
 
+    func testSharedHTMLPreservesAppleFileBootstrapAndLocalWebRoot() throws {
+        var workspaceRoot = URL(fileURLWithPath: #filePath)
+        for _ in 0..<4 {
+            workspaceRoot.deleteLastPathComponent()
+        }
+        let html = try String(
+            contentsOf: workspaceRoot.appendingPathComponent("NavPlanner/Resources/Web/map.html"),
+            encoding: .utf8
+        )
+
+        // Apple loads map.html from its bundle with file://, then every CSS/JS
+        // request must return to the existing navplanner://app resource bridge.
+        // Local Web keeps root-relative HTTP requests from the exact same HTML.
+        XCTAssertTrue(html.contains(#"window.location.protocol === "navplanner:""#))
+        XCTAssertTrue(html.contains(#"window.location.protocol === "file:""#))
+        XCTAssertTrue(html.contains(#"usesAppleResourceBridge ? "navplanner://app/" : "/""#))
+        XCTAssertTrue(html.contains(#"href="/styles.css""#))
+        XCTAssertTrue(html.contains(#"src="/runtime.js""#))
+        XCTAssertTrue(html.contains(#"src="/app.js""#))
+    }
+
+    func testSharedAppearanceDefaultsKeepAppleAndWebOnOneSource() throws {
+        var workspaceRoot = URL(fileURLWithPath: #filePath)
+        for _ in 0..<4 {
+            workspaceRoot.deleteLastPathComponent()
+        }
+        let webRoot = workspaceRoot.appendingPathComponent("NavPlanner/Resources/Web")
+        let html = try String(contentsOf: webRoot.appendingPathComponent("map.html"), encoding: .utf8)
+        let app = try String(contentsOf: webRoot.appendingPathComponent("app.js"), encoding: .utf8)
+        let runtime = try String(contentsOf: webRoot.appendingPathComponent("runtime.js"), encoding: .utf8)
+        let zoom = try String(contentsOf: webRoot.appendingPathComponent("ui-zoom.js"), encoding: .utf8)
+        let styles = try String(contentsOf: webRoot.appendingPathComponent("styles.css"), encoding: .utf8)
+
+        XCTAssertTrue(html.contains(#"href="/app-icons/style2-day-medium.png""#))
+        XCTAssertTrue(html.contains(#"id="darkMapToggle" type="checkbox""#))
+        XCTAssertFalse(html.contains(#"id="darkMapToggle" type="checkbox" checked"#))
+        XCTAssertTrue(app.contains(#"darkMapEnabled: savedDarkMapEnabled === "true""#))
+        XCTAssertTrue(app.contains(#"providerKey: "arcgis-dark""#))
+        XCTAssertTrue(app.contains(#"? migrated : "style2-day-medium""#))
+        XCTAssertTrue(runtime.contains(#"iconChoice || "style2-day-medium""#))
+
+        // The Local Web source package intentionally excludes the UIKit shell,
+        // Xcode project, and asset catalog. Validate those Apple-only defaults
+        // when this test runs from a complete repository checkout; release audit
+        // separately checks the compiled IPA and Catalyst asset catalogs.
+        let appEnvironmentURL = workspaceRoot.appendingPathComponent("NavPlanner/App/AppEnvironment.swift")
+        if FileManager.default.fileExists(atPath: appEnvironmentURL.path) {
+            let appEnvironment = try String(contentsOf: appEnvironmentURL, encoding: .utf8)
+            let primaryIcon = try String(
+                contentsOf: workspaceRoot.appendingPathComponent(
+                    "NavPlanner/Support/Assets.xcassets/AppIcon.appiconset/Contents.json"
+                ),
+                encoding: .utf8
+            )
+            let style3DefaultIcon = workspaceRoot.appendingPathComponent(
+                "NavPlanner/Support/Assets.xcassets/AppIconStyle3DayMedium.appiconset/Contents.json"
+            )
+            let project = try String(
+                contentsOf: workspaceRoot.appendingPathComponent("NavPlanner.xcodeproj/project.pbxproj"),
+                encoding: .utf8
+            )
+
+            XCTAssertTrue(appEnvironment.contains(#"else { return "style2-day-medium" }"#))
+            XCTAssertTrue(appEnvironment.contains(#""style2-day-medium": (nil, "风格2 · 日间默认")"#))
+            XCTAssertTrue(appEnvironment.contains(#""style3-day-medium": ("AppIconStyle3DayMedium""#))
+            XCTAssertTrue(primaryIcon.contains(#"style2-day-medium-ios-marketing-1024.png"#))
+            XCTAssertTrue(FileManager.default.fileExists(atPath: style3DefaultIcon.path))
+            XCTAssertTrue(project.contains("AppIconStyle3DayMedium"))
+            XCTAssertFalse(project.contains("AppIconStyle2DayMedium"))
+        }
+
+        XCTAssertTrue(zoom.contains(#"window.location.protocol === "http:""#))
+        XCTAssertTrue(zoom.contains(#"window.location.protocol === "https:""#))
+        XCTAssertTrue(zoom.contains("return 0.9;"))
+        XCTAssertTrue(zoom.contains(#"root.dataset.platform === "mac" ? 0.9 : 0.8"#))
+
+        XCTAssertFalse(styles.contains(#"data-theme="night"][data-map-source="online"] .terrain-pane"#))
+        XCTAssertFalse(styles.contains("brightness(0.58)"))
+        XCTAssertFalse(styles.contains("grayscale(0.48)"))
+        XCTAssertTrue(styles.contains(#"html[data-dark-map-active="true"] #map"#))
+        XCTAssertTrue(styles.contains("Native dark tiles are rendered exactly as supplied by the provider."))
+    }
+
+    func testNativeDarkProviderUsesDedicatedArcGISDarkGrayTiles() throws {
+        let provider = try XCTUnwrap(SimNavOnlineTileCache.providers["arcgis-dark"])
+        XCTAssertEqual(provider.key, "arcgis-dark")
+        XCTAssertEqual(provider.format, "jpg")
+        XCTAssertEqual(provider.contentType, "image/jpeg")
+        XCTAssertEqual(provider.maxZoom, 20)
+        XCTAssertEqual(provider.templates.count, 2)
+        XCTAssertTrue(provider.templates.allSatisfy {
+            $0.contains("arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/")
+        })
+        XCTAssertEqual(
+            provider.requestURLs(z: 4, x: 13, y: 6).first?.path,
+            "/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/4/6/13"
+        )
+    }
+
     func testDirectWebKitAndHTTPAdaptersHaveTransportParity() throws {
         let dataRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("SimNavCoreTests-\(UUID().uuidString)", isDirectory: true)

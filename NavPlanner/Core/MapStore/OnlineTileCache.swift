@@ -142,7 +142,7 @@ final class SimNavOnlineTileCache: @unchecked Sendable {
     private var successfulDownloadCount = 0
     private let failureCooldown: TimeInterval = 8
 
-    private let providers: [String: OnlineTileProvider] = [
+    static let providers: [String: OnlineTileProvider] = [
         "arcgis": OnlineTileProvider(
             key: "arcgis",
             format: "jpg",
@@ -150,6 +150,16 @@ final class SimNavOnlineTileCache: @unchecked Sendable {
             templates: [
                 "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
                 "https://services.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}"
+            ],
+            maxZoom: 20
+        ),
+        "arcgis-dark": OnlineTileProvider(
+            key: "arcgis-dark",
+            format: "jpg",
+            contentType: "image/jpeg",
+            templates: [
+                "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+                "https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
             ],
             maxZoom: 20
         ),
@@ -247,7 +257,7 @@ final class SimNavOnlineTileCache: @unchecked Sendable {
         priority: RequestPriority = .visible,
         shouldCancel: () -> Bool = { false }
     ) -> TileState {
-        guard let provider = providers[providerKey],
+        guard let provider = Self.providers[providerKey],
               z >= 0, z <= provider.maxZoom, x >= 0, y >= 0 else {
             return .failed
         }
@@ -346,7 +356,7 @@ final class SimNavOnlineTileCache: @unchecked Sendable {
     }
 
     func cachedTile(providerKey: String, z: Int, x: Int, y: Int) -> TileState {
-        guard let provider = providers[providerKey],
+        guard let provider = Self.providers[providerKey],
               z >= 0, z <= provider.maxZoom, x >= 0, y >= 0,
               let payload = cachedTilePayload(
                 provider: provider,
@@ -385,7 +395,7 @@ final class SimNavOnlineTileCache: @unchecked Sendable {
             "root": rootDirectory.path,
             "size_bytes": usage.bytes,
             "file_count": usage.files,
-            "providers": providers.values.sorted { $0.key < $1.key }.map {
+            "providers": Self.providers.values.sorted { $0.key < $1.key }.map {
                 ["key": $0.key, "format": $0.format, "max_zoom": $0.maxZoom]
             },
             "pending_count": runtime["pending_count"] ?? 0,

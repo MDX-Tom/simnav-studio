@@ -13,6 +13,7 @@ if (!uiZoomRuntime) {
   throw new Error("SimNav ui-zoom.js must load before app.js.");
 }
 const savedThemeMode = readLocalStorageValue("navplannerThemeMode");
+const savedDarkMapEnabled = readLocalStorageValue("navplannerDarkMapEnabled");
 const savedAppIconChoice = readLocalStorageValue("navplannerAppIconChoice");
 const savedLanguageMode = readLocalStorageValue("navplannerLanguageMode");
 const savedMapSourceMode = readLocalStorageValue("navplannerMapSourceMode");
@@ -50,6 +51,7 @@ const PRESSURE_UNITS = new Set(["in", "hpa"]);
 const ONLINE_TILE_BASE_SIZE = 256;
 const LOCAL_SETTING_KEYS = Object.freeze([
   "navplannerThemeMode",
+  "navplannerDarkMapEnabled",
   "navplannerAppIconChoice",
   "navplannerLanguageMode",
   "navplannerMapSourceMode",
@@ -65,6 +67,11 @@ const ONLINE_MAP_PROVIDERS = Object.freeze({
     titleKey: "map.provider.arcgisHint",
     format: "jpg",
     maxZoom: 20,
+    nativeDark: {
+      providerKey: "arcgis-dark",
+      format: "jpg",
+      maxZoom: 20,
+    },
   },
   openstreetmap: {
     labelKey: "map.provider.openstreetmap",
@@ -165,6 +172,12 @@ const TRANSLATIONS = {
   "settings.databaseHint": { "zh-Hans": "支持从“文件”中选择 .s3db / .sqlite / .db，导入后核心查询会切换到新的本地数据库。", en: "Choose .s3db / .sqlite / .db from Files. Core local queries switch to the imported database after import." },
   "settings.appearance": { "zh-Hans": "外观", en: "Appearance" },
   "settings.appearanceMode": { "zh-Hans": "外观模式", en: "Appearance mode" },
+  "settings.darkMapTitle": { "zh-Hans": "暗色模式地图", en: "Dark Mode Map" },
+  "settings.darkMapOn": { "zh-Hans": "已开启", en: "On" },
+  "settings.darkMapOff": { "zh-Hans": "已关闭", en: "Off" },
+  "settings.darkMapHint": { "zh-Hans": "默认关闭：夜间界面继续使用与日间相同的地图。开启后只请求图源原生暗色瓦片，不使用深色滤镜；当前地图不支持时会自动切换到 ArcGIS。", en: "Off by default: Night keeps the same map as Day. When enabled, SimNav requests native dark tiles without a darkening filter and automatically switches to ArcGIS when the current map does not support native dark mode." },
+  "settings.darkMapEnabled": { "zh-Hans": "已开启暗色模式地图；进入夜间主题时使用原生暗色图源。", en: "Dark Mode Map is on; Night now uses a native dark map source." },
+  "settings.darkMapDisabled": { "zh-Hans": "已关闭暗色模式地图；夜间地图与日间地图保持一致。", en: "Dark Mode Map is off; Night now uses the same map as Day." },
   "settings.uiZoomTitle": { "zh-Hans": "UI 缩放", en: "UI Zoom" },
   "settings.uiZoomValue": { "zh-Hans": "当前 {level}（{percent}%）", en: "Current {level} ({percent}%)" },
   "settings.uiZoomAria": { "zh-Hans": "UI 缩放等级", en: "UI zoom level" },
@@ -404,7 +417,7 @@ const TRANSLATIONS = {
   "map.source.offlineHint": { "zh-Hans": "使用本机离线地图资源", en: "Use local offline map resources" },
   "map.providerTitle": { "zh-Hans": "在线地图来源", en: "Online Map Source" },
   "map.provider.arcgis": { "zh-Hans": "ArcGIS", en: "ArcGIS" },
-  "map.provider.arcgisHint": { "zh-Hans": "默认在线地形底图", en: "Default online topographic base map" },
+  "map.provider.arcgisHint": { "zh-Hans": "默认地形底图 · 支持原生暗色", en: "Default terrain map · native dark supported" },
   "map.provider.openstreetmap": { "zh-Hans": "OpenStreetMap", en: "OpenStreetMap" },
   "map.provider.openstreetmapHint": { "zh-Hans": "OSM 标准底图", en: "OSM standard base map" },
   "map.provider.opentopomap": { "zh-Hans": "OpenTopoMap", en: "OpenTopoMap" },
@@ -418,6 +431,7 @@ const TRANSLATIONS = {
   "map.zoomOffsetDefault": { "zh-Hans": "默认", en: "Default" },
   "map.sourceChanged": { "zh-Hans": "已切换为{mode}。", en: "Switched to {mode}." },
   "map.providerChanged": { "zh-Hans": "已切换在线地图来源：{provider}。", en: "Online map source changed to {provider}." },
+  "map.nativeDarkAutoSwitch": { "zh-Hans": "当前地图不支持原生暗色模式，已自动切换到 ArcGIS 原生暗色地图。", en: "The current map has no native dark mode, so SimNav switched to the native ArcGIS dark map." },
   "map.zoomOffsetChanged": { "zh-Hans": "在线地图清晰度 Offset 已设为 {value}。", en: "Online map clarity offset set to {value}." },
   "map.vector.label": { "zh-Hans": "地形矢量", en: "Topo Vector" },
   "map.vector.title": { "zh-Hans": "山影与等高线", en: "Hillshade and contours" },
@@ -994,6 +1008,7 @@ const state = {
   detailLayoutExecutionCount: 0,
   detailScrollIdleTimer: 0,
   themeMode: THEME_MODES.has(savedThemeMode) ? savedThemeMode : "system",
+  darkMapEnabled: savedDarkMapEnabled === "true",
   uiZoomLevel: uiZoomRuntime.normalizeLevel(savedUIZoomLevel),
   uiZoomLayoutFrame: 0,
   languageMode: normalizeLanguageMode(savedLanguageMode),
@@ -1115,9 +1130,40 @@ function mapSourceModeForBaseMap(type) {
   return type === "offline" ? "offline" : "online";
 }
 
+function nativeDarkMapRequested() {
+  return state.darkMapEnabled && document.documentElement.dataset.theme === "night";
+}
+
+function effectiveOnlineMapDescriptor(provider = state.onlineMapProvider) {
+  const providerKey = normalizeOnlineMapProvider(provider);
+  const config = ONLINE_MAP_PROVIDERS[providerKey] || ONLINE_MAP_PROVIDERS.arcgis;
+  if (nativeDarkMapRequested() && config.nativeDark) {
+    return Object.freeze({
+      providerKey: config.nativeDark.providerKey,
+      format: config.nativeDark.format,
+      maxZoom: config.nativeDark.maxZoom,
+      nativeDark: true,
+    });
+  }
+  return Object.freeze({
+    providerKey,
+    format: config.format,
+    maxZoom: config.maxZoom,
+    nativeDark: false,
+  });
+}
+
 function syncMapThemeAttributes() {
+  const descriptor = effectiveOnlineMapDescriptor();
   document.documentElement.dataset.mapSource = currentMapSourceMode();
   document.documentElement.dataset.onlineMapProvider = normalizeOnlineMapProvider(state.onlineMapProvider);
+  document.documentElement.dataset.onlineMapEffectiveProvider = descriptor.providerKey;
+  document.documentElement.dataset.darkMapEnabled = String(state.darkMapEnabled);
+  document.documentElement.dataset.darkMapActive = String(
+    descriptor.nativeDark
+      && currentMapSourceMode() === "online"
+      && state.baseMap === "terrain",
+  );
 }
 
 function setMapSourceMode(mode, { persist = true } = {}) {
@@ -1133,9 +1179,8 @@ function currentOnlineMapProviderConfig(provider = state.onlineMapProvider) {
 }
 
 function onlineMapTileUrl(provider = state.onlineMapProvider) {
-  const key = normalizeOnlineMapProvider(provider);
-  const config = currentOnlineMapProviderConfig(key);
-  return apiResourceUrl(`/api/map-cache/${key}/${versionPathSegment(state.mapCacheTileVersion)}/{z}/{x}/{y}.${config.format}`);
+  const descriptor = effectiveOnlineMapDescriptor(provider);
+  return apiResourceUrl(`/api/map-cache/${descriptor.providerKey}/${versionPathSegment(state.mapCacheTileVersion)}/{z}/{x}/{y}.${descriptor.format}`);
 }
 
 let onlineTileDemandGeneration = Math.max(1, Date.now());
@@ -1160,8 +1205,8 @@ function onlineTileDemandUrl(tileUrl, generation = onlineTileDemandGeneration) {
 }
 
 function onlineMapTileLayerOptions() {
-  const provider = currentOnlineMapProviderConfig();
-  const maxProviderZoom = provider.maxZoom || 20;
+  const descriptor = effectiveOnlineMapDescriptor();
+  const maxProviderZoom = descriptor.maxZoom || 20;
   const zoomOffset = state.mapTileZoomOffset;
   return {
     maxZoom: 20,
@@ -1172,7 +1217,7 @@ function onlineMapTileLayerOptions() {
 }
 
 function onlineMapTileLayerSignature() {
-  return `${normalizeOnlineMapProvider(state.onlineMapProvider)}|${state.mapTileZoomOffset}`;
+  return `${effectiveOnlineMapDescriptor().providerKey}|${state.mapTileZoomOffset}`;
 }
 
 /**
@@ -1448,6 +1493,8 @@ const elements = {
   restoreBundledDatabaseButton: document.querySelector("#restoreBundledDatabaseButton"),
   databaseList: document.querySelector("#databaseList"),
   themeChoiceButtons: document.querySelectorAll("[data-theme-choice]"),
+  darkMapToggle: document.querySelector("#darkMapToggle"),
+  darkMapToggleState: document.querySelector("#darkMapToggleState"),
   uiZoomSliderFrame: document.querySelector("#uiZoomSliderFrame"),
   uiZoomInput: document.querySelector("#uiZoomInput"),
   uiZoomValue: document.querySelector("#uiZoomValue"),
@@ -4563,6 +4610,45 @@ function handleOfflineTerrainUnavailable({ openManager = false, preserveSettings
 }
 
 /**
+ * 功能：原生暗色地图启用且进入夜间主题时，保证当前底图来自支持原生暗色瓦片的在线来源。
+ * 输入：persist 表示自动切换是否写入用户设置。
+ * 输出：是否发生了 provider、在线/离线模式或底图类型切换。
+ */
+function ensureNativeDarkMapSelection({ persist = true } = {}) {
+  if (!nativeDarkMapRequested()) {
+    syncMapThemeAttributes();
+    return false;
+  }
+
+  let switched = false;
+  const selectedProvider = currentOnlineMapProviderConfig();
+  if (!selectedProvider.nativeDark) {
+    state.onlineMapProvider = "arcgis";
+    if (persist) {
+      writeLocalStorageValue("navplannerOnlineMapProvider", state.onlineMapProvider);
+    }
+    switched = true;
+  }
+
+  if (currentMapSourceMode() !== "online" || state.baseMap !== "terrain") {
+    state.baseMap = "terrain";
+    setMapSourceMode("online", { persist });
+    map.getContainer().dataset.baseMap = "terrain";
+    hideVectorMap();
+    removeMapAttribution(VECTOR_ATTRIBUTION);
+    removeMapAttribution(OFFLINE_VECTOR_ATTRIBUTION);
+    setRasterBaseLayer("terrain");
+    map.invalidateSize({ pan: false });
+    scheduleNavLabelSnapshot();
+    switched = true;
+  }
+
+  syncMapThemeAttributes();
+  updateMapTypeOptionState();
+  return switched;
+}
+
+/**
  * 功能：设置 `setBaseMap` 对应的业务逻辑。
  * 输入：type。
  * 输出：函数处理结果，或对应的界面/地图副作用。
@@ -4570,6 +4656,15 @@ function handleOfflineTerrainUnavailable({ openManager = false, preserveSettings
 function setBaseMap(type, { preserveSettingsMode = false, openManagerWhenUnavailable = true } = {}) {
   if (!BASE_MAPS[type]) {
     return false;
+  }
+  if (nativeDarkMapRequested() && type !== "terrain") {
+    const previousSignature = onlineMapTileLayerSignature();
+    ensureNativeDarkMapSelection();
+    if (previousSignature !== onlineMapTileLayerSignature()) {
+      refreshOnlineBaseLayer();
+    }
+    setStatus(t("map.nativeDarkAutoSwitch"));
+    return true;
   }
   if (state.baseMap === type && type !== "offline") {
     setMapSourceMode(mapSourceModeForBaseMap(type));
@@ -4636,12 +4731,19 @@ function applyOnlineMapProvider(provider) {
     return;
   }
   state.onlineMapProvider = normalized;
+  const switchedForNativeDark = nativeDarkMapRequested()
+    && !currentOnlineMapProviderConfig(normalized).nativeDark;
+  if (switchedForNativeDark) {
+    state.onlineMapProvider = "arcgis";
+  }
   syncMapThemeAttributes();
-  writeLocalStorageValue("navplannerOnlineMapProvider", normalized);
+  writeLocalStorageValue("navplannerOnlineMapProvider", state.onlineMapProvider);
   refreshOnlineBaseLayer({ bumpVersion: true });
   setBaseMap("terrain");
   updateMapTypeOptionState();
-  setStatus(t("map.providerChanged", { provider: t(currentOnlineMapProviderConfig(normalized).labelKey) }));
+  setStatus(switchedForNativeDark
+    ? t("map.nativeDarkAutoSwitch")
+    : t("map.providerChanged", { provider: t(currentOnlineMapProviderConfig().labelKey) }));
 }
 
 /**
@@ -5501,12 +5603,13 @@ async function resetAllSettingsAndCaches() {
     state.baseMap = "terrain";
     state.mapTileZoomOffset = 0;
     state.themeMode = "system";
+    state.darkMapEnabled = false;
     state.uiZoomLevel = 0;
     state.languageMode = "system";
     state.effectiveLanguage = resolveLanguageMode("system");
     state.weightUnit = "lb";
     state.pressureUnit = "in";
-    state.appIconChoice = "style3-day-medium";
+    state.appIconChoice = "style2-day-medium";
     state.fr24CacheItems = [];
     state.fr24CacheFlights.clear();
     updateMapCacheSummary(mapCachePayload);
@@ -5514,10 +5617,11 @@ async function resetAllSettingsAndCaches() {
     renderFR24CacheFlights([]);
     applyLanguageMode("system", { persist: false, refresh: true });
     applyThemeMode("system", { persist: false });
+    applyDarkMapEnabled(false, { persist: false, announce: false });
     applyUIZoomLevel(0, { persist: false, announce: false });
     applyWeightUnit("lb", { persist: false, announce: false });
     applyPressureUnit("in", { persist: false, announce: false });
-    applyAppIconChoice("style3-day-medium", { persist: false, notifyNative: true });
+    applyAppIconChoice("style2-day-medium", { persist: false, notifyNative: true });
     updateMapTypeOptionLabels();
     updateMapTileZoomOffsetControl();
     map.getContainer().dataset.baseMap = "terrain";
@@ -8209,6 +8313,7 @@ function refreshLocalizedDynamicText() {
   updateMapTypeOptionState();
   updateMapTileZoomOffsetControl();
   updateUIZoomControl();
+  updateDarkMapControl();
   updateMapOverlayControlLabels();
   updateTrackHistoryControlLabels();
   syncProcedureOverviewHeadings();
@@ -8317,12 +8422,44 @@ function applyPressureUnit(unit, { persist = true, announce = true } = {}) {
   }
 }
 
+function updateDarkMapControl() {
+  if (elements.darkMapToggle) {
+    elements.darkMapToggle.checked = state.darkMapEnabled;
+  }
+  if (elements.darkMapToggleState) {
+    elements.darkMapToggleState.textContent = t(
+      state.darkMapEnabled ? "settings.darkMapOn" : "settings.darkMapOff",
+    );
+  }
+}
+
+function applyDarkMapEnabled(enabled, { persist = true, announce = true } = {}) {
+  const previousSignature = onlineMapTileLayerSignature();
+  state.darkMapEnabled = Boolean(enabled);
+  if (persist) {
+    writeLocalStorageValue("navplannerDarkMapEnabled", String(state.darkMapEnabled));
+  }
+  const switchedForNativeDark = ensureNativeDarkMapSelection({ persist });
+  syncMapThemeAttributes();
+  updateDarkMapControl();
+  updateMapTypeOptionState();
+  if (previousSignature !== onlineMapTileLayerSignature()) {
+    refreshOnlineBaseLayer();
+  }
+  if (announce) {
+    setStatus(switchedForNativeDark
+      ? t("map.nativeDarkAutoSwitch")
+      : t(state.darkMapEnabled ? "settings.darkMapEnabled" : "settings.darkMapDisabled"));
+  }
+}
+
 /**
- * 功能：根据日间/夜间/系统自动设置应用主题。
+ * 功能：根据日间/夜间/系统自动设置应用主题，并同步原生暗色底图选择。
  * 输入：mode 为 system/day/night，persist 表示是否写入 localStorage。
- * 输出：无返回值；通过 html data 属性驱动 CSS。
+ * 输出：无返回值；通过 html data 属性驱动 CSS，必要时重建在线瓦片层。
  */
 function applyThemeMode(mode, { persist = true } = {}) {
+  const previousMapSignature = onlineMapTileLayerSignature();
   const normalized = THEME_MODES.has(mode) ? mode : "system";
   state.themeMode = normalized;
   const effectiveTheme = normalized === "system"
@@ -8330,7 +8467,9 @@ function applyThemeMode(mode, { persist = true } = {}) {
     : normalized;
   document.documentElement.dataset.themeMode = normalized;
   document.documentElement.dataset.theme = effectiveTheme;
+  const switchedForNativeDark = ensureNativeDarkMapSelection({ persist });
   syncMapThemeAttributes();
+  updateDarkMapControl();
   elements.themeChoiceButtons.forEach((button) => {
     const active = button.dataset.themeChoice === normalized;
     button.classList.toggle("active", active);
@@ -8338,6 +8477,12 @@ function applyThemeMode(mode, { persist = true } = {}) {
   });
   if (persist) {
     writeLocalStorageValue("navplannerThemeMode", normalized);
+  }
+  if (previousMapSignature !== onlineMapTileLayerSignature()) {
+    refreshOnlineBaseLayer();
+  }
+  if (switchedForNativeDark) {
+    setStatus(t("map.nativeDarkAutoSwitch"));
   }
   postNativeEvent("themeChanged", {
     mode: normalized,
@@ -8347,7 +8492,7 @@ function applyThemeMode(mode, { persist = true } = {}) {
 
 function normalizeAppIconChoice(choice) {
   const migrated = LEGACY_APP_ICON_CHOICES[choice] || choice;
-  return APP_ICON_CHOICES.has(migrated) ? migrated : "style3-day-medium";
+  return APP_ICON_CHOICES.has(migrated) ? migrated : "style2-day-medium";
 }
 
 function appIconStyleFromChoice(choice) {
@@ -8364,7 +8509,7 @@ function appIconVariantFromChoice(choice) {
  * 输出：无返回值；复用 applyAppIconChoice 完成持久化和原生切换。
  */
 function applyAppIconStyle(style) {
-  const normalizedStyle = APP_ICON_STYLES.has(style) ? style : "style3";
+  const normalizedStyle = APP_ICON_STYLES.has(style) ? style : "style2";
   applyAppIconChoice(`${normalizedStyle}-${appIconVariantFromChoice(state.appIconChoice)}`);
 }
 
@@ -15716,6 +15861,7 @@ registerSettingsPage({
   clearMapCache,
   resetAllSettingsAndCaches,
   applyThemeMode,
+  applyDarkMapEnabled,
   applyUIZoomLevel,
   applyLanguageMode,
   applyWeightUnit,
@@ -17230,6 +17376,9 @@ async function applySimulatorDebugLaunch() {
   }
   if (["system", "day", "night"].includes(config.themeMode)) {
     applyThemeMode(config.themeMode, { persist: false });
+  }
+  if (typeof config.darkMapEnabled === "boolean") {
+    applyDarkMapEnabled(config.darkMapEnabled, { persist: false, announce: false });
   }
   if (["lb", "kg"].includes(config.weightUnit)) {
     applyWeightUnit(config.weightUnit, { persist: false, announce: false });

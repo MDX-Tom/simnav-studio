@@ -429,7 +429,7 @@
   }
 
   function setBrowserIcon(iconChoice) {
-    const normalized = String(iconChoice || "style3-day-medium");
+    const normalized = String(iconChoice || "style2-day-medium");
     let link = document.querySelector('link[data-simnav-runtime-icon="true"]');
     if (!link) {
       link = document.createElement("link");

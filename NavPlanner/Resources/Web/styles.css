@@ -66,12 +66,6 @@
     linear-gradient(180deg, #101726 0%, var(--bg) 100%);
 }
 
-/* Keep raster providers comfortable beside the night chrome without replacing
-   their source or altering route/airport overlays. */
-html[data-theme="night"][data-map-source="online"] .terrain-pane {
-  filter: brightness(0.58) saturate(0.72) contrast(1.08);
-}
-
 html[data-theme="day"],
 html[data-theme-mode="day"] {
   color-scheme: light;
@@ -131,6 +125,10 @@ html[data-theme-mode="day"] {
     linear-gradient(135deg, rgba(58, 146, 178, 0.11), transparent 34%),
     linear-gradient(225deg, rgba(78, 137, 105, 0.075), transparent 29%),
     linear-gradient(180deg, #fbfdfe 0%, #eaf1f4 100%);
+}
+
+html[data-theme="night"][data-dark-map-enabled="false"] {
+  --map-loading-background: #d7dfdb;
 }
 
 @media (prefers-color-scheme: light) {
@@ -525,6 +523,11 @@ body.map-expanded .detail-panel {
   width: 100%;
   height: 100%;
   filter: saturate(0.96);
+}
+
+/* Native dark tiles are rendered exactly as supplied by the provider. */
+html[data-dark-map-active="true"] #map {
+  filter: none;
 }
 
 .section-label {
@@ -3018,6 +3021,76 @@ body.left-panel-expanded .selection-table {
   margin-top: 10px;
 }
 
+.dark-map-setting {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+  border-top: 1px solid var(--surface-line);
+  padding-top: 10px;
+}
+
+.settings-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 28px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.settings-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.settings-switch-track {
+  position: relative;
+  display: block;
+  width: 42px;
+  height: 24px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: rgba(114, 132, 152, 0.34);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.24);
+  transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.settings-switch-track i {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #f7fbff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.32);
+  transition: transform 0.16s ease;
+}
+
+.settings-switch input:checked + .settings-switch-track {
+  border-color: rgba(84, 189, 255, 0.78);
+  background: linear-gradient(180deg, #168bc5, #075b91);
+  box-shadow: 0 0 0 1px rgba(84, 189, 255, 0.1), inset 0 1px 2px rgba(255, 255, 255, 0.18);
+}
+
+.settings-switch input:checked + .settings-switch-track i {
+  transform: translateX(18px);
+}
+
+.settings-switch input:focus-visible + .settings-switch-track {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 .map-zoom-offset-slider-frame {
   --zoom-offset-progress: 33.333%;
   --zoom-offset-track-fill-top: rgba(8, 86, 151, 0.99);
@@ -3722,8 +3795,7 @@ html[data-theme="day"] .selection-leg-turn {
 }
 
 .leaflet-pane.terrain-pane {
-  opacity: 0.9;
-  filter: grayscale(0.48) saturate(0.66) contrast(0.72) brightness(1.14);
+  opacity: 1;
 }
 
 .vector-maplibre-base {
@@ -6438,6 +6510,11 @@ html[data-theme="day"] .offline-progress {
   html[data-mobile-layout="true"] .settings-row {
     grid-template-columns: minmax(0, 1fr);
     gap: 5px;
+  }
+
+  html[data-mobile-layout="true"] .dark-map-setting-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
   }
 
   html[data-mobile-layout="true"] .database-manager {

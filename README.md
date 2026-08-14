@@ -216,8 +216,10 @@ Online map cache and offline packages are managed separately. Clearing the onlin
 **Appearance and UI scale**
 
 1. Open **Settings** → **Appearance** to follow the system theme or select light/dark mode.
-2. UI Zoom provides `-1`, `0`, `+1`, and `+2`; level `0` is the default and every step changes the current device layout by 8%. In Local Web, level `0` / `100%` deliberately uses 90% of the previous browser UI size as its new baseline.
-3. Text, controls, panels, and map chrome scale together. The geographic map zoom is unchanged, and the same preference is used by the Apple App and Local Web.
+2. **Dark Mode Map** is off by default, so a dark UI keeps the same map source and colors as the light UI. When enabled, SimNav requests the provider's native dark tiles—without a darkening overlay or color filter—and automatically switches an unsupported source to ArcGIS World Dark Gray.
+3. UI Zoom provides `-1`, `0`, `+1`, and `+2`; level `0` is the default and every step changes the current device layout by 8%. In Local Web, level `0` / `100%` deliberately uses 90% of the previous browser UI size as its new baseline without changing Apple layout baselines.
+4. Text, controls, panels, and map chrome scale together. The geographic map zoom is unchanged; Apple and Local Web execute the same UI source while retaining their platform-specific level-0 baselines.
+5. Icon style 2, Day / Default, is the fresh-install default. Settings keeps all three icon styles and their Day/Night High, Default, and Soft variants available.
 
 <a id="nav-db-compatible-format"></a>
 <details>

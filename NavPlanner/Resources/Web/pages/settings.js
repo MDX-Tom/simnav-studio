@@ -12,6 +12,7 @@ export function registerSettingsPage(context) {
     clearMapCache,
     resetAllSettingsAndCaches,
     applyThemeMode,
+    applyDarkMapEnabled,
     applyUIZoomLevel,
     applyLanguageMode,
     applyWeightUnit,
@@ -56,6 +57,9 @@ export function registerSettingsPage(context) {
   });
   elements.themeChoiceButtons.forEach((button) => {
     button.addEventListener("click", () => applyThemeMode(button.dataset.themeChoice));
+  });
+  elements.darkMapToggle?.addEventListener("change", () => {
+    applyDarkMapEnabled(elements.darkMapToggle.checked);
   });
   elements.uiZoomInput?.addEventListener("input", () => {
     applyUIZoomLevel(elements.uiZoomInput.value, { announce: false });

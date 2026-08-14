@@ -51,9 +51,10 @@ let iconEntries: [(idiom: String, size: String, scale: String, pixels: Int)] = [
 ]
 
 func generatedStyleVariants(style: Int) -> [IconVariant] {
-    [
+    let dayMediumAssetName = style == 2 ? "AppIcon" : "AppIconStyle\(style)DayMedium"
+    return [
         IconVariant(style: style, assetName: "AppIconStyle\(style)DayHigh", filePrefix: "style\(style)-day-high", webPreviewName: "style\(style)-day-high", saturation: 1.12, contrast: 1.03, brightness: -0.002, nightStyle: false),
-        IconVariant(style: style, assetName: "AppIconStyle\(style)DayMedium", filePrefix: "style\(style)-day-medium", webPreviewName: "style\(style)-day-medium", saturation: 1.00, contrast: 1.00, brightness: 0.000, nightStyle: false),
+        IconVariant(style: style, assetName: dayMediumAssetName, filePrefix: "style\(style)-day-medium", webPreviewName: "style\(style)-day-medium", saturation: 1.00, contrast: 1.00, brightness: 0.000, nightStyle: false),
         IconVariant(style: style, assetName: "AppIconStyle\(style)DaySoft", filePrefix: "style\(style)-day-soft", webPreviewName: "style\(style)-day-soft", saturation: 0.78, contrast: 0.93, brightness: 0.020, nightStyle: false),
         IconVariant(style: style, assetName: "AppIconStyle\(style)NightHigh", filePrefix: "style\(style)-night-high", webPreviewName: "style\(style)-night-high", saturation: 1.10, contrast: 1.04, brightness: -0.004, nightStyle: true),
         IconVariant(style: style, assetName: "AppIconStyle\(style)NightMedium", filePrefix: "style\(style)-night-medium", webPreviewName: "style\(style)-night-medium", saturation: 1.00, contrast: 1.00, brightness: 0.000, nightStyle: true),
@@ -61,10 +62,10 @@ func generatedStyleVariants(style: Int) -> [IconVariant] {
     ]
 }
 
-// 风格 1、2 使用确认后的六联源图；风格 3 保留现有图标，并继续以日间均衡档作为主图标。
+// 风格 1、2 使用确认后的六联源图；风格 2 日间均衡为主图标，风格 3 日间均衡保留为备用图标。
 let variants: [IconVariant] = generatedStyleVariants(style: 1) + generatedStyleVariants(style: 2) + [
     IconVariant(style: 3, assetName: "AppIconDayHigh", filePrefix: "day-high", webPreviewName: "style3-day-high", saturation: 1.00, contrast: 1.00, brightness: 0.00, nightStyle: false),
-    IconVariant(style: 3, assetName: "AppIcon", filePrefix: "day-medium", webPreviewName: "style3-day-medium", saturation: 0.58, contrast: 0.90, brightness: 0.020, nightStyle: false),
+    IconVariant(style: 3, assetName: "AppIconStyle3DayMedium", filePrefix: "day-medium", webPreviewName: "style3-day-medium", saturation: 0.58, contrast: 0.90, brightness: 0.020, nightStyle: false),
     IconVariant(style: 3, assetName: "AppIconDaySoft", filePrefix: "day-soft", webPreviewName: "style3-day-soft", saturation: 0.30, contrast: 0.80, brightness: 0.040, nightStyle: false),
     IconVariant(style: 3, assetName: "AppIconNightHigh", filePrefix: "night-high", webPreviewName: "style3-night-high", saturation: 1.00, contrast: 1.08, brightness: -0.010, nightStyle: true),
     IconVariant(style: 3, assetName: "AppIconNightMedium", filePrefix: "night-medium", webPreviewName: "style3-night-medium", saturation: 0.56, contrast: 0.92, brightness: 0.004, nightStyle: true),
@@ -795,4 +796,4 @@ for variant in variants {
 }
 
 try validateGeneratedOutputs()
-print("已生成并校验三套风格的日间/夜间三档 App 图标；所有 PNG 尺寸正确且不含 Alpha，默认主图标为风格 3 日间均衡。")
+print("已生成并校验三套风格的日间/夜间三档 App 图标；所有 PNG 尺寸正确且不含 Alpha，默认主图标为风格 2 日间均衡。")
