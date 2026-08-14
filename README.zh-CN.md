@@ -369,8 +369,9 @@ Tools/LocalWeb/run.sh \
 
 按 Control-C 停止 server。它只绑定 `127.0.0.1`；Host 与 Origin 只允许 loopback，
 会改变状态的请求必须带页面注入的单进程 token。在设置中导入或选择的数据库，会在原生
-进程或容器重启后继续保持启用。受跟踪封包工具会生成带 macOS、Windows、Linux 启动器
-的 `releases/release-<version>/web/`。Windows 在包含经宿主 smoke 的原生 bundle 时直接
+进程或容器重启后继续保持启用。受跟踪封包工具会生成
+`releases/release-<version>/web-bundle/SimNav-Studio-<version>-web.zip`；解压后目录为
+`web/`。Windows 在包含经宿主 smoke 的原生 bundle 时直接
 运行 `simnav-local-web.exe` 与 runtime DLL，无需安装 Swift，也不启动 Linux、WSL 或
 Docker；原生 bundle 缺失时回退 Docker Desktop。Linux 在固定容器中构建并运行原生 Swift
 可执行文件。Docker 启动时，专用 FR24 Edge/Chrome/Chromium 仍运行在宿主桌面：Linux 通过
@@ -439,7 +440,8 @@ App Store 签名，只能在受保护 CI 中从 Secret 临时导入。详见
 GitHub 提供的 IPA 未签名，不包含维护者证书或
 provisioning profile，不能直接安装。
 
-1. 下载带 `-unsigned.ipa` 后缀的 IPA 与 `SHA256SUMS.txt`，先复验校验和。
+1. 下载带 `-unsigned.ipa` 后缀的 IPA 与 `SHA256SUMS.txt`，先复验校验和。release 根目录
+   的校验文件严格只列 iOS IPA、macOS DMG 和 Web ZIP 三个工件。
 2. 将 IPA 导入 AltStore、SideStore、Sideloadly 或其他可信签名工具。
 3. 由工具使用安装者自己的 Apple Account 重新签名并安装。
 4. 按工具与设备提示信任本地签名；仅在 iOS/iPadOS 明确要求时启用
@@ -463,13 +465,14 @@ provisioning profile，不能直接安装。
 #### Local Web
 
 Local Web 是第三个正式 release 平台。完成 Web 集成的 release 会把启动脚本和必要
-payload 放在 `web/`：macOS 使用 `run-macos.command`，Linux 使用
+payload 放在 `web-bundle/SimNav-Studio-<version>-web.zip` 中，解压后目录为 `web/`：macOS 使用
+`run-macos.command`，Linux 使用
 `run-linux.sh`，Windows 使用 `run-windows.ps1`。macOS 优先使用 universal 原生
 binary；Windows 优先使用随包原生 SwiftNIO `.exe`，只在缺失时使用 Docker；Linux 在
 Docker 中以 Hummingbird transport 构建同一个 Swift 核心。Docker 模式的 FR24 专用浏览器
 保留在宿主可见窗口，并通过受限宿主桥连接（Linux 私有 Compose gateway、Windows 鉴权 relay）；
 FR24 业务仍只在共享 Swift core 实现。所有容器端口都只发布到 `127.0.0.1`；stop 脚本既能处理已记录
-的原生进程，也能停止 Docker，并保留 Local Web 数据根 / 命名 volume。`web/` 自动携带并
+的原生进程，也能停止 Docker，并保留 Local Web 数据根 / 命名 volume。ZIP 内的 `web/` 自动携带并
 启用与 IPA/DMG 完全同 SHA-256 的 release 导航数据库，但不携带用户地图、轨迹、会话、
 缓存或 token；用户仍可从浏览器导入自己有权使用的数据。受跟踪 release builder 与 audit 会在 v0.1.1 候选中生成并校验
 该 payload。

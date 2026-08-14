@@ -383,7 +383,7 @@ Press Control-C to stop the server. It binds only to `127.0.0.1`; Host and
 Origin are restricted to loopback, and state-changing requests require the
 per-process token injected into the shared page. A database imported or selected
 in Settings remains active after the native process or container restarts.
-Tracked packaging generates `releases/release-<version>/web/` with macOS,
+Tracked packaging generates `releases/release-<version>/web-bundle/SimNav-Studio-<version>-web.zip`; after extraction it contains the macOS,
 Windows, and Linux launchers. The Windows launcher runs
 `simnav-local-web.exe` and its bundled runtime DLLs directly when a
 Windows-smoked native bundle is present—without installing Swift or starting
@@ -460,7 +460,8 @@ trusted signing workflow that re-signs it with your own account.**
 The GitHub IPA is unsigned, contains no maintainer certificate or provisioning
 profile, and cannot be installed directly.
 
-1. Download the `-unsigned.ipa` and `SHA256SUMS.txt`, then verify the checksum.
+1. Download the `-unsigned.ipa` and `SHA256SUMS.txt`, then verify the checksum. The release-root
+   checksum file lists exactly the iOS IPA, macOS DMG, and Web ZIP.
 2. Import the IPA into AltStore, SideStore, Sideloadly, or another signing tool
    you trust.
 3. Let that tool re-sign the IPA with your own Apple Account and install it.
@@ -488,7 +489,8 @@ wrapper.
 #### Local Web
 
 Local Web is the third formal release platform. A Web-enabled release places
-its launchers and required payload under `web/`: macOS uses
+its launchers and required payload inside `web-bundle/SimNav-Studio-<version>-web.zip`;
+after extraction the package root is `web/`. macOS uses
 `run-macos.command`, Linux uses `run-linux.sh`, and Windows uses
 `run-windows.ps1`. The macOS launcher prefers its universal native binary;
 Windows prefers a packaged native SwiftNIO `.exe` and uses Docker only when that

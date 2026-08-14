@@ -89,9 +89,9 @@ App、截图、原始日志或其他非 `release-VERSION/` 项。
 
 - unsigned Universal IPA；
 - ad-hoc Catalyst App 与未 notarize DMG；
-- `web/` Local Web 部署目录（macOS / Windows / Linux 启停脚本、单一 Web/Swift 源、
-  固定 Dockerfile/Compose、内部 manifest/checksums，以及与 Apple 工件相同的 release
-  数据库；不含用户数据）；
+- `web-bundle/SimNav-Studio-VERSION-web.zip` Local Web 部署 ZIP（解压后包含 macOS /
+  Windows / Linux 启停脚本、单一 Web/Swift 源、固定 Dockerfile/Compose、内部
+  manifest/checksums，以及与 Apple 工件相同的 release 数据库；不含用户数据）；
 - 脱敏 manifest 和双语公开说明；
 - SHA-256 checksums。
 
@@ -112,8 +112,10 @@ Tools/LocalWeb/audit_web_release.sh /tmp/SimNav-Web \
   --expected-database database/e_dfd_PMDG_release.s3db --docker-smoke
 ```
 
-正式 release build 会自动执行这两步并把 manifest schema 升级为 6，顶层
-`SHA256SUMS.txt` 逐文件覆盖 `web/`。如要随 release 加入 Windows 原生 Swift server，
+正式 release build 会自动执行这两步并把 manifest schema 升级为 6，完成 Web package audit
+后再将整个包写入 `web-bundle/SimNav-Studio-VERSION-web.zip`。顶层
+`SHA256SUMS.txt` 严格只列 iOS IPA、macOS DMG 和 Web ZIP 三个下载工件；ZIP 内部仍保留
+逐文件 package checksum。如要随 release 加入 Windows 原生 Swift server，
 先从 `.github/workflows/local-web-windows.yml` 或 Windows 本机脚本得到已 smoke 的 bundle，
 再设置 `SIMNAV_WINDOWS_NATIVE_BUNDLE=/path/to/bundle`。Windows 启动器发现 `.exe` 时会直接
 运行其原生 SwiftNIO transport 与随包 Swift/SQLite runtime DLL，不要求用户安装 Swift，也不启动 Linux / WSL /

@@ -22,6 +22,7 @@ BUNDLE_IDENTIFIER="$(awk -F' = ' '/^PRODUCT_BUNDLE_IDENTIFIER = / {print $2; exi
 IPA_FILENAME="$ARTIFACT_BASENAME-$VERSION-unsigned.ipa"
 MAC_APP_FILENAME="$ARTIFACT_BASENAME-$VERSION-catalyst-adhoc.app"
 DMG_FILENAME="$ARTIFACT_BASENAME-$VERSION-catalyst-adhoc.dmg"
+WEB_ZIP_FILENAME="$ARTIFACT_BASENAME-$VERSION-web.zip"
 
 if [ -z "$BUNDLE_IDENTIFIER" ]; then
   echo "Public Bundle Identifier is missing from Config/CodeSigning.xcconfig." >&2
@@ -176,7 +177,7 @@ if [ -z "$TASK_DEVELOPER_DIR" ]; then
 fi
 export DEVELOPER_DIR="$TASK_DEVELOPER_DIR"
 
-mkdir -p "$OUTPUT_DIR/ios" "$OUTPUT_DIR/macos" "$OUTPUT_DIR/metadata"
+mkdir -p "$OUTPUT_DIR/ios" "$OUTPUT_DIR/macos" "$OUTPUT_DIR/metadata" "$OUTPUT_DIR/web-bundle"
 mkdir -p "$WORK_DIR/logs" "$WORK_DIR/ios-stage/Payload" "$WORK_DIR/dmg-stage"
 
 IOS_DERIVED="$WORK_DIR/DerivedData-iOS"
@@ -281,8 +282,9 @@ diskutil image create from \
   "$WORK_DIR/dmg-stage" \
   "$DMG_PATH" >"$WORK_DIR/logs/dmg-create.txt" 2>&1
 
+WEB_PACKAGE_DIR="$WORK_DIR/web-package"
 WEB_PACKAGE_ARGS=(
-  --output "$OUTPUT_DIR/web"
+  --output "$WEB_PACKAGE_DIR"
   --build-macos-native
   --database "$RELEASE_DATABASE_SOURCE"
 )
@@ -290,8 +292,19 @@ if [ -n "${SIMNAV_WINDOWS_NATIVE_BUNDLE:-}" ]; then
   WEB_PACKAGE_ARGS+=(--windows-native "$SIMNAV_WINDOWS_NATIVE_BUNDLE")
 fi
 "$PROJECT_ROOT/Tools/LocalWeb/package_web_release.sh" "${WEB_PACKAGE_ARGS[@]}"
-"$PROJECT_ROOT/Tools/LocalWeb/audit_web_release.sh" "$OUTPUT_DIR/web" \
+"$PROJECT_ROOT/Tools/LocalWeb/audit_web_release.sh" "$WEB_PACKAGE_DIR" \
   --expected-database "$RELEASE_DATABASE_SOURCE" --docker-smoke
+WEB_ZIP_PATH="$OUTPUT_DIR/web-bundle/$WEB_ZIP_FILENAME"
+mkdir -p "$WORK_DIR/web-zip-stage/web"
+/usr/bin/ditto "$WEB_PACKAGE_DIR" "$WORK_DIR/web-zip-stage/web"
+(
+  cd "$WORK_DIR/web-zip-stage"
+  COPYFILE_DISABLE=1 /usr/bin/zip -qry -X "$WEB_ZIP_PATH" web
+)
+if unzip -Z1 "$WEB_ZIP_PATH" | grep -Eq '(^|/)(\.DS_Store|__MACOSX)(/|$)'; then
+  echo "Web release ZIP contains Finder metadata: $WEB_ZIP_PATH" >&2
+  exit 3
+fi
 
 IPA_PATH="$OUTPUT_DIR/ios/$IPA_FILENAME"
 APP_TREE_SHA="$(
@@ -304,11 +317,13 @@ IPA_SIZE="$(stat -f '%z' "$IPA_PATH")"
 APP_SIZE="$(find "$MAC_PUBLIC_APP" -type f -print0 | xargs -0 stat -f '%z' | awk '{sum += $1} END {print sum + 0}')"
 DMG_SIZE="$(stat -f '%z' "$DMG_PATH")"
 WEB_TREE_SHA="$(
-  cd "$OUTPUT_DIR/web"
+  cd "$WEB_PACKAGE_DIR"
   find . -type f -print0 | sort -z | xargs -0 shasum -a 256 | shasum -a 256 | awk '{print $1}'
 )"
-WEB_SIZE="$(find "$OUTPUT_DIR/web" -type f -print0 | xargs -0 stat -f '%z' | awk '{sum += $1} END {print sum + 0}')"
-WEB_WINDOWS_NATIVE="$(python3 -c 'import json,sys; print(str(json.load(open(sys.argv[1]))["native_bundles"]["windows_x86_64"]))' "$OUTPUT_DIR/web/web-manifest.json")"
+WEB_SIZE="$(find "$WEB_PACKAGE_DIR" -type f -print0 | xargs -0 stat -f '%z' | awk '{sum += $1} END {print sum + 0}')"
+WEB_ZIP_SHA="$(shasum -a 256 "$WEB_ZIP_PATH" | awk '{print $1}')"
+WEB_ZIP_SIZE="$(stat -f '%z' "$WEB_ZIP_PATH")"
+WEB_WINDOWS_NATIVE="$(python3 -c 'import json,sys; print(str(json.load(open(sys.argv[1]))["native_bundles"]["windows_x86_64"]))' "$WEB_PACKAGE_DIR/web-manifest.json")"
 SOURCE_HEAD="$(git -C "$PROJECT_ROOT" rev-parse HEAD)"
 SOURCE_BRANCH="$(git -C "$PROJECT_ROOT" branch --show-current)"
 SOURCE_DIRTY=False
@@ -430,14 +445,17 @@ manifest = {
             "installation": "Gatekeeper public-distribution trust is not provided; Developer ID signing and notarization would require a separate private CI workflow.",
         },
         {
-            "path": "web/",
-            "type": "Local Web deployment package",
+            "path": "web-bundle/$WEB_ZIP_FILENAME",
+            "type": "Local Web deployment ZIP",
             "platform": "Web",
             "host_operating_systems": ["macOS", "Windows", "Linux"],
             "architectures": ["arm64", "x86_64"],
-            "size_bytes": int("$WEB_SIZE"),
-            "sha256": "$WEB_TREE_SHA",
-            "sha256_scope": "sha256-of-sorted-relative-file-sha256-list",
+            "package_format": "zip",
+            "size_bytes": int("$WEB_ZIP_SIZE"),
+            "sha256": "$WEB_ZIP_SHA",
+            "sha256_scope": "sha256-of-zip-file",
+            "unpacked_size_bytes": int("$WEB_SIZE"),
+            "unpacked_tree_sha256": "$WEB_TREE_SHA",
             "ui_source": "NavPlanner/Resources/Web",
             "swift_core_source": "NavPlanner/Core",
             "database_included": True,
@@ -479,7 +497,7 @@ manifest = {
     "publishable_github_assets": [
         "ios/$IPA_FILENAME",
         "macos/$DMG_FILENAME",
-        "web/",
+        "web-bundle/$WEB_ZIP_FILENAME",
         "SHA256SUMS.txt",
         "PUBLIC_RELEASE_NOTES.md",
     ],
@@ -536,8 +554,8 @@ notes = """## 🚀 $PRODUCT_NAME v$VERSION
 
   * \x60SimNav-Studio-$VERSION-unsigned.ipa\x60：iPhone / iPad 侧载包。必须由 AltStore、SideStore、Sideloadly 或其他可信工具使用安装者自己的 Apple Account 重新签名。
   * \x60SimNav-Studio-$VERSION-catalyst-adhoc.dmg\x60：Mac Catalyst 通用包，仅 ad-hoc 签名，未 notarize；不提供 Developer ID / Gatekeeper 公开分发信任。
-  * \x60web/\x60：Local Web 正式平台包，内含与 IPA/DMG 相同 SHA-256 的 \x60Database/navdata.sqlite\x60。macOS/Linux 使用 Hummingbird 与同一 Swift 核心；Windows 包含经宿主 smoke 的原生 SwiftNIO \x60.exe\x60 时直接运行且不启动 Linux/WSL/Docker，未包含时使用 Docker Desktop fallback。三者都只发布到 \x60127.0.0.1\x60。
-  * \x60SHA256SUMS.txt\x60：公开工件与元数据校验和。
+  * \x60web-bundle/$WEB_ZIP_FILENAME\x60：Local Web 正式平台 ZIP，解压后内含与 IPA/DMG 相同 SHA-256 的 \x60app/NavPlanner/Resources/Database/navdata.sqlite\x60。macOS/Linux 使用 Hummingbird 与同一 Swift 核心；Windows 包含经宿主 smoke 的原生 SwiftNIO \x60.exe\x60 时直接运行且不启动 Linux/WSL/Docker，未包含时使用 Docker Desktop fallback。三者都只发布到 \x60127.0.0.1\x60。
+  * \x60SHA256SUMS.txt\x60：仅列出 iOS IPA、macOS DMG 和 Web ZIP 三个公开下载工件的校验和；ZIP 内的包级清单仍用于解压后自检。
 
 ⚠️ 公开源码仓库不包含导航数据库。发布候选会把本机 \x60database/e_dfd_PMDG_release.s3db\x60 作为 \x60Database/navdata.sqlite\x60 同字节放入 IPA、DMG 与 Web；本次输入库 AIRAC 为 \x60$DATABASE_AIRAC\x60，SHA-256 为 \x60$DATABASE_SHA\x60。当前示例数据库的随附 notice 将其用途限制为地面娱乐飞行模拟软件，并要求取得 Navigraph 的书面许可后才能再分发；未取得许可前，不得发布任何包含该库的工件。详细安装与发布边界见 [README](https://github.com/MDX-Tom/simnav-studio/blob/main/README.md#install-the-ipa-and-dmg-from-releases) 和 [public release packaging](https://github.com/MDX-Tom/simnav-studio/blob/main/Tools/Release/README.md)。
 
@@ -578,8 +596,8 @@ Key capabilities:
 
   * \x60SimNav-Studio-$VERSION-unsigned.ipa\x60: iPhone / iPad sideload package. It must be re-signed with the installer's own Apple Account through AltStore, SideStore, Sideloadly, or another trusted tool.
   * \x60SimNav-Studio-$VERSION-catalyst-adhoc.dmg\x60: universal Mac Catalyst package, ad-hoc signed and not notarized; it does not provide Developer ID / Gatekeeper public-distribution trust.
-  * \x60web/\x60: the formal Local Web platform package, including \x60Database/navdata.sqlite\x60 with the same SHA-256 as the IPA/DMG copy. macOS/Linux use Hummingbird with the shared Swift core; Windows runs the host-smoked native SwiftNIO \x60.exe\x60 directly without Linux/WSL/Docker when that bundle is included, and otherwise uses the Docker Desktop fallback. Every launcher publishes only to \x60127.0.0.1\x60.
-  * \x60SHA256SUMS.txt\x60: checksums for public artifacts and metadata.
+  * \x60web-bundle/$WEB_ZIP_FILENAME\x60: the formal Local Web deployment ZIP. After extraction it includes \x60app/NavPlanner/Resources/Database/navdata.sqlite\x60 with the same SHA-256 as the IPA/DMG copy. macOS/Linux use Hummingbird with the shared Swift core; Windows runs the host-smoked native SwiftNIO \x60.exe\x60 directly without Linux/WSL/Docker when that bundle is included, and otherwise uses the Docker Desktop fallback. Every launcher publishes only to \x60127.0.0.1\x60.
+  * \x60SHA256SUMS.txt\x60: checksums for exactly the iOS IPA, macOS DMG, and Web ZIP download artifacts; the ZIP retains its package-level checksum list for post-extraction verification.
 
 ⚠️ The public source repository does not contain a navigation database. The release candidate bundles the local \x60database/e_dfd_PMDG_release.s3db\x60 byte-for-byte as \x60Database/navdata.sqlite\x60 in the IPA, DMG, and Web package; this input database is AIRAC \x60$DATABASE_AIRAC\x60 with SHA-256 \x60$DATABASE_SHA\x60. The accompanying notice limits the current example database to ground-based recreational flight-simulation software and requires written permission from Navigraph for redistribution; do not publish any artifact containing it without that permission. See the [README](https://github.com/MDX-Tom/simnav-studio/blob/main/README.md#install-the-ipa-and-dmg-from-releases) and [public release packaging guide](https://github.com/MDX-Tom/simnav-studio/blob/main/Tools/Release/README.md) for installation and publication boundaries.
 """
@@ -589,14 +607,10 @@ PY
 
 (
   cd "$OUTPUT_DIR"
-  MANIFEST_SHA="$(shasum -a 256 metadata/build-manifest.json | awk '{print $1}')"
-  NOTES_SHA="$(shasum -a 256 PUBLIC_RELEASE_NOTES.md | awk '{print $1}')"
   {
     printf '%s  %s\n' "$IPA_SHA" "ios/$IPA_FILENAME"
     printf '%s  %s\n' "$DMG_SHA" "macos/$DMG_FILENAME"
-    printf '%s  %s\n' "$MANIFEST_SHA" "metadata/build-manifest.json"
-    printf '%s  %s\n' "$NOTES_SHA" "PUBLIC_RELEASE_NOTES.md"
-    find web -type f -print0 | sort -z | xargs -0 shasum -a 256
+    printf '%s  %s\n' "$WEB_ZIP_SHA" "web-bundle/$WEB_ZIP_FILENAME"
   } >SHA256SUMS.txt
 )
 

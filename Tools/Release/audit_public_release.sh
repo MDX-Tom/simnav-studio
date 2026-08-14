@@ -56,22 +56,17 @@ fi
 IPA_PATH="$RELEASE_DIR/ios/$ARTIFACT_BASENAME-$EXPECTED_VERSION-unsigned.ipa"
 MAC_APP="$RELEASE_DIR/macos/$ARTIFACT_BASENAME-$EXPECTED_VERSION-catalyst-adhoc.app"
 DMG_PATH="$RELEASE_DIR/macos/$ARTIFACT_BASENAME-$EXPECTED_VERSION-catalyst-adhoc.dmg"
-WEB_DIR="$RELEASE_DIR/web"
+WEB_ZIP_FILENAME="$ARTIFACT_BASENAME-$EXPECTED_VERSION-web.zip"
+WEB_ZIP_PATH="$RELEASE_DIR/web-bundle/$WEB_ZIP_FILENAME"
 
-if [ ! -f "$IPA_PATH" ] || [ ! -d "$MAC_APP" ] || [ ! -f "$DMG_PATH" ] || [ ! -d "$WEB_DIR" ]; then
-  echo "Expected unsigned IPA, ad-hoc app, ad-hoc DMG and Local Web package were not found." >&2
-  exit 4
-fi
-"$PROJECT_ROOT/Tools/LocalWeb/audit_web_release.sh" "$WEB_DIR"
-
-unzip -tq "$IPA_PATH" >/dev/null
-if unzip -Z1 "$IPA_PATH" | grep -Eq '(^|/)embedded\.mobileprovision$|(^|/)_CodeSignature(/|$)'; then
-  echo "Unsigned IPA contains a provisioning profile or bundle CodeResources signature." >&2
+if [ ! -f "$IPA_PATH" ] || [ ! -d "$MAC_APP" ] || [ ! -f "$DMG_PATH" ] || [ ! -f "$WEB_ZIP_PATH" ]; then
+  echo "Expected unsigned IPA, ad-hoc app, ad-hoc DMG and Web ZIP were not found." >&2
   exit 4
 fi
 
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/navplanner-public-audit.XXXXXX")"
 MOUNT_DIR="$TEMP_DIR/dmg-mount"
+WEB_EXTRACT_DIR="$TEMP_DIR/web-zip"
 MOUNT_ATTACHED=0
 cleanup() {
   if [ "$MOUNT_ATTACHED" -eq 1 ]; then
@@ -80,6 +75,27 @@ cleanup() {
   rm -rf "$TEMP_DIR"
 }
 trap cleanup EXIT
+
+unzip -tq "$WEB_ZIP_PATH" >/dev/null
+if unzip -Z1 "$WEB_ZIP_PATH" | grep -Eq '(^|/)(\.DS_Store|__MACOSX)(/|$)|(^|/)\.\.?(/|$)'; then
+  echo "Web ZIP contains Finder metadata or unsafe relative paths." >&2
+  exit 4
+fi
+mkdir -p "$WEB_EXTRACT_DIR"
+unzip -q "$WEB_ZIP_PATH" -d "$WEB_EXTRACT_DIR"
+WEB_DIR="$WEB_EXTRACT_DIR/web"
+if [ ! -d "$WEB_DIR" ]; then
+  echo "Web ZIP must contain a top-level web/ package directory." >&2
+  exit 4
+fi
+"$PROJECT_ROOT/Tools/LocalWeb/audit_web_release.sh" "$WEB_DIR" \
+  --expected-database "$PROJECT_ROOT/database/e_dfd_PMDG_release.s3db"
+
+unzip -tq "$IPA_PATH" >/dev/null
+if unzip -Z1 "$IPA_PATH" | grep -Eq '(^|/)embedded\.mobileprovision$|(^|/)_CodeSignature(/|$)'; then
+  echo "Unsigned IPA contains a provisioning profile or bundle CodeResources signature." >&2
+  exit 4
+fi
 unzip -q "$IPA_PATH" -d "$TEMP_DIR"
 IOS_APP="$(find "$TEMP_DIR/Payload" -maxdepth 1 -type d -name '*.app' -print -quit)"
 
@@ -267,12 +283,14 @@ fi
 
 IPA_SHA="$(shasum -a 256 "$IPA_PATH" | awk '{print $1}')"
 DMG_SHA="$(shasum -a 256 "$DMG_PATH" | awk '{print $1}')"
+WEB_ZIP_SHA="$(shasum -a 256 "$WEB_ZIP_PATH" | awk '{print $1}')"
 APP_TREE_SHA="$(
   cd "$MAC_APP"
   find . -type f -print0 | sort -z | xargs -0 shasum -a 256 | shasum -a 256 | awk '{print $1}'
 )"
 IPA_SIZE="$(stat -f '%z' "$IPA_PATH")"
 DMG_SIZE="$(stat -f '%z' "$DMG_PATH")"
+WEB_ZIP_SIZE="$(stat -f '%z' "$WEB_ZIP_PATH")"
 APP_SIZE="$(find "$MAC_APP" -type f -print0 | xargs -0 stat -f '%z' | awk '{sum += $1} END {print sum + 0}')"
 WEB_TREE_SHA="$(
   cd "$WEB_DIR"
@@ -288,7 +306,7 @@ python3 - \
   "$EXPECTED_PRODUCT_NAME" "$EXPECTED_DISPLAY_NAME" "$EXPECTED_SUBTITLE" "$ARTIFACT_BASENAME" \
   "$CURRENT_BRANCH" "$CURRENT_HEAD" \
   "$IPA_SHA" "$IPA_SIZE" "$APP_TREE_SHA" "$APP_SIZE" "$DMG_SHA" "$DMG_SIZE" \
-  "$WEB_TREE_SHA" "$WEB_SIZE" \
+  "$WEB_ZIP_SHA" "$WEB_ZIP_SIZE" "$WEB_TREE_SHA" "$WEB_SIZE" \
   "$IOS_DATABASE_SHA" "$IOS_DATABASE_SIZE" "$IOS_DATABASE_AIRAC" "$IOS_DATABASE_REVISION" <<'PY'
 import json
 import sys
@@ -310,7 +328,9 @@ import sys
     app_size,
     dmg_sha,
     dmg_size,
-    web_sha,
+    web_zip_sha,
+    web_zip_size,
+    web_tree_sha,
     web_size,
     database_sha,
     database_size,
@@ -346,7 +366,7 @@ expected_artifacts = {
     "ios/" + artifact_basename + "-" + expected_version + "-unsigned.ipa": (ipa_sha, int(ipa_size)),
     "macos/" + artifact_basename + "-" + expected_version + "-catalyst-adhoc.app": (app_sha, int(app_size)),
     "macos/" + artifact_basename + "-" + expected_version + "-catalyst-adhoc.dmg": (dmg_sha, int(dmg_size)),
-    "web/": (web_sha, int(web_size)),
+    "web-bundle/" + artifact_basename + "-" + expected_version + "-web.zip": (web_zip_sha, int(web_zip_size)),
 }
 for path, (expected_sha, expected_size) in expected_artifacts.items():
     artifact = artifacts.get(path)
@@ -355,7 +375,14 @@ for path, (expected_sha, expected_size) in expected_artifacts.items():
     if artifact.get("sha256") != expected_sha or artifact.get("size_bytes") != expected_size:
         raise SystemExit(f"Manifest hash/size does not match {path}.")
 
-if artifacts["web/"].get("http_transports") != {
+web_zip_path = "web-bundle/" + artifact_basename + "-" + expected_version + "-web.zip"
+web_artifact = artifacts[web_zip_path]
+if web_artifact.get("package_format") != "zip" or web_artifact.get("sha256_scope") != "sha256-of-zip-file":
+    raise SystemExit("Public manifest Web artifact is not a ZIP with file-scoped SHA-256.")
+if web_artifact.get("unpacked_tree_sha256") != web_tree_sha or web_artifact.get("unpacked_size_bytes") != int(web_size):
+    raise SystemExit("Public manifest Web unpacked tree metadata does not match the ZIP contents.")
+
+if web_artifact.get("http_transports") != {
     "macos": "hummingbird-2.22.0",
     "linux": "hummingbird-2.22.0",
     "windows": "swift-nio-2.101.3",
@@ -367,7 +394,7 @@ expected_web_database = {
     "database_path": "app/NavPlanner/Resources/Database/navdata.sqlite",
 }
 for key, expected in expected_web_database.items():
-    if artifacts["web/"].get(key) != expected:
+    if web_artifact.get(key) != expected:
         raise SystemExit(f"Public manifest Web {key} does not match the release database.")
 
 database = manifest.get("bundled_database", {})
@@ -393,6 +420,31 @@ if not identity_audit or any(value is not False for value in identity_audit.valu
     raise SystemExit("Manifest identity/secret audit is missing or does not report a clean result.")
 PY
 
+if [ -e "$RELEASE_DIR/web" ]; then
+  echo "Release root must not contain a raw web/ directory; publish web-bundle/*.zip instead." >&2
+  exit 5
+fi
+python3 - "$RELEASE_DIR/SHA256SUMS.txt" \
+  "ios/$ARTIFACT_BASENAME-$EXPECTED_VERSION-unsigned.ipa" \
+  "macos/$ARTIFACT_BASENAME-$EXPECTED_VERSION-catalyst-adhoc.dmg" \
+  "web-bundle/$WEB_ZIP_FILENAME" <<'PY'
+import pathlib
+import sys
+
+checksum_path = pathlib.Path(sys.argv[1])
+expected_paths = set(sys.argv[2:])
+lines = [line.strip() for line in checksum_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+if len(lines) != 3:
+    raise SystemExit(f"SHA256SUMS.txt must contain exactly three artifact entries, found {len(lines)}.")
+actual_paths = set()
+for line in lines:
+    parts = line.split()
+    if len(parts) != 2 or len(parts[0]) != 64 or any(ch not in "0123456789abcdef" for ch in parts[0].lower()):
+        raise SystemExit(f"Invalid SHA256SUMS.txt entry: {line}")
+    actual_paths.add(parts[1])
+if actual_paths != expected_paths:
+    raise SystemExit(f"SHA256SUMS.txt paths are {sorted(actual_paths)}, expected {sorted(expected_paths)}.")
+PY
 (
   cd "$RELEASE_DIR"
   shasum -a 256 -c SHA256SUMS.txt
