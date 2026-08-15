@@ -360,7 +360,11 @@ export function createCalculatePage(context) {
     input.parentElement?.style.setProperty("--slider-progress-ratio", progressRatio.toFixed(5));
     const control = input.closest?.(".calculate-slider-control") || input.parentElement;
     if (control) {
-      const width = control.getBoundingClientRect?.().width || control.clientWidth || 0;
+      // clientWidth is expressed in layout CSS pixels; getBoundingClientRect()
+      // is already multiplied by CSS zoom. Mixing the latter with unscaled CSS
+      // inset/thumb variables applies zoom twice and shifts the visual thumb
+      // away from its tick. Keep every calculation in layout pixels.
+      const width = control.clientWidth || control.getBoundingClientRect?.().width || 0;
       const styles = window.getComputedStyle(control);
       const inset = Number.parseFloat(styles.getPropertyValue("--calculate-track-inset")) || 0;
       const thumbSize = Number.parseFloat(styles.getPropertyValue("--calculate-thumb-size")) || 0;

@@ -10,10 +10,10 @@ sources used by the apps. It does not contain a second frontend or backend imple
   the fallback.
 - Windows: right-click `run-windows.ps1` and choose **Run with PowerShell**. A packaged
   SwiftNIO `simnav-local-web.exe` runs directly on Windows with no Linux server. Docker Desktop
-  is used only when that native bundle is absent; the launcher keeps Edge/Chrome on Windows so
-  the same visible FR24 verification flow remains available to the container.
+  is used only when that native bundle is absent; the managed Chrome/Chromium/Edge process stays
+  hidden unless the user explicitly opens the FR24 verification page.
 - Linux: run `./run-linux.sh`. Docker builds and runs the native Linux Swift server, while the
-  launcher keeps the dedicated visible Chrome/Edge/Chromium profile on the Linux desktop.
+  launcher keeps its managed Chrome/Chromium/Edge process off-screen until explicit verification.
 
 Open <http://127.0.0.1:8010>. Set `SIMNAV_WEB_PORT` before launching to choose another port.
 Container launchers publish only to `127.0.0.1`; the service is not exposed to the LAN or Internet.
@@ -29,9 +29,10 @@ server copies that read-only release database into the Local Web data root and a
 airport search and planning work immediately. A database later imported or selected in the browser
 remains active across native-process or container restarts; **Restore bundled database** returns to
 the release copy. No user map, track, cookie, FR24 session, cache, log, or secret is bundled. Local
-Web opens Chrome, Edge, or Chromium with an isolated profile under its data root. Complete any
-normal FR24 / Cloudflare verification in that dedicated window, then select **Sync Browser Session**
-in Query. The FR24 homepage remains the only visible verification target; schedule/playback targets
+Web uses Chrome, Chromium, or Edge with an isolated profile under its data root. Startup and normal
+FR24 requests stay off-screen; select **Open FR24 verification page** to show the dedicated window,
+complete any normal FR24 / Cloudflare verification, then select **Sync Browser Session** in Query.
+The FR24 homepage remains the only visible verification target; schedule/playback targets
 stay in the background and close if challenged. The launchers use a randomized non-zero private
 loopback DevTools port, preserving normal headed-browser semantics (`navigator.webdriver=false`)
 instead of Chromium's port-zero automation mode. The shared Swift `FR24Service` performs route

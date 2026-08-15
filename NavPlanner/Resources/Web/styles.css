@@ -283,6 +283,13 @@ svg {
   transition: grid-template-columns 0.22s ease;
 }
 
+/* Local Web alone gets a 10% wider desktop detail sidebar. The canonical CSS
+   remains shared; Apple geometry is selected by its existing device/platform
+   markers and is not changed. */
+html[data-runtime="web"] .shell {
+  --detail-panel-width: 385px;
+}
+
 @media (orientation: landscape) {
   html[data-device="pad"] .shell {
     --planner-panel-width: 381.6px;

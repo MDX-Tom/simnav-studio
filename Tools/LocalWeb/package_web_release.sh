@@ -253,6 +253,8 @@ manifest = {
         "adapter": "managed-Chromium-CDP",
         "official_api_credential_required": False,
         "browser_profile": "isolated-and-persistent",
+        "background_requests": True,
+        "visible_window_trigger": "explicit-open-verification-only",
         "linux_docker_bridge": "private-compose-gateway",
         "windows_docker_bridge": "ephemeral-authenticated-host-relay",
     },

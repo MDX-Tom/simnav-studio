@@ -44,6 +44,7 @@ final class PackageBoundaryTests: XCTestCase {
         let runtime = try String(contentsOf: webRoot.appendingPathComponent("runtime.js"), encoding: .utf8)
         let zoom = try String(contentsOf: webRoot.appendingPathComponent("ui-zoom.js"), encoding: .utf8)
         let styles = try String(contentsOf: webRoot.appendingPathComponent("styles.css"), encoding: .utf8)
+        let calculate = try String(contentsOf: webRoot.appendingPathComponent("pages/calculate.js"), encoding: .utf8)
 
         XCTAssertTrue(html.contains(#"href="/app-icons/style2-day-medium.png""#))
         XCTAssertTrue(html.contains(#"id="darkMapToggle" type="checkbox""#))
@@ -85,14 +86,43 @@ final class PackageBoundaryTests: XCTestCase {
 
         XCTAssertTrue(zoom.contains(#"window.location.protocol === "http:""#))
         XCTAssertTrue(zoom.contains(#"window.location.protocol === "https:""#))
-        XCTAssertTrue(zoom.contains("return 0.9;"))
+        XCTAssertTrue(zoom.contains(#"root.dataset.runtime = "web""#))
+        XCTAssertTrue(zoom.contains("return 0.828;"))
         XCTAssertTrue(zoom.contains(#"root.dataset.platform === "mac" ? 0.9 : 0.8"#))
+        XCTAssertTrue(styles.contains(#"html[data-runtime="web"] .shell"#))
+        XCTAssertTrue(styles.contains("--detail-panel-width: 385px;"))
+        XCTAssertTrue(calculate.contains(#"const width = control.clientWidth || control.getBoundingClientRect?.().width || 0;"#))
 
         XCTAssertFalse(styles.contains(#"data-theme="night"][data-map-source="online"] .terrain-pane"#))
         XCTAssertFalse(styles.contains("brightness(0.58)"))
         XCTAssertFalse(styles.contains("grayscale(0.48)"))
         XCTAssertTrue(styles.contains(#"html[data-dark-map-active="true"] #map"#))
         XCTAssertTrue(styles.contains("Native dark tiles are rendered exactly as supplied by the provider."))
+    }
+
+    func testFR24PrimaryActionsDrawBeforeNonBlockingAirportSynchronization() throws {
+        var workspaceRoot = URL(fileURLWithPath: #filePath)
+        for _ in 0..<4 {
+            workspaceRoot.deleteLastPathComponent()
+        }
+        let app = try String(
+            contentsOf: workspaceRoot.appendingPathComponent("NavPlanner/Resources/Web/app.js"),
+            encoding: .utf8
+        )
+        let drawStart = try XCTUnwrap(app.range(of: "async function downloadAndDrawFR24Track(key)"))
+        let matchStart = try XCTUnwrap(
+            app.range(of: "async function matchFR24FlightTrack(key)", range: drawStart.upperBound..<app.endIndex)
+        )
+        let drawBody = String(app[drawStart.lowerBound..<matchStart.lowerBound])
+        let playbackStart = try XCTUnwrap(drawBody.range(of: "const payload = await fetchFR24TrackPayload"))
+        let playbackBody = String(drawBody[playbackStart.lowerBound...])
+        let trackDraw = try XCTUnwrap(playbackBody.range(of: "drawFR24TrackPoints(payload.track_points || [])"))
+        let airportSync = try XCTUnwrap(playbackBody.range(of: "await syncPlanAirportsFromFR24Flight"))
+        XCTAssertLessThan(trackDraw.lowerBound, airportSync.lowerBound)
+        XCTAssertTrue(playbackBody.contains("if (count < 2)"))
+        XCTAssertTrue(playbackBody.contains("FR24 轨迹已绘制，机场同步未完成"))
+        XCTAssertTrue(app.contains("FR24 拟合沿用当前查询机场，机场同步未完成"))
+        XCTAssertTrue(app.contains("payload?.browser_adapter_available"))
     }
 
     func testNativeDarkProviderUsesDedicatedArcGISDarkGrayTiles() throws {

@@ -89,7 +89,8 @@ App、截图、原始日志或其他非 `release-VERSION/` 项。
 
 - unsigned Universal IPA；
 - ad-hoc Catalyst App 与未 notarize DMG；
-- `web-bundle/SimNav-Studio-VERSION-web.zip` Local Web 部署 ZIP（解压后包含 macOS /
+- `web-bundle/SimNav-Studio-VERSION-web.zip` Local Web 部署 ZIP（解压根目录为
+  `SimNav-Studio-VERSION-web/`，包含 macOS /
   Windows / Linux 启停脚本、单一 Web/Swift 源、固定 Dockerfile/Compose、内部
   manifest/checksums，以及与 Apple 工件相同的 release 数据库；不含用户数据）；
 - 脱敏 manifest 和双语公开说明；
@@ -113,7 +114,8 @@ Tools/LocalWeb/audit_web_release.sh /tmp/SimNav-Web \
 ```
 
 正式 release build 会自动执行这两步并把 manifest schema 升级为 6，完成 Web package audit
-后再将整个包写入 `web-bundle/SimNav-Studio-VERSION-web.zip`。顶层
+后再将整个包写入 `web-bundle/SimNav-Studio-VERSION-web.zip`，且 ZIP 只能包含
+`SimNav-Studio-VERSION-web/` 这一个顶层目录。顶层
 `SHA256SUMS.txt` 严格只列 iOS IPA、macOS DMG 和 Web ZIP 三个下载工件；ZIP 内部仍保留
 逐文件 package checksum。如要随 release 加入 Windows 原生 Swift server，
 先从 `.github/workflows/local-web-windows.yml` 或 Windows 本机脚本得到已 smoke 的 bundle，
@@ -125,7 +127,7 @@ Docker；没有原生 bundle 时才使用 Docker Desktop 兜底。该 bundle 必
 也可独立复跑审计：
 
 ```bash
-Tools/Release/audit_public_release.sh releases/release-0.1.1
+Tools/Release/audit_public_release.sh releases/release-0.1.2
 ```
 
 审计遇到以下情况会失败：已跟踪或未跟踪但未忽略的公开源码含 signing

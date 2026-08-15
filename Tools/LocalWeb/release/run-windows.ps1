@@ -94,11 +94,14 @@ function Find-FR24Browser {
         return (Resolve-Path -LiteralPath $env:SIMNAV_FR24_BROWSER).Path
     }
     $Candidates = @(
-        (Join-Path ${env:ProgramFiles(x86)} "Microsoft\Edge\Application\msedge.exe"),
-        (Join-Path $env:ProgramFiles "Microsoft\Edge\Application\msedge.exe"),
         (Join-Path $env:ProgramFiles "Google\Chrome\Application\chrome.exe"),
         (Join-Path ${env:ProgramFiles(x86)} "Google\Chrome\Application\chrome.exe"),
-        (Join-Path $env:LOCALAPPDATA "Google\Chrome\Application\chrome.exe")
+        (Join-Path $env:LOCALAPPDATA "Google\Chrome\Application\chrome.exe"),
+        (Join-Path $env:ProgramFiles "Chromium\Application\chrome.exe"),
+        (Join-Path ${env:ProgramFiles(x86)} "Chromium\Application\chrome.exe"),
+        (Join-Path $env:LOCALAPPDATA "Chromium\Application\chrome.exe"),
+        (Join-Path $env:ProgramFiles "Microsoft\Edge\Application\msedge.exe"),
+        (Join-Path ${env:ProgramFiles(x86)} "Microsoft\Edge\Application\msedge.exe")
     ) | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) }
     if (-not $Candidates) {
         throw "Microsoft Edge, Google Chrome, or Chromium is required for the App-equivalent FR24 workflow."
@@ -167,7 +170,7 @@ if (Test-Path -LiteralPath $NativeExe -PathType Leaf) {
     }
 }
 
-Write-Host "A native Windows bundle is not included; using Docker with a host-managed Edge/Chrome session."
+Write-Host "A native Windows bundle is not included; using Docker with a background managed Chrome/Chromium/Edge session."
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
     throw "Install Docker Desktop, or add native\windows-x86_64\simnav-local-web.exe and its DLLs."
 }
@@ -215,7 +218,9 @@ try {
             "--no-default-browser-check",
             "--disable-sync",
             "--disable-background-mode",
-            "--no-startup-window"
+            "--no-startup-window",
+            "--window-position=-10000,-10000",
+            "--window-size=1280,900"
         )
         $BrowserProcess = Start-Process -FilePath $BrowserExecutable `
             -ArgumentList $BrowserArguments -PassThru

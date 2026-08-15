@@ -80,10 +80,11 @@ if [[ -z "${swift_bin}" || ! -x "${swift_bin}" ]]; then
   exit 1
 fi
 
-if ! swift_version="$(${swift_bin} --version 2>&1 | head -n 1)"; then
+if ! swift_version="$(${swift_bin} --version 2>&1)"; then
   echo "Unable to execute Swift at ${swift_bin}. Set SIMNAV_SWIFT_BIN to a working Swift 6.1+ binary." >&2
   exit 1
 fi
+swift_version="${swift_version%%$'\n'*}"
 if [[ ! "${swift_version}" =~ Swift[[:space:]]version[[:space:]]([0-9]+)\.([0-9]+) ]]; then
   echo "Unable to determine Swift version from: ${swift_version}" >&2
   exit 1

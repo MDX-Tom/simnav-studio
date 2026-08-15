@@ -140,6 +140,8 @@ if [[ -z "${browser_port}" ]]; then
     "--disable-sync"
     "--disable-background-mode"
     "--no-startup-window"
+    "--window-position=-10000,-10000"
+    "--window-size=1280,900"
   )
   if [[ "${SIMNAV_FR24_BROWSER_HEADLESS:-0}" == "1" ]]; then
     browser_arguments=("--headless=new" "${browser_arguments[@]}")

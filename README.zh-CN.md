@@ -10,7 +10,7 @@
   <a href="https://github.com/MDX-Tom/simnav-studio/stargazers"><img src="https://img.shields.io/github/stars/MDX-Tom/simnav-studio?logo=github&label=Stars" alt="GitHub Stars" /></a>
   <img src="https://img.shields.io/badge/平台-iOS%20%7C%20macOS%20%7C%20Local%20Web-475569" alt="iOS、macOS 与 Local Web" />
     <img src="https://img.shields.io/badge/Swift-5.0-F05138?logo=swift&logoColor=white" alt="Swift 5.0" />
-  <img src="https://img.shields.io/badge/版本-0.1.1-0F766E" alt="版本 0.1.1" />
+  <img src="https://img.shields.io/badge/版本-0.1.2-0F766E" alt="版本 0.1.2" />
 </p>
 
 <p>
@@ -68,7 +68,7 @@ Apple App 以 SwiftUI 构建外壳；Local Web 则从 localhost 直接提供完�
 | 🛬 | **机场与 Procedure 查看** | 查看跑道、通信频率、`SID`、`STAR`、`APPROACH`，并支持 RF / AF 弧线、复飞段和等待航线几何。 |
 | 🗺️ | **多图层地图工作区** | 独立控制底图、各类航路、Procedure、FR24 轨迹、航点、导航台、跑道、ILS 和 airway 标签；支持撤销、重做与清除绘制。 |
 | 📐 | **飞行计算工作台** | 配置机型、重量、燃油、巡航、下降、天气和 QNH，查看风速 / 地形、地速 / 垂直速度剖面及 SimBrief 风格燃油估算。 |
-| 📡 | **FR24 轨迹对照** | Apple 同步 App 内 Web 会话，Local Web 同步隔离的 SimNav 专用浏览器会话；无需填写官方 API，即可查询、下载、绘制并拟合轨迹，也可导入 GPX 或 FR24 CSV/KML。 |
+| 📡 | **FR24 轨迹对照** | 先通过共享后端在后台直接查询；只有 FR24 实际要求验证时，Apple 才打开并同步 App 内 Web 会话，Local Web 才打开并同步隔离的 SimNav 专用浏览器会话。无需填写官方 API，即可下载、绘制并拟合轨迹，也可导入 GPX 或 FR24 CSV/KML。 |
 | 💾 | **离线地图库** | 导入或下载 PMTiles、MBTiles、SQLite 瓦片库和 Web 旧版 `tiles/` 布局，并与在线地图缓存分开管理。 |
 | 🗄️ | **本地导航数据库** | 导入 `.s3db`、`.sqlite`、`.sqlite3` 或 `.db`，切换数据库、删除未使用副本，并恢复内置数据库。 |
 
@@ -169,8 +169,8 @@ Apple App 以 SwiftUI 构建外壳；Local Web 则从 localhost 直接提供完�
 <summary><strong>4 · FR24 轨迹：查询、下载、回放、拟合</strong></summary>
 
 1. 在计划页填写起飞机场和到达机场，再打开 **查询** 页。
-2. 打开 FR24 验证页并正常完成 FR24 / Cloudflare 验证。Apple 使用 App 内 WebKit 会话；Local Web 会在隔离的 SimNav Chrome / Edge / Chromium 配置中打开 FR24 主页。启动器使用随机的非零私有回环控制端口，让可见页面保持普通浏览器语义（`navigator.webdriver=false`），不再进入 Chromium 的 `port=0` 自动化模式。可见验证标签始终保持为主页；schedule / playback 只在短生命周期后台标签中请求，遇到挑战会立即关闭。返回 Query 后点击 **同步浏览器会话**，无需填写官方 API。
-3. 查询该航线最近最多 10 个航班，或手动搜索航班号 / flightId。
+2. 直接查询该航线最近最多 10 个航班，或手动搜索航班号 / flightId。Apple 与 Local Web 都会先通过同一 FR24 后端在后台尝试，无需填写官方 API。
+3. 只有 FR24 实际要求验证时，才手动打开 **FR24 验证页**、正常完成 FR24 / Cloudflare 验证，再点击 **同步浏览器会话**。Apple 使用 App 内 WebKit 会话；Local Web 只在此时显示隔离的 SimNav Chrome / Chromium / Edge 配置中的 FR24 主页。启动器使用随机的非零私有回环控制端口，让可见页面保持普通浏览器语义（`navigator.webdriver=false`）；schedule / playback 仍只在短生命周期后台标签中请求，遇到挑战会立即关闭。
 4. 下载并绘制轨迹、导入 GPX 或账户授权导出的 FR24 CSV/KML、查看高度 / 速度剖面，或把当前轨迹拟合到本地航路引擎。
 
 尚未起飞的航班会使用深灰色计划卡片显示。由于 FR24 此时还没有实际 playback，SimNav Studio 会明确提示这一限制，并可使用本地自动规划器以虚线绘制计划预览；该虚线不会被表述为实际飞行轨迹或 FR24 filed route。
@@ -179,7 +179,7 @@ Apple App 以 SwiftUI 构建外壳；Local Web 则从 localhost 直接提供完�
 
 下载轨迹会以 GPX、playback JSON 和 metadata 缓存在本机。Query 可检索缓存、绘制或拟合缓存轨迹、分享 GPX、收藏重要轨迹、打开缓存目录，并清理未收藏的下载记录。
 
-> **在线增强功能。** FR24 为可选功能。Local Web 的专用浏览器配置只保存在独立数据根中，不读取用户的普通浏览器配置，也不导出 Cookie；若 FR24 要求验证，专用窗口会保留并由用户正常完成。DevTools 仅监听随机的非零回环端口，既避免把可见窗口误标为 WebDriver 自动化，也不会暴露到局域网。网络、会话或验证失败都不会阻断本地航路规划、机场查询、Procedure、nav-overlay 和离线地图。SimNav Studio 不绕过 Cloudflare，也不自动处理 CAPTCHA。
+> **在线增强功能。** FR24 为可选功能。Local Web 的专用浏览器配置只保存在独立数据根中，不读取用户的普通浏览器配置，也不导出 Cookie；启动、schedule 查询和 playback 下载都会在受管浏览器后台进程中完成，只有用户手动点击**打开 FR24 验证页**时才显示浏览器窗口。DevTools 仅监听随机的非零回环端口，既避免把可见窗口误标为 WebDriver 自动化，也不会暴露到局域网。网络、会话或验证失败都不会阻断本地航路规划、机场查询、Procedure、nav-overlay 和离线地图。SimNav Studio 不绕过 Cloudflare，也不自动处理 CAPTCHA。
 
 <table align="center" width="92%">
   <tr>
@@ -217,7 +217,7 @@ Apple App 以 SwiftUI 构建外壳；Local Web 则从 localhost 直接提供完�
 
 1. 打开 **设置** → **外观**，可跟随系统主题或选择日间/夜间模式。
 2. **暗色模式地图**默认关闭，因此暗色 UI 会继续使用与亮色 UI 完全相同的地图来源和配色。开启后只请求地图供应商提供的原生暗色瓦片，不叠加深色遮罩或颜色滤镜；当前来源不支持时会自动切换到 ArcGIS World Dark Gray。
-3. UI 缩放提供 `-1`、`0`、`+1`、`+2`，默认等级为 `0`，每档以当前设备布局为基准相差 8%；Local Web 的等级 `0` / `100%` 特意以原浏览器界面的 90% 作为新基准，不改变 Apple 平台既有的等级 0 基准。
+3. UI 缩放提供 `-1`、`0`、`+1`、`+2`，默认等级为 `0`，每档以当前设备布局为基准相差 8%；Local Web 的等级 `0` / `100%` 采用原等级 0 大小的 92%（浏览器有效缩放为 82.8%），不改变 Apple 平台既有的等级 0 基准。
 4. 文字、控件、面板与地图界面会一起缩放，不改变地图的地理缩放级别；Apple App 与 Local Web 执行同一份 UI 源码，同时保留各自的平台基准。
 5. 全新安装默认使用图标风格 2 的“日间 / 默认”版本；设置中仍可选择三种风格各自的日间/夜间高饱和、默认和柔和版本。
 
@@ -371,13 +371,14 @@ Tools/LocalWeb/run.sh \
 会改变状态的请求必须带页面注入的单进程 token。在设置中导入或选择的数据库，会在原生
 进程或容器重启后继续保持启用。受跟踪封包工具会生成
 `releases/release-<version>/web-bundle/SimNav-Studio-<version>-web.zip`；解压后目录为
-`web/`。Windows 在包含经宿主 smoke 的原生 bundle 时直接
+`SimNav-Studio-<version>-web/`。Windows 在包含经宿主 smoke 的原生 bundle 时直接
 运行 `simnav-local-web.exe` 与 runtime DLL，无需安装 Swift，也不启动 Linux、WSL 或
 Docker；原生 bundle 缺失时回退 Docker Desktop。Linux 在固定容器中构建并运行原生 Swift
-可执行文件。Docker 启动时，专用 FR24 Edge/Chrome/Chromium 仍运行在宿主桌面：Linux 通过
-仅绑定 Compose 私有网关的 relay 连接，Windows 通过一次性随机 token 的宿主 relay 连接。
-这样无需官方 API 或第二套 FR24 后端，仍可使用与 App 相同的可见验证与 Query 流程。
-v0.1.1 候选与 Apple 工件从同一个已审查源码 commit 生成。
+可执行文件。Docker 启动时，专用 FR24 Chrome/Chromium/Edge 子进程在宿主后台隐藏运行：
+Linux 通过仅绑定 Compose 私有网关的 relay 连接，Windows 通过一次性随机 token 的宿主 relay
+连接。只有用户手动点击“打开 FR24 验证页”时才显示窗口；普通 Query、历史和 playback 请求
+保持后台运行，无需官方 API 或第二套 FR24 后端。
+v0.1.2 候选与 Apple 工件从同一个已审查源码 commit 生成。
 
 浏览器本身并不执行 Swift；各平台启动器会先启动一个只监听回环地址的 HTTP 进程。
 Hummingbird 2.22.0 用于 macOS/Linux，但它不支持 Windows，因此 Windows `.exe` 在同一
@@ -465,16 +466,18 @@ provisioning profile，不能直接安装。
 #### Local Web
 
 Local Web 是第三个正式 release 平台。完成 Web 集成的 release 会把启动脚本和必要
-payload 放在 `web-bundle/SimNav-Studio-<version>-web.zip` 中，解压后目录为 `web/`：macOS 使用
+payload 放在 `web-bundle/SimNav-Studio-<version>-web.zip` 中，解压后目录为
+`SimNav-Studio-<version>-web/`：macOS 使用
 `run-macos.command`，Linux 使用
 `run-linux.sh`，Windows 使用 `run-windows.ps1`。macOS 优先使用 universal 原生
 binary；Windows 优先使用随包原生 SwiftNIO `.exe`，只在缺失时使用 Docker；Linux 在
 Docker 中以 Hummingbird transport 构建同一个 Swift 核心。Docker 模式的 FR24 专用浏览器
-保留在宿主可见窗口，并通过受限宿主桥连接（Linux 私有 Compose gateway、Windows 鉴权 relay）；
+在宿主后台隐藏运行，并通过受限宿主桥连接（Linux 私有 Compose gateway、Windows 鉴权 relay）；
+仅手动打开验证页时显示窗口，
 FR24 业务仍只在共享 Swift core 实现。所有容器端口都只发布到 `127.0.0.1`；stop 脚本既能处理已记录
-的原生进程，也能停止 Docker，并保留 Local Web 数据根 / 命名 volume。ZIP 内的 `web/` 自动携带并
+的原生进程，也能停止 Docker，并保留 Local Web 数据根 / 命名 volume。ZIP 内的版本化根目录自动携带并
 启用与 IPA/DMG 完全同 SHA-256 的 release 导航数据库，但不携带用户地图、轨迹、会话、
-缓存或 token；用户仍可从浏览器导入自己有权使用的数据。受跟踪 release builder 与 audit 会在 v0.1.1 候选中生成并校验
+缓存或 token；用户仍可从浏览器导入自己有权使用的数据。受跟踪 release builder 与 audit 会在 v0.1.2 候选中生成并校验
 该 payload。
 
 </details>

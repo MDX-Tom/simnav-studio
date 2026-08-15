@@ -23,6 +23,7 @@ IPA_FILENAME="$ARTIFACT_BASENAME-$VERSION-unsigned.ipa"
 MAC_APP_FILENAME="$ARTIFACT_BASENAME-$VERSION-catalyst-adhoc.app"
 DMG_FILENAME="$ARTIFACT_BASENAME-$VERSION-catalyst-adhoc.dmg"
 WEB_ZIP_FILENAME="$ARTIFACT_BASENAME-$VERSION-web.zip"
+WEB_ROOT_DIRNAME="$ARTIFACT_BASENAME-$VERSION-web"
 
 if [ -z "$BUNDLE_IDENTIFIER" ]; then
   echo "Public Bundle Identifier is missing from Config/CodeSigning.xcconfig." >&2
@@ -295,14 +296,18 @@ fi
 "$PROJECT_ROOT/Tools/LocalWeb/audit_web_release.sh" "$WEB_PACKAGE_DIR" \
   --expected-database "$RELEASE_DATABASE_SOURCE" --docker-smoke
 WEB_ZIP_PATH="$OUTPUT_DIR/web-bundle/$WEB_ZIP_FILENAME"
-mkdir -p "$WORK_DIR/web-zip-stage/web"
-/usr/bin/ditto "$WEB_PACKAGE_DIR" "$WORK_DIR/web-zip-stage/web"
+mkdir -p "$WORK_DIR/web-zip-stage/$WEB_ROOT_DIRNAME"
+/usr/bin/ditto "$WEB_PACKAGE_DIR" "$WORK_DIR/web-zip-stage/$WEB_ROOT_DIRNAME"
 (
   cd "$WORK_DIR/web-zip-stage"
-  COPYFILE_DISABLE=1 /usr/bin/zip -qry -X "$WEB_ZIP_PATH" web
+  COPYFILE_DISABLE=1 /usr/bin/zip -qry -X "$WEB_ZIP_PATH" "$WEB_ROOT_DIRNAME"
 )
 if unzip -Z1 "$WEB_ZIP_PATH" | grep -Eq '(^|/)(\.DS_Store|__MACOSX)(/|$)'; then
   echo "Web release ZIP contains Finder metadata: $WEB_ZIP_PATH" >&2
+  exit 3
+fi
+if [ "$(unzip -Z1 "$WEB_ZIP_PATH" | awk -F/ 'NF {print $1}' | sort -u)" != "$WEB_ROOT_DIRNAME" ]; then
+  echo "Web release ZIP must contain only $WEB_ROOT_DIRNAME/ at its root." >&2
   exit 3
 fi
 
@@ -451,6 +456,7 @@ manifest = {
             "host_operating_systems": ["macOS", "Windows", "Linux"],
             "architectures": ["arm64", "x86_64"],
             "package_format": "zip",
+            "archive_root": "$WEB_ROOT_DIRNAME/",
             "size_bytes": int("$WEB_ZIP_SIZE"),
             "sha256": "$WEB_ZIP_SHA",
             "sha256_scope": "sha256-of-zip-file",
@@ -520,7 +526,16 @@ notes = """## 🚀 $PRODUCT_NAME v$VERSION
 
 ### 中文
 
-✨ v$VERSION 是 SimNav Studio 的首个公开版本。它将航路规划、机场与程序查看、飞行剖面计算、FR24 轨迹复盘、离线地图和本地导航数据库整合进一个本地优先的模拟飞行工作台，覆盖从航线构思到地图复盘的完整流程。
+✨ v$VERSION 延续 SimNav Studio 的单一 Web UI 与 Swift 业务核心，并集中修复 Local Web 的 FR24、发布封包、缩放和计算页交互。
+
+### 本版本更新内容
+
+- 📡 **FR24 单击即下载并绘制**：轨迹通过共享 \x60FR24Service\x60 下载后立即校验和绘制，机场同步退到非阻断后续步骤，不再需要第二次点击。
+- 🧵 **后台托管浏览器**：启动、查询、下载和历史请求先使用隐藏的隔离 Chromium 子进程；只有实际遇到验证且用户点击“打开 FR24 验证页”时显示窗口，并按 Chrome、Chromium、Edge 的可用顺序选择，不假设系统一定安装 Edge。
+- 📦 **版本化 Web 解压目录**：\x60web-bundle/SimNav-Studio-$VERSION-web.zip\x60 解压后的唯一根目录为 \x60SimNav-Studio-$VERSION-web/\x60，内含 macOS、Windows、Linux 启动器。
+- 🔍 **Local Web 新缩放基线**：旧 level 0（90%）的 92%，即 82.8%，成为新的 level 0 / 100% 基线；Apple 平台缩放基线保持不变。
+- ↔️ **桌面右侧栏加宽**：Local Web 非 compact 三栏布局的右侧详情栏由 350px 增至 385px（110%）。
+- 🎚️ **计算页滑块精确对齐**：thumb、进度轨道与刻度全部改用同一布局像素坐标系，在所有平台及 \x60-1 / 0 / +1 / +2\x60 UI 缩放等级下保持一致。
 
 主要能力：
 
@@ -529,7 +544,7 @@ notes = """## 🚀 $PRODUCT_NAME v$VERSION
   * 🛬 **机场与程序查看**：查看跑道、通信频率、 \x60SID\x60、 \x60STAR\x60、 \x60APPROACH\x60，并绘制 RF / AF 弧线、复飞段和等待航线几何。
   * 🗺️ **多图层地图工作区**：统一查看底图、航路、程序、FR24 轨迹、航点、导航台、跑道、ILS 和 airway 标签，支持绘制撤销与重做。
   * 📐 **飞行剖面与燃油计算**：配置机型、重量、燃油、巡航、下降、天气和 QNH，查看风、地形、地速 / 垂直速度剖面及 SimBrief 风格燃油估算。
-  * 📡 **FR24 轨迹对照**：同步 App 内浏览器会话后查询航班或 flightId，下载和导入 GPX，缓存轨迹，并将实际轨迹拟合回本地航路。
+  * 📡 **FR24 轨迹对照**：先在后台查询航班或 flightId，仅在 FR24 实际要求时手动打开并同步验证会话；支持下载和导入 GPX、缓存轨迹，并将实际轨迹拟合回本地航路。
   * 💾 **离线地图与导航数据库**：管理 PMTiles、MBTiles、SQLite 瓦片资源，导入 PMDG 风格 SQLite 导航数据库，并在核心功能上保持离线可用。
   * 🎨 **可选 App 图标样式**：提供多组日间 / 夜间图标样式，并在 iPhone、iPad 与 Mac Catalyst 间保持选择状态。
 
@@ -554,7 +569,7 @@ notes = """## 🚀 $PRODUCT_NAME v$VERSION
 
   * \x60SimNav-Studio-$VERSION-unsigned.ipa\x60：iPhone / iPad 侧载包。必须由 AltStore、SideStore、Sideloadly 或其他可信工具使用安装者自己的 Apple Account 重新签名。
   * \x60SimNav-Studio-$VERSION-catalyst-adhoc.dmg\x60：Mac Catalyst 通用包，仅 ad-hoc 签名，未 notarize；不提供 Developer ID / Gatekeeper 公开分发信任。
-  * \x60web-bundle/$WEB_ZIP_FILENAME\x60：Local Web 正式平台 ZIP，解压后内含与 IPA/DMG 相同 SHA-256 的 \x60app/NavPlanner/Resources/Database/navdata.sqlite\x60。macOS/Linux 使用 Hummingbird 与同一 Swift 核心；Windows 包含经宿主 smoke 的原生 SwiftNIO \x60.exe\x60 时直接运行且不启动 Linux/WSL/Docker，未包含时使用 Docker Desktop fallback。三者都只发布到 \x60127.0.0.1\x60。
+  * \x60web-bundle/$WEB_ZIP_FILENAME\x60：Local Web 正式平台 ZIP，解压根目录为 \x60$WEB_ROOT_DIRNAME/\x60，内含与 IPA/DMG 相同 SHA-256 的 \x60app/NavPlanner/Resources/Database/navdata.sqlite\x60。macOS/Linux 使用 Hummingbird 与同一 Swift 核心；Windows 包含经宿主 smoke 的原生 SwiftNIO \x60.exe\x60 时直接运行且不启动 Linux/WSL/Docker，未包含时使用 Docker Desktop fallback。三者都只发布到 \x60127.0.0.1\x60。
   * \x60SHA256SUMS.txt\x60：仅列出 iOS IPA、macOS DMG 和 Web ZIP 三个公开下载工件的校验和；ZIP 内的包级清单仍用于解压后自检。
 
 ⚠️ 公开源码仓库不包含导航数据库。发布候选会把本机 \x60database/e_dfd_PMDG_release.s3db\x60 作为 \x60Database/navdata.sqlite\x60 同字节放入 IPA、DMG 与 Web；本次输入库 AIRAC 为 \x60$DATABASE_AIRAC\x60，SHA-256 为 \x60$DATABASE_SHA\x60。当前示例数据库的随附 notice 将其用途限制为地面娱乐飞行模拟软件，并要求取得 Navigraph 的书面许可后才能再分发；未取得许可前，不得发布任何包含该库的工件。详细安装与发布边界见 [README](https://github.com/MDX-Tom/simnav-studio/blob/main/README.md#install-the-ipa-and-dmg-from-releases) 和 [public release packaging](https://github.com/MDX-Tom/simnav-studio/blob/main/Tools/Release/README.md)。
@@ -562,7 +577,16 @@ notes = """## 🚀 $PRODUCT_NAME v$VERSION
 * * *
 ### English
 
-✨ v$VERSION is the first public release of SimNav Studio. It brings route planning, airport and procedure inspection, flight-profile calculation, FR24 track replay, offline maps, and local navigation databases into one local-first flight-simulation workspace, covering the workflow from route idea to map review.
+✨ v$VERSION keeps SimNav Studio on its single Web UI and Swift business core while focusing on Local Web FR24, packaging, scaling, and calculation-page interaction fixes.
+
+### What's New in v$VERSION
+
+- 📡 **One-click FR24 download and draw**: after the shared \x60FR24Service\x60 returns a track, the UI validates and draws it immediately; airport synchronization is now a non-blocking follow-up instead of forcing a second click.
+- 🧵 **Background managed browser**: launch, query, download, and history requests first use a hidden isolated Chromium subprocess. A window appears only after a real challenge and an explicit **Open FR24 verification page** click, with Chrome and Chromium preferred when available and Edge retained as a fallback.
+- 📦 **Versioned Web extraction root**: \x60web-bundle/SimNav-Studio-$VERSION-web.zip\x60 extracts to the single \x60SimNav-Studio-$VERSION-web/\x60 root containing the macOS, Windows, and Linux launchers.
+- 🔍 **New Local Web scaling baseline**: 92% of the former level-0 90% scale—82.8% effective—becomes the new level 0 / 100%; Apple platform baselines stay unchanged.
+- ↔️ **Wider desktop detail sidebar**: the Local Web non-compact three-column detail panel grows from 350px to 385px (110%).
+- 🎚️ **Calculation sliders stay aligned**: thumb, progress track, and ticks now share one layout-pixel coordinate system across every platform and \x60-1 / 0 / +1 / +2\x60 UI zoom level.
 
 Key capabilities:
 
@@ -571,7 +595,7 @@ Key capabilities:
   * 🛬 **Airport and procedure inspection**: inspect runways, frequencies, \x60SID\x60, \x60STAR\x60, and \x60APPROACH\x60 paths, including RF / AF arcs, missed approaches, and holding geometry.
   * 🗺️ **Layered map workspace**: view basemaps, routes, procedures, FR24 tracks, waypoints, navaids, runways, ILS, and airway labels with undo / redo for drawn tracks.
   * 📐 **Flight profiles and fuel**: configure aircraft, weight, fuel, cruise, descent, weather, and QNH, then review wind, terrain, ground-speed / vertical-speed profiles, and a SimBrief-style fuel estimate.
-  * 📡 **FR24 track comparison**: sync the in-app browser session, query flights or a flightId, download or import GPX, cache tracks, and match actual tracks back to local route data.
+  * 📡 **FR24 track comparison**: query flights or a flightId in the background first, opening and syncing verification only when FR24 requests it; download or import GPX, cache tracks, and match actual tracks back to local route data.
   * 💾 **Offline maps and navigation databases**: manage PMTiles, MBTiles, and SQLite tile resources, import PMDG-style SQLite navigation databases, and keep core workflows available offline.
   * 🎨 **Selectable app-icon styles**: provide multiple day / night icon styles and preserve the selected style across iPhone, iPad, and Mac Catalyst.
 
@@ -596,7 +620,7 @@ Key capabilities:
 
   * \x60SimNav-Studio-$VERSION-unsigned.ipa\x60: iPhone / iPad sideload package. It must be re-signed with the installer's own Apple Account through AltStore, SideStore, Sideloadly, or another trusted tool.
   * \x60SimNav-Studio-$VERSION-catalyst-adhoc.dmg\x60: universal Mac Catalyst package, ad-hoc signed and not notarized; it does not provide Developer ID / Gatekeeper public-distribution trust.
-  * \x60web-bundle/$WEB_ZIP_FILENAME\x60: the formal Local Web deployment ZIP. After extraction it includes \x60app/NavPlanner/Resources/Database/navdata.sqlite\x60 with the same SHA-256 as the IPA/DMG copy. macOS/Linux use Hummingbird with the shared Swift core; Windows runs the host-smoked native SwiftNIO \x60.exe\x60 directly without Linux/WSL/Docker when that bundle is included, and otherwise uses the Docker Desktop fallback. Every launcher publishes only to \x60127.0.0.1\x60.
+  * \x60web-bundle/$WEB_ZIP_FILENAME\x60: the formal Local Web deployment ZIP. It extracts to \x60$WEB_ROOT_DIRNAME/\x60 and includes \x60app/NavPlanner/Resources/Database/navdata.sqlite\x60 with the same SHA-256 as the IPA/DMG copy. macOS/Linux use Hummingbird with the shared Swift core; Windows runs the host-smoked native SwiftNIO \x60.exe\x60 directly without Linux/WSL/Docker when that bundle is included, and otherwise uses the Docker Desktop fallback. Every launcher publishes only to \x60127.0.0.1\x60.
   * \x60SHA256SUMS.txt\x60: checksums for exactly the iOS IPA, macOS DMG, and Web ZIP download artifacts; the ZIP retains its package-level checksum list for post-extraction verification.
 
 ⚠️ The public source repository does not contain a navigation database. The release candidate bundles the local \x60database/e_dfd_PMDG_release.s3db\x60 byte-for-byte as \x60Database/navdata.sqlite\x60 in the IPA, DMG, and Web package; this input database is AIRAC \x60$DATABASE_AIRAC\x60 with SHA-256 \x60$DATABASE_SHA\x60. The accompanying notice limits the current example database to ground-based recreational flight-simulation software and requires written permission from Navigraph for redistribution; do not publish any artifact containing it without that permission. See the [README](https://github.com/MDX-Tom/simnav-studio/blob/main/README.md#install-the-ipa-and-dmg-from-releases) and [public release packaging guide](https://github.com/MDX-Tom/simnav-studio/blob/main/Tools/Release/README.md) for installation and publication boundaries.

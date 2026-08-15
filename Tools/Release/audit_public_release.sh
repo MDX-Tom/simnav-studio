@@ -57,6 +57,7 @@ IPA_PATH="$RELEASE_DIR/ios/$ARTIFACT_BASENAME-$EXPECTED_VERSION-unsigned.ipa"
 MAC_APP="$RELEASE_DIR/macos/$ARTIFACT_BASENAME-$EXPECTED_VERSION-catalyst-adhoc.app"
 DMG_PATH="$RELEASE_DIR/macos/$ARTIFACT_BASENAME-$EXPECTED_VERSION-catalyst-adhoc.dmg"
 WEB_ZIP_FILENAME="$ARTIFACT_BASENAME-$EXPECTED_VERSION-web.zip"
+WEB_ROOT_DIRNAME="$ARTIFACT_BASENAME-$EXPECTED_VERSION-web"
 WEB_ZIP_PATH="$RELEASE_DIR/web-bundle/$WEB_ZIP_FILENAME"
 
 if [ ! -f "$IPA_PATH" ] || [ ! -d "$MAC_APP" ] || [ ! -f "$DMG_PATH" ] || [ ! -f "$WEB_ZIP_PATH" ]; then
@@ -83,9 +84,13 @@ if unzip -Z1 "$WEB_ZIP_PATH" | grep -Eq '(^|/)(\.DS_Store|__MACOSX)(/|$)|(^|/)\.
 fi
 mkdir -p "$WEB_EXTRACT_DIR"
 unzip -q "$WEB_ZIP_PATH" -d "$WEB_EXTRACT_DIR"
-WEB_DIR="$WEB_EXTRACT_DIR/web"
+WEB_DIR="$WEB_EXTRACT_DIR/$WEB_ROOT_DIRNAME"
 if [ ! -d "$WEB_DIR" ]; then
-  echo "Web ZIP must contain a top-level web/ package directory." >&2
+  echo "Web ZIP must contain a top-level $WEB_ROOT_DIRNAME/ package directory." >&2
+  exit 4
+fi
+if [ "$(unzip -Z1 "$WEB_ZIP_PATH" | awk -F/ 'NF {print $1}' | sort -u)" != "$WEB_ROOT_DIRNAME" ]; then
+  echo "Web ZIP contains an unexpected top-level entry." >&2
   exit 4
 fi
 "$PROJECT_ROOT/Tools/LocalWeb/audit_web_release.sh" "$WEB_DIR" \
@@ -379,6 +384,8 @@ web_zip_path = "web-bundle/" + artifact_basename + "-" + expected_version + "-we
 web_artifact = artifacts[web_zip_path]
 if web_artifact.get("package_format") != "zip" or web_artifact.get("sha256_scope") != "sha256-of-zip-file":
     raise SystemExit("Public manifest Web artifact is not a ZIP with file-scoped SHA-256.")
+if web_artifact.get("archive_root") != artifact_basename + "-" + expected_version + "-web/":
+    raise SystemExit("Public manifest Web archive root does not match the versioned ZIP directory.")
 if web_artifact.get("unpacked_tree_sha256") != web_tree_sha or web_artifact.get("unpacked_size_bytes") != int(web_size):
     raise SystemExit("Public manifest Web unpacked tree metadata does not match the ZIP contents.")
 

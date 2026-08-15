@@ -647,7 +647,7 @@ const TRANSLATIONS = {
   "query.cacheBrowserList": { "zh-Hans": "Local Web 缓存文件可从下方缓存航班列表直接下载。", en: "Local Web cache files can be downloaded from the cached-flight list below." },
   "query.cacheDirectoryFailed": { "zh-Hans": "无法打开 FR24 缓存目录。", en: "Could not open the FR24 cache folder." },
   "query.access": { "zh-Hans": "FR24 网络访问", en: "FR24 Network Access" },
-  "query.accessInitial": { "zh-Hans": "请打开 FR24 验证页，正常完成验证后同步浏览器会话。", en: "Open FR24 verification, complete it normally, then sync the browser session." },
+  "query.accessInitial": { "zh-Hans": "可直接在后台查询；仅当 FR24 要求验证时才需手动打开验证页并同步会话。", en: "Query in the background first; open verification and sync only if FR24 requests it." },
   "query.accessSummary": { "zh-Hans": "FR24：{method} · {state}。", en: "FR24: {method} · {state}." },
   "query.accessMethodManagedBrowser": { "zh-Hans": "SimNav 专用浏览器会话", en: "dedicated SimNav browser session" },
   "query.accessMethodWeb": { "zh-Hans": "App 内 Web 会话", en: "in-app Web session" },
@@ -681,8 +681,8 @@ const TRANSLATIONS = {
   "query.accessClear": { "zh-Hans": "清除访问配置", en: "Clear Access" },
   "query.accessSaved": { "zh-Hans": "已保存 FR24 Web 会话配置。", en: "FR24 Web session saved." },
   "query.accessCleared": { "zh-Hans": "已清除 FR24 浏览器会话与兼容配置。", en: "FR24 browser-session and compatibility settings cleared." },
-  "query.accessHint": { "zh-Hans": "在 App 内打开 FR24 验证页并正常完成验证，然后同步会话，即可查询 FR24 航班。", en: "Open FR24 verification inside the app, complete verification normally, then sync the session to query FR24 flights." },
-  "query.accessHintLocalWeb": { "zh-Hans": "Local Web 会打开隔离的 SimNav 专用浏览器配置；正常完成 FR24 验证后同步会话，即可查询航班和下载轨迹，无需填写官方 API。", en: "Local Web opens an isolated SimNav browser profile. Complete FR24 verification normally and sync the session to query flights and download tracks, with no official API entry required." },
+  "query.accessHint": { "zh-Hans": "App 会先在后台尝试 FR24 查询；只有实际遇到验证时，才需手动打开验证页、正常完成验证并同步会话。", en: "The app tries FR24 in the background first. Open verification, complete it normally, and sync only if a challenge is actually returned." },
+  "query.accessHintLocalWeb": { "zh-Hans": "Local Web 会先使用隔离的 SimNav 后台浏览器查询和下载；只有实际遇到验证时才显示用户手动打开的验证页，无需填写官方 API。", en: "Local Web queries and downloads through its isolated SimNav browser in the background first. A window appears only when the user opens verification after a real challenge; no official API entry is required." },
   "query.undoTrack": { "zh-Hans": "撤销上一步绘制", en: "Undo Last Drawing" },
   "query.redoTrack": { "zh-Hans": "重做上次撤销", en: "Redo Last Undo" },
   "query.clearTrack": { "zh-Hans": "清除绘制", en: "Clear Drawing" },
@@ -14563,6 +14563,12 @@ function fr24SessionIsConfigured(payload = state.fr24AccessStatus) {
     payload?.cookie_configured
     || payload?.frpl_configured
     || payload?.browser_cookie_detected
+    // A managed browser can often read FR24's public schedule/playback data
+    // without a pre-existing cookie. Let the shared FR24Service try in its
+    // background target first; only an actual challenge should send the user
+    // to the explicitly opened verification page.
+    || (runtime.capabilities.fr24ManagedBrowserSession
+      && payload?.browser_adapter_available)
   );
 }
 
@@ -15392,7 +15398,7 @@ function drawFR24TrackPoints(trackPoints, { fitBounds = true, recordHistory = tr
 
 async function downloadAndDrawFR24Track(key) {
   const flight = getFR24FlightByKey(key);
-  if (!flight) {
+  if (!flight || state.fr24BusyByKey.has(key)) {
     return;
   }
   const planned = isFR24PlannedFlight(flight);
@@ -15432,15 +15438,26 @@ async function downloadAndDrawFR24Track(key) {
       return;
     }
     const payload = await fetchFR24TrackPayload(flight, { signal: controller.signal });
-    await syncPlanAirportsFromFR24Flight(payload.flight || flight, { signal: controller.signal });
     throwIfAborted(controller.signal);
     const count = drawFR24TrackPoints(payload.track_points || []);
-    if (count >= 2) {
-      setFR24CurrentDrawnCard(key);
+    if (count < 2) {
+      throw new Error(t("error.fr24Track"));
     }
+    setFR24CurrentDrawnCard(key);
     updateFR24CacheSummary(payload.cache || state.fr24CacheStatus || {});
     updateFR24AccessSummary(payload.access || state.fr24AccessStatus || {});
     setFR24QueryStatus(t("query.drawn", { count }));
+    // Drawing is the primary action. Airport synchronization is useful for a
+    // later match, but a partial/mismatched airport record must not turn the
+    // first click into a download-only pass that requires a second click.
+    try {
+      await syncPlanAirportsFromFR24Flight(payload.flight || flight, { signal: controller.signal });
+    } catch (syncError) {
+      if (isAbortError(syncError)) {
+        throw syncError;
+      }
+      console.warn("FR24 轨迹已绘制，机场同步未完成", syncError);
+    }
   } catch (error) {
     if (isAbortError(error)) {
       setFR24QueryStatus(t("query.cancelled"));
@@ -15456,7 +15473,7 @@ async function downloadAndDrawFR24Track(key) {
 
 async function matchFR24FlightTrack(key) {
   const flight = getFR24FlightByKey(key);
-  if (!flight) {
+  if (!flight || state.fr24BusyByKey.has(key)) {
     return;
   }
   if (isFR24PlannedFlight(flight)) {
@@ -15470,18 +15487,28 @@ async function matchFR24FlightTrack(key) {
   try {
     const download = await fetchFR24TrackPayload(flight, { signal: controller.signal });
     throwIfAborted(controller.signal);
+    const drawnCount = drawFR24TrackPoints(download.track_points || [], { fitBounds: false });
+    if (drawnCount < 2) {
+      throw new Error(t("error.fr24Track"));
+    }
+    setFR24CurrentDrawnCard(key);
     setFR24CardProgressPhase(key, t("query.phaseMatching"));
-    const route = await syncPlanAirportsFromFR24Flight(download.flight || flight, {
-      signal: controller.signal,
-    }) || currentQueryRouteInputs();
+    let route = null;
+    try {
+      route = await syncPlanAirportsFromFR24Flight(download.flight || flight, {
+        signal: controller.signal,
+      });
+    } catch (syncError) {
+      if (isAbortError(syncError)) {
+        throw syncError;
+      }
+      console.warn("FR24 拟合沿用当前查询机场，机场同步未完成", syncError);
+    }
+    route ||= currentQueryRouteInputs();
     if (!route) {
       return;
     }
     throwIfAborted(controller.signal);
-    const drawnCount = drawFR24TrackPoints(download.track_points || [], { fitBounds: false });
-    if (drawnCount >= 2) {
-      setFR24CurrentDrawnCard(key);
-    }
     updateFR24CacheSummary(download.cache || state.fr24CacheStatus || {});
     updateFR24AccessSummary(download.access || state.fr24AccessStatus || {});
     if (state.currentRoutePayload && !state.preTrackMatchRoutePayload) {

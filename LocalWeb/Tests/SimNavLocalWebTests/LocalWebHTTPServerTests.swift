@@ -124,7 +124,7 @@ final class LocalWebHTTPServerTests: XCTestCase {
             XCTAssertTrue(html.contains(#"window.location.protocol === "navplanner:""#))
             XCTAssertTrue(html.contains(#"window.location.protocol === "file:""#))
             XCTAssertTrue(html.contains(#"usesAppleResourceBridge ? "navplanner://app/" : "/""#))
-            XCTAssertTrue(html.contains("20260814-native-dark-map-style2-v108"))
+            XCTAssertTrue(html.contains("20260815-local-web-fr24-layout-v109"))
             XCTAssertTrue(html.contains(#"href="/app-icons/style2-day-medium.png""#))
             XCTAssertTrue(html.contains(#"id="darkMapToggle" type="checkbox""#))
             XCTAssertFalse(html.contains(#"id="darkMapToggle" type="checkbox" checked"#))
@@ -157,7 +157,7 @@ final class LocalWebHTTPServerTests: XCTestCase {
             XCTAssertEqual(uiZoomData, sourceUIZoom)
             let uiZoomSource = String(decoding: uiZoomData, as: UTF8.self)
             XCTAssertTrue(uiZoomSource.contains("window.SimNavUIZoom"))
-            XCTAssertTrue(uiZoomSource.contains("return 0.9"))
+            XCTAssertTrue(uiZoomSource.contains("return 0.828;"))
             XCTAssertTrue(uiZoomSource.contains("1 + normalizeLevel(value) * 0.08"))
             XCTAssertLessThan(
                 try XCTUnwrap(html.range(of: "src=\"/ui-zoom.js\"")?.lowerBound),
@@ -229,9 +229,9 @@ final class LocalWebHTTPServerTests: XCTestCase {
 #if os(macOS)
     func testRealChromiumAdapterCompletesZBAAToZULSChainAgainstLocalUpstream() async throws {
         let executable = [
-            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
             "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-            "/Applications/Chromium.app/Contents/MacOS/Chromium"
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
         ].first { FileManager.default.isExecutableFile(atPath: $0) }
         guard let executable else {
             throw XCTSkip("Chrome, Edge, or Chromium is not installed for the CDP integration probe.")
@@ -449,6 +449,10 @@ final class LocalWebHTTPServerTests: XCTestCase {
 
             let opened = router.handle(RuntimeRequest(method: "POST", path: "/fr24/browser/open"))
             XCTAssertEqual(opened.status, 200, String(decoding: opened.body, as: UTF8.self))
+            let openedPayload = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: opened.body) as? [String: Any]
+            )
+            XCTAssertEqual(openedPayload["visible"] as? Bool, true)
             let synced = router.handle(RuntimeRequest(method: "POST", path: "/fr24/browser/sync"))
             XCTAssertEqual(synced.status, 503, String(decoding: synced.body, as: UTF8.self))
             let syncPayload = try XCTUnwrap(
@@ -462,6 +466,7 @@ final class LocalWebHTTPServerTests: XCTestCase {
             )
             let managedBrowser = try XCTUnwrap(statusPayload["managed_browser"] as? [String: Any])
             XCTAssertEqual(managedBrowser["verification_opened"] as? Bool, true)
+            XCTAssertEqual(managedBrowser["background_requests"] as? Bool, true)
 
             let activePortText = try String(
                 contentsOf: profileRoot.appendingPathComponent(".simnav-control-port"),
@@ -469,14 +474,28 @@ final class LocalWebHTTPServerTests: XCTestCase {
             )
             let browserPort = try XCTUnwrap(Int(activePortText.split(whereSeparator: { $0.isNewline })[0]))
             let targetsURL = try XCTUnwrap(URL(string: "http://localhost:\(browserPort)/json/list"))
-            let targetsData = try Data(contentsOf: targetsURL)
-            let targets = try XCTUnwrap(
-                JSONSerialization.jsonObject(with: targetsData) as? [[String: Any]]
-            )
-            let pageURLs = targets.compactMap { target -> String? in
-                guard target["type"] as? String == "page" else { return nil }
-                return target["url"] as? String
-            }
+            // Chromium acknowledges /json/close before the target always
+            // disappears from /json/list. Allow that asynchronous teardown to
+            // settle, then verify that only the retained verification page is
+            // left behind.
+            var targets: [[String: Any]] = []
+            var pageURLs: [String] = []
+            let closeDeadline = Date().addingTimeInterval(2)
+            repeat {
+                let targetsData = try Data(contentsOf: targetsURL)
+                targets = try XCTUnwrap(
+                    JSONSerialization.jsonObject(with: targetsData) as? [[String: Any]]
+                )
+                pageURLs = targets.compactMap { target -> String? in
+                    guard target["type"] as? String == "page" else { return nil }
+                    return target["url"] as? String
+                }
+                if !pageURLs.contains(where: { $0.contains("/common/v1/airport.json") })
+                    && !pageURLs.contains("about:blank") {
+                    break
+                }
+                try await Task.sleep(nanoseconds: 50_000_000)
+            } while Date() < closeDeadline
             XCTAssertTrue(pageURLs.contains { $0 == baseURL.absoluteString || $0 == baseURL.absoluteString + "/" })
             XCTAssertFalse(pageURLs.contains { $0.contains("/common/v1/airport.json") })
             XCTAssertFalse(pageURLs.contains("about:blank"))
@@ -497,9 +516,9 @@ final class LocalWebHTTPServerTests: XCTestCase {
 
     func testExternalChromiumEndpointUsesAuthenticatedControlAndPreservesHostProfile() async throws {
         let executable = [
-            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
             "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-            "/Applications/Chromium.app/Contents/MacOS/Chromium"
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
         ].first { FileManager.default.isExecutableFile(atPath: $0) }
         guard let executable else {
             throw XCTSkip("Chrome, Edge, or Chromium is not installed for the external CDP probe.")
@@ -725,6 +744,9 @@ final class LocalWebHTTPServerTests: XCTestCase {
             "The native adapter must use a non-zero loopback DevTools port so navigator.webdriver remains false."
         )
         XCTAssertTrue(native.contains("--remote-debugging-port=\\(browserPort)"))
+        XCTAssertTrue(native.contains("--no-startup-window"))
+        XCTAssertTrue(native.contains("--window-position=-10000,-10000"))
+        XCTAssertTrue(native.contains("revealTargetWindow(target)"))
 
         // The distributable launchers live above app/ in a packaged release, while
         // Linux package tests mount only app/ at /source. Check them here in a
@@ -750,6 +772,8 @@ final class LocalWebHTTPServerTests: XCTestCase {
                     "\(name) must use a non-zero loopback DevTools port so navigator.webdriver remains false."
                 )
                 XCTAssertTrue(source.contains(expectedArgument))
+                XCTAssertTrue(source.contains("--no-startup-window"))
+                XCTAssertTrue(source.contains("--window-position=-10000,-10000"))
             }
         }
     }

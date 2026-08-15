@@ -32,11 +32,13 @@ Origin are restricted to loopback, unsafe requests require a per-process token, 
 paths cannot escape the shared Web root.
 
 Local Web FR24 uses the same `FR24Service` as the Apple Apps through a thin managed-browser adapter.
-Query opens Chrome, Edge, or Chromium with an isolated profile under the Local Web data root. After
-the user completes any normal FR24 / Cloudflare verification on the FR24 homepage, **Sync Browser
-Session** probes that same profile and enables route queries plus playback downloads. The homepage
-remains the only visible verification target; schedule/playback targets stay in the background and
-close if challenged. Every headed launcher reserves a randomized non-zero loopback DevTools port;
+Startup, query, history, and playback work use an off-screen managed Chrome, Chromium, or Edge
+subprocess with an isolated profile under the Local Web data root. A browser window is shown only
+after the user explicitly selects **Open FR24 verification page**. After any normal FR24 / Cloudflare
+verification on that homepage, **Sync Browser Session** probes the same profile and enables route
+queries plus playback downloads. The homepage remains the only visible verification target;
+schedule/playback targets stay in the background and close if challenged. Every headed launcher
+reserves a randomized non-zero loopback DevTools port;
 this keeps `navigator.webdriver=false` instead of activating Chromium's `--remote-debugging-port=0`
 automation signal, while the endpoint remains host-private. No official API credential is
 requested, the normal browser profile is never opened, and cookies are not exported. GPX and FR24

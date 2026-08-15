@@ -25,6 +25,7 @@ final class LocalWebFR24BrowserFetch: @unchecked Sendable,
         var apiBaseURL: URL
         var websiteBaseURL: URL
         var launchHeadless: Bool
+        var revealVerificationWindow: Bool
         var additionalBrowserArguments: [String]
 
         init(
@@ -49,6 +50,7 @@ final class LocalWebFR24BrowserFetch: @unchecked Sendable,
             self.apiBaseURL = apiBaseURL
             self.websiteBaseURL = websiteBaseURL
             launchHeadless = environment["SIMNAV_FR24_BROWSER_HEADLESS"] == "1"
+            revealVerificationWindow = environment["SIMNAV_FR24_BROWSER_REVEAL"] != "0"
             additionalBrowserArguments = []
         }
 
@@ -60,6 +62,7 @@ final class LocalWebFR24BrowserFetch: @unchecked Sendable,
             apiBaseURL: URL,
             websiteBaseURL: URL,
             launchHeadless: Bool = false,
+            revealVerificationWindow: Bool = true,
             additionalBrowserArguments: [String] = []
         ) {
             self.profileRoot = profileRoot
@@ -69,6 +72,7 @@ final class LocalWebFR24BrowserFetch: @unchecked Sendable,
             self.apiBaseURL = apiBaseURL
             self.websiteBaseURL = websiteBaseURL
             self.launchHeadless = launchHeadless
+            self.revealVerificationWindow = revealVerificationWindow
             self.additionalBrowserArguments = additionalBrowserArguments
         }
 
@@ -93,14 +97,15 @@ final class LocalWebFR24BrowserFetch: @unchecked Sendable,
 #if os(macOS)
             candidates += [
                 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-                "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
                 "/Applications/Chromium.app/Contents/MacOS/Chromium",
-                "/Applications/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+                "/Applications/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+                "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
             ]
 #elseif os(Windows)
             for root in [environment["PROGRAMFILES"], environment["PROGRAMFILES(X86)"], environment["LOCALAPPDATA"]].compactMap({ $0 }) {
                 candidates += [
                     URL(fileURLWithPath: root).appendingPathComponent("Google/Chrome/Application/chrome.exe").path,
+                    URL(fileURLWithPath: root).appendingPathComponent("Chromium/Application/chrome.exe").path,
                     URL(fileURLWithPath: root).appendingPathComponent("Microsoft/Edge/Application/msedge.exe").path
                 ]
             }
@@ -508,8 +513,12 @@ final class LocalWebFR24BrowserFetch: @unchecked Sendable,
         closeRetainedVerificationTarget()
         let target = try createTarget(url: configuration.websiteBaseURL)
         retainForVerification(target)
+        let visible = configuration.revealVerificationWindow
+            && !configuration.launchHeadless
+            && revealTargetWindow(target)
         return [
             "opened": true,
+            "visible": visible,
             "access_method": "managed_browser",
             "isolated_profile": true,
             "message": "FR24 verification opened in the dedicated SimNav browser profile."
@@ -525,6 +534,7 @@ final class LocalWebFR24BrowserFetch: @unchecked Sendable,
             "available": available,
             "running": running,
             "isolated_profile": true,
+            "background_requests": true,
             "browser": browserDisplayName,
             "verification_opened": stateLock.withLock { verificationTargetID != nil }
         ]
@@ -629,6 +639,16 @@ final class LocalWebFR24BrowserFetch: @unchecked Sendable,
             "--disable-background-mode",
             "--no-startup-window"
         ]
+        // Keep the managed Chromium subprocess browser-compatible (including
+        // navigator.webdriver=false) while its internal request targets run as
+        // an off-screen background process. Only the explicit verification
+        // action moves this dedicated window on-screen.
+        if !configuration.launchHeadless {
+            arguments += [
+                "--window-position=-10000,-10000",
+                "--window-size=1280,900"
+            ]
+        }
         arguments.append(contentsOf: configuration.additionalBrowserArguments)
         if configuration.launchHeadless {
             arguments.insert("--headless=new", at: 0)
@@ -711,6 +731,7 @@ final class LocalWebFR24BrowserFetch: @unchecked Sendable,
             throw BrowserError(message: "FR24 browser target could not be opened.")
         }
         let target = Target(id: id, webSocketURL: webSocketURL)
+        reactivateRetainedVerificationTarget(excluding: target.id)
         do {
             let headers: [String: String] = [
                 "Cache-Control": "no-cache",
@@ -735,6 +756,7 @@ final class LocalWebFR24BrowserFetch: @unchecked Sendable,
                !errorText.contains("ERR_HTTP_RESPONSE_CODE_FAILURE") {
                 throw BrowserError(message: "FR24 browser navigation failed: \(errorText)")
             }
+            reactivateRetainedVerificationTarget(excluding: target.id)
             return target
         } catch {
             closeTarget(target)
@@ -745,6 +767,69 @@ final class LocalWebFR24BrowserFetch: @unchecked Sendable,
     private func retainForVerification(_ target: Target) {
         stateLock.withLock { verificationTargetID = target.id }
         activateTarget(target)
+    }
+
+    /// Moves the dedicated headed window on-screen only for the user-triggered
+    /// verification action. Data requests continue to use the same profile and
+    /// FR24Service backend, but their short-lived targets remain off-screen.
+    private func revealTargetWindow(_ target: Target) -> Bool {
+        do {
+            let window = try performTargetCommand(
+                target: target,
+                method: "Browser.getWindowForTarget",
+                params: ["targetId": target.id],
+                timeout: 5
+            )
+            guard let windowID = (window["windowId"] as? NSNumber)?.intValue else {
+                return false
+            }
+            if let bounds = window["bounds"] as? [String: Any],
+               stringValue(bounds["windowState"]) != "normal" {
+                _ = try performTargetCommand(
+                    target: target,
+                    method: "Browser.setWindowBounds",
+                    params: [
+                        "windowId": windowID,
+                        "bounds": ["windowState": "normal"]
+                    ],
+                    timeout: 5
+                )
+            }
+            _ = try performTargetCommand(
+                target: target,
+                method: "Browser.setWindowBounds",
+                params: [
+                    "windowId": windowID,
+                    "bounds": [
+                        "left": 72,
+                        "top": 72,
+                        "width": 1280,
+                        "height": 900
+                    ]
+                ],
+                timeout: 5
+            )
+            _ = try performTargetCommand(
+                target: target,
+                method: "Page.bringToFront",
+                timeout: 5
+            )
+            activateTarget(target)
+            return true
+        } catch {
+            activateTarget(target)
+            return false
+        }
+    }
+
+    private func reactivateRetainedVerificationTarget(excluding targetID: String) {
+        guard let retainedID = stateLock.withLock({ verificationTargetID }),
+              retainedID != targetID,
+              let endpoint = stateLock.withLock({ endpointURL }),
+              let url = URL(string: "/json/activate/\(retainedID)", relativeTo: endpoint) else {
+            return
+        }
+        _ = try? performHTTPData(controlRequest(url: url))
     }
 
     private func closeRetainedVerificationTarget() {

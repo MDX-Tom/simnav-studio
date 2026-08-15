@@ -190,6 +190,8 @@ if manifest.get("fr24") != {
     "adapter": "managed-Chromium-CDP",
     "official_api_credential_required": False,
     "browser_profile": "isolated-and-persistent",
+    "background_requests": True,
+    "visible_window_trigger": "explicit-open-verification-only",
     "linux_docker_bridge": "private-compose-gateway",
     "windows_docker_bridge": "ephemeral-authenticated-host-relay",
 }:
@@ -228,6 +230,11 @@ fi
 if ! rg -Fq -- '--remote-debugging-port=${browser_port}' "${package_dir}/run-linux.sh" \
     || ! rg -Fq -- '--remote-debugging-port=$BrowserPort' "${package_dir}/run-windows.ps1"; then
   echo "A managed-browser launcher does not allocate a non-zero private DevTools port." >&2
+  exit 3
+fi
+if ! rg -Fq -- '--no-startup-window' "${package_dir}/run-linux.sh" "${package_dir}/run-windows.ps1" \
+    || ! rg -Fq -- '--window-position=-10000,-10000' "${package_dir}/run-linux.sh" "${package_dir}/run-windows.ps1"; then
+  echo "A managed-browser launcher may expose a window before explicit FR24 verification." >&2
   exit 3
 fi
 if ! rg -q 'SIMNAV_DATABASE=/opt/simnav/Database/navdata.sqlite' "${package_dir}/Dockerfile" \
