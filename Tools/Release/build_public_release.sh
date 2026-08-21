@@ -530,8 +530,8 @@ notes = """## 🚀 $PRODUCT_NAME v$VERSION
 
 ### 本版本更新内容
 
-- 📡 **FR24 单击即下载并绘制**：轨迹通过共享 \x60FR24Service\x60 下载后立即校验和绘制，机场同步退到非阻断后续步骤，不再需要第二次点击。
-- 🧵 **后台托管浏览器**：启动、查询、下载和历史请求先使用隐藏的隔离 Chromium 子进程；只有实际遇到验证且用户点击“打开 FR24 验证页”时显示窗口，并按 Chrome、Chromium、Edge 的可用顺序选择，不假设系统一定安装 Edge。
+- 📡 **FR24 单击即下载并绘制**：轨迹通过共享 \x60FR24Service\x60 下载后立即校验和绘制；起降机场先即时回填、再分别解析，即使一侧详情失败也不会丢失另一侧，当前轨迹可直接拟合。
+- 🧵 **内置验证页与数据请求分离**：查询、下载和历史直接复用 App 的共享 FR24 后端，不创建浏览器数据页；只有用户点击“打开 FR24 验证页”时才显示窗口。macOS 使用 App 自有 WebKit，不启动 Edge/Chrome；Windows/Linux 从实际环境选择私有 Chrome/Chromium/Edge fallback。完成验证后自动同步并关闭。
 - 📦 **版本化 Web 解压目录**：\x60web-bundle/SimNav-Studio-$VERSION-web.zip\x60 解压后的唯一根目录为 \x60SimNav-Studio-$VERSION-web/\x60，内含 macOS、Windows、Linux 启动器。
 - 🔍 **Local Web 新缩放基线**：旧 level 0（90%）的 92%，即 82.8%，成为新的 level 0 / 100% 基线；Apple 平台缩放基线保持不变。
 - ↔️ **桌面右侧栏加宽**：Local Web 非 compact 三栏布局的右侧详情栏由 350px 增至 385px（110%）。
@@ -581,8 +581,8 @@ notes = """## 🚀 $PRODUCT_NAME v$VERSION
 
 ### What's New in v$VERSION
 
-- 📡 **One-click FR24 download and draw**: after the shared \x60FR24Service\x60 returns a track, the UI validates and draws it immediately; airport synchronization is now a non-blocking follow-up instead of forcing a second click.
-- 🧵 **Background managed browser**: launch, query, download, and history requests first use a hidden isolated Chromium subprocess. A window appears only after a real challenge and an explicit **Open FR24 verification page** click, with Chrome and Chromium preferred when available and Edge retained as a fallback.
+- 📡 **One-click FR24 download and draw**: after the shared \x60FR24Service\x60 returns a track, the UI validates and draws it immediately. Departure and arrival are filled first and then resolved independently, so the current track remains ready to match even if one detail lookup fails.
+- 🧵 **Built-in verification separated from data requests**: query, download, and history reuse the App's shared FR24 backend without browser data pages. A window appears only after an explicit **Open FR24 verification page** click. macOS uses App-owned WebKit without launching Edge/Chrome; Windows/Linux select a private Chrome/Chromium/Edge fallback from the actual environment. It then syncs and closes automatically.
 - 📦 **Versioned Web extraction root**: \x60web-bundle/SimNav-Studio-$VERSION-web.zip\x60 extracts to the single \x60SimNav-Studio-$VERSION-web/\x60 root containing the macOS, Windows, and Linux launchers.
 - 🔍 **New Local Web scaling baseline**: 92% of the former level-0 90% scale—82.8% effective—becomes the new level 0 / 100%; Apple platform baselines stay unchanged.
 - ↔️ **Wider desktop detail sidebar**: the Local Web non-compact three-column detail panel grows from 350px to 385px (110%).

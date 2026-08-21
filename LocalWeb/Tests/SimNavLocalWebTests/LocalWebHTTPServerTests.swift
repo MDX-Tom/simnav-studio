@@ -16,6 +16,27 @@ import XCTest
 import SimNavCore
 
 final class LocalWebHTTPServerTests: XCTestCase {
+#if os(macOS)
+    func testDefaultMacFR24VerificationUsesBuiltInWebKitInsteadOfEdge() throws {
+        let dataRoot = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "SimNavWebKitVerificationTests-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: dataRoot) }
+        let browser = LocalWebFR24BrowserFetch(
+            dataRoot: dataRoot,
+            environment: [:]
+        )
+
+        let status = browser.browserSessionStatusPayload()
+        XCTAssertEqual(status["available"] as? Bool, true)
+        XCTAssertEqual(status["running"] as? Bool, false)
+        XCTAssertEqual(status["browser"] as? String, "SimNav App WebKit")
+        XCTAssertEqual(status["verification_transport"] as? String, "app_webkit")
+        XCTAssertEqual(status["background_requests"] as? Bool, false)
+        XCTAssertEqual(status["verification_only"] as? Bool, true)
+    }
+#endif
     private let token = "0123456789abcdef0123456789abcdef"
 
     func testBindHostRequiresExplicitContainerBoundary() throws {
@@ -124,7 +145,7 @@ final class LocalWebHTTPServerTests: XCTestCase {
             XCTAssertTrue(html.contains(#"window.location.protocol === "navplanner:""#))
             XCTAssertTrue(html.contains(#"window.location.protocol === "file:""#))
             XCTAssertTrue(html.contains(#"usesAppleResourceBridge ? "navplanner://app/" : "/""#))
-            XCTAssertTrue(html.contains("20260815-local-web-fr24-layout-v109"))
+            XCTAssertTrue(html.contains("20260820-fr24-webkit-icao-v111"))
             XCTAssertTrue(html.contains(#"href="/app-icons/style2-day-medium.png""#))
             XCTAssertTrue(html.contains(#"id="darkMapToggle" type="checkbox""#))
             XCTAssertFalse(html.contains(#"id="darkMapToggle" type="checkbox" checked"#))
@@ -227,28 +248,39 @@ final class LocalWebHTTPServerTests: XCTestCase {
     }
 
 #if os(macOS)
-    func testRealChromiumAdapterCompletesZBAAToZULSChainAgainstLocalUpstream() async throws {
+    func testRealChromiumVerificationExportsSessionAndSharedBackendUsesNoDataTargets() async throws {
         let executable = [
             "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
             "/Applications/Chromium.app/Contents/MacOS/Chromium",
             "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
         ].first { FileManager.default.isExecutableFile(atPath: $0) }
         guard let executable else {
-            throw XCTSkip("Chrome, Edge, or Chromium is not installed for the CDP integration probe.")
+            throw XCTSkip("Chrome, Chromium, or Edge is not installed for the CDP integration probe.")
         }
 
         let upstreamRouter = Router()
+        upstreamRouter.get("/") { _, _ -> Response in
+            var headers: HTTPFields = [:]
+            headers[.contentType] = "text/html; charset=utf-8"
+            headers[HTTPField.Name("Set-Cookie")!] = "simnav_session=verified; Path=/; SameSite=Lax"
+            return Response(
+                status: .ok,
+                headers: headers,
+                body: .init(byteBuffer: ByteBuffer(
+                    string: "<html><head><title>Fixture FR24</title></head><body>FR24 fixture ready</body></html>"
+                ))
+            )
+        }
         upstreamRouter.get("/**") { request, _ -> Response in
             let target = request.uri.string
+            let isDataRequest = target.contains("/common/v1/flight-playback.json")
+                || target.contains("/common/v1/airport.json")
+            let hasExportedSession = request.headers[.cookie]?.contains("simnav_session=verified") == true
             let body: String
             let contentType: String
             let status: HTTPResponse.Status
-            let isDataRequest = target.contains("/common/v1/flight-playback.json")
-                || target.contains("/common/v1/airport.json")
-            let hasWebKitEquivalentHeaders = request.headers[.referer]?.contains("localhost:") == true
-                && request.headers[.cacheControl]?.localizedCaseInsensitiveContains("no-cache") == true
-            if isDataRequest && !hasWebKitEquivalentHeaders {
-                body = #"{"error":"missing WebKit-equivalent navigation headers"}"#
+            if isDataRequest && !hasExportedSession {
+                body = #"{"error":"missing exported verification session"}"#
                 contentType = "application/json; charset=utf-8"
                 status = .forbidden
             } else if target.contains("/common/v1/flight-playback.json") {
@@ -271,6 +303,9 @@ final class LocalWebHTTPServerTests: XCTestCase {
             }
             var headers: HTTPFields = [:]
             headers[.contentType] = contentType
+            if !isDataRequest {
+                headers[HTTPField.Name("Set-Cookie")!] = "simnav_session=verified; Path=/; SameSite=Lax"
+            }
             return Response(
                 status: status,
                 headers: headers,
@@ -308,7 +343,8 @@ final class LocalWebHTTPServerTests: XCTestCase {
                     dataRoot: dataRoot,
                     bundledDatabaseURL: databaseURL
                 ),
-                fr24BrowserFetcher: browser
+                fr24BrowserFetcher: browser,
+                fr24APIBaseURL: baseURL
             )
 
             func payload(_ request: RuntimeRequest) throws -> [String: Any] {
@@ -321,8 +357,25 @@ final class LocalWebHTTPServerTests: XCTestCase {
 
             let opened = try payload(RuntimeRequest(method: "POST", path: "/fr24/browser/open"))
             XCTAssertEqual(opened["opened"] as? Bool, true)
-            let synced = try payload(RuntimeRequest(method: "POST", path: "/fr24/browser/sync"))
+            XCTAssertEqual(opened["visible"] as? Bool, false)
+
+            var synced: [String: Any] = [:]
+            let syncDeadline = Date().addingTimeInterval(10)
+            repeat {
+                synced = try payload(RuntimeRequest(method: "POST", path: "/fr24/browser/sync"))
+                if synced["verified"] as? Bool == true { break }
+                try await Task.sleep(for: .milliseconds(100))
+            } while Date() < syncDeadline
             XCTAssertEqual(synced["verified"] as? Bool, true)
+            XCTAssertEqual(synced["verification_closed"] as? Bool, true)
+            XCTAssertEqual(synced["automatic_sync"] as? Bool, true)
+
+            let browserStatus = try payload(RuntimeRequest(method: "GET", path: "/fr24/browser/status"))
+            let managedBrowser = try XCTUnwrap(browserStatus["managed_browser"] as? [String: Any])
+            XCTAssertEqual(managedBrowser["background_requests"] as? Bool, false)
+            XCTAssertEqual(managedBrowser["verification_only"] as? Bool, true)
+            XCTAssertEqual(managedBrowser["verification_opened"] as? Bool, false)
+            XCTAssertEqual(managedBrowser["running"] as? Bool, false)
 
             let search = try payload(RuntimeRequest(
                 method: "GET",
@@ -349,6 +402,11 @@ final class LocalWebHTTPServerTests: XCTestCase {
             let trackPoints = try XCTUnwrap(download["track_points"] as? [[String: Any]])
             XCTAssertEqual(trackPoints.count, 14)
 
+            let statusAfterData = try payload(RuntimeRequest(method: "GET", path: "/fr24/browser/status"))
+            let browserAfterData = try XCTUnwrap(statusAfterData["managed_browser"] as? [String: Any])
+            XCTAssertEqual(browserAfterData["running"] as? Bool, false)
+            XCTAssertEqual(browserAfterData["verification_opened"] as? Bool, false)
+
             let matchBody = try JSONSerialization.data(withJSONObject: [
                 "departure": "ZBAA",
                 "arrival": "ZULS",
@@ -366,11 +424,11 @@ final class LocalWebHTTPServerTests: XCTestCase {
         }
     }
 
-    func testRealChromiumAdapterKeepsHomepageVisibleAndClosesDataChallenge() async throws {
+    func testRealChromiumVerificationWaitsWithoutOpeningDataTargets() async throws {
         let executable = [
-            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
             "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-            "/Applications/Chromium.app/Contents/MacOS/Chromium"
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
         ].first { FileManager.default.isExecutableFile(atPath: $0) }
         guard let executable else {
             throw XCTSkip("Chrome, Edge, or Chromium is not installed for the CDP challenge probe.")
@@ -454,11 +512,13 @@ final class LocalWebHTTPServerTests: XCTestCase {
             )
             XCTAssertEqual(openedPayload["visible"] as? Bool, true)
             let synced = router.handle(RuntimeRequest(method: "POST", path: "/fr24/browser/sync"))
-            XCTAssertEqual(synced.status, 503, String(decoding: synced.body, as: UTF8.self))
+            XCTAssertEqual(synced.status, 200, String(decoding: synced.body, as: UTF8.self))
             let syncPayload = try XCTUnwrap(
                 JSONSerialization.jsonObject(with: synced.body) as? [String: Any]
             )
             XCTAssertEqual(syncPayload["verified"] as? Bool, false)
+            XCTAssertEqual(syncPayload["automatic_sync"] as? Bool, true)
+            XCTAssertEqual(syncPayload["probe_result"] as? String, "waiting_for_verification")
 
             let status = router.handle(RuntimeRequest(method: "GET", path: "/fr24/browser/status"))
             let statusPayload = try XCTUnwrap(
@@ -466,7 +526,8 @@ final class LocalWebHTTPServerTests: XCTestCase {
             )
             let managedBrowser = try XCTUnwrap(statusPayload["managed_browser"] as? [String: Any])
             XCTAssertEqual(managedBrowser["verification_opened"] as? Bool, true)
-            XCTAssertEqual(managedBrowser["background_requests"] as? Bool, true)
+            XCTAssertEqual(managedBrowser["background_requests"] as? Bool, false)
+            XCTAssertEqual(managedBrowser["verification_only"] as? Bool, true)
 
             let activePortText = try String(
                 contentsOf: profileRoot.appendingPathComponent(".simnav-control-port"),
@@ -474,10 +535,8 @@ final class LocalWebHTTPServerTests: XCTestCase {
             )
             let browserPort = try XCTUnwrap(Int(activePortText.split(whereSeparator: { $0.isNewline })[0]))
             let targetsURL = try XCTUnwrap(URL(string: "http://localhost:\(browserPort)/json/list"))
-            // Chromium acknowledges /json/close before the target always
-            // disappears from /json/list. Allow that asynchronous teardown to
-            // settle, then verify that only the retained verification page is
-            // left behind.
+            // Session polling must only inspect the user-opened verification
+            // page; it must not create a second airport/schedule data target.
             var targets: [[String: Any]] = []
             var pageURLs: [String] = []
             let closeDeadline = Date().addingTimeInterval(2)
@@ -525,17 +584,35 @@ final class LocalWebHTTPServerTests: XCTestCase {
         }
 
         let upstreamRouter = Router()
+        upstreamRouter.get("/") { _, _ -> Response in
+            var headers: HTTPFields = [:]
+            headers[.contentType] = "text/html; charset=utf-8"
+            headers[HTTPField.Name("Set-Cookie")!] = "simnav_external=verified; Path=/; SameSite=Lax"
+            return Response(
+                status: .ok,
+                headers: headers,
+                body: .init(byteBuffer: ByteBuffer(
+                    string: "<html><head><title>External fixture</title></head><body>FR24 fixture ready</body></html>"
+                ))
+            )
+        }
         upstreamRouter.get("/**") { request, _ -> Response in
             let isJSON = request.uri.path.hasSuffix("/common/v1/airport.json")
+            let hasExportedSession = request.headers[.cookie]?.contains("simnav_external=verified") == true
             var headers: HTTPFields = [:]
             headers[.contentType] = isJSON
                 ? "application/json; charset=utf-8"
                 : "text/html; charset=utf-8"
-            let body = isJSON
+            if !isJSON {
+                headers[HTTPField.Name("Set-Cookie")!] = "simnav_external=verified; Path=/; SameSite=Lax"
+            }
+            let body = isJSON && hasExportedSession
                 ? #"{"result":{"response":{"airport":{}}}}"#
-                : "<html><head><title>External fixture</title></head><body>FR24 fixture ready</body></html>"
+                : isJSON
+                    ? #"{"error":"missing exported verification session"}"#
+                    : "<html><head><title>External fixture</title></head><body>FR24 fixture ready</body></html>"
             return Response(
-                status: .ok,
+                status: isJSON && !hasExportedSession ? .forbidden : .ok,
                 headers: headers,
                 body: .init(byteBuffer: ByteBuffer(string: body))
             )
@@ -617,18 +694,26 @@ final class LocalWebHTTPServerTests: XCTestCase {
                     dataRoot: serverDataRoot,
                     bundledDatabaseURL: databaseURL
                 ),
-                fr24BrowserFetcher: browser
+                fr24BrowserFetcher: browser,
+                fr24APIBaseURL: upstreamURL
             )
 
             let opened = router.handle(RuntimeRequest(method: "POST", path: "/fr24/browser/open"))
             XCTAssertEqual(opened.status, 200, String(decoding: opened.body, as: UTF8.self))
-            let synced = router.handle(RuntimeRequest(method: "POST", path: "/fr24/browser/sync"))
-            XCTAssertEqual(synced.status, 200, String(decoding: synced.body, as: UTF8.self))
-            let payload = try XCTUnwrap(
-                JSONSerialization.jsonObject(with: synced.body) as? [String: Any]
-            )
+            var payload: [String: Any] = [:]
+            let syncDeadline = Date().addingTimeInterval(10)
+            repeat {
+                let synced = router.handle(RuntimeRequest(method: "POST", path: "/fr24/browser/sync"))
+                XCTAssertEqual(synced.status, 200, String(decoding: synced.body, as: UTF8.self))
+                payload = try XCTUnwrap(
+                    JSONSerialization.jsonObject(with: synced.body) as? [String: Any]
+                )
+                if payload["verified"] as? Bool == true { break }
+                try await Task.sleep(for: .milliseconds(100))
+            } while Date() < syncDeadline
             XCTAssertEqual(payload["verified"] as? Bool, true)
             XCTAssertEqual(payload["access_method"] as? String, "managed_browser")
+            XCTAssertEqual(payload["verification_closed"] as? Bool, true)
 
             try browser.clearBrowserSession()
             XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path))

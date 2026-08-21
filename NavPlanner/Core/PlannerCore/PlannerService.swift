@@ -845,9 +845,75 @@ final class PlannerService: @unchecked Sendable {
                 return ["error": "Departure or arrival could not be resolved."]
             }
             return [
-                "departure": try fr24AirportInfo(point: departurePoint, database: database),
-                "arrival": try fr24AirportInfo(point: arrivalPoint, database: database)
+                "departure": try fr24AirportInfo(
+                    point: departurePoint,
+                    requestedToken: departureToken,
+                    database: database
+                ),
+                "arrival": try fr24AirportInfo(
+                    point: arrivalPoint,
+                    requestedToken: arrivalToken,
+                    database: database
+                )
             ]
+        }
+    }
+
+    /// Converts every FR24 airport field that can drive planning or track
+    /// matching to the navigation database's canonical four-character airport
+    /// identifier. IATA values remain available only as metadata.
+    func canonicalizedFR24FlightAirports(_ source: [String: Any]) -> [String: Any] {
+        dataStore.read(fallback: source) { database in
+            var flight = source
+            for side in ["origin", "dest"] {
+                let actualKey = "\(side)_actual_code"
+                let actualIATAKey = "\(side)_actual_iata"
+                let icaoKey = "\(side)_icao"
+                let iataKey = "\(side)_iata"
+                let actualCode = navString(flight[actualKey])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .uppercased()
+                let advertisedICAO = navString(flight[icaoKey])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .uppercased()
+                let advertisedIATA = navString(flight[iataKey])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .uppercased()
+
+                if !actualCode.isEmpty {
+                    if let canonical = try canonicalFR24AirportIdentifier(actualCode, database: database) {
+                        flight[actualKey] = canonical.uppercased()
+                    } else if Self.isFourCharacterAirportCode(actualCode) {
+                        // A newly opened airport may not yet exist in the
+                        // selected AIRAC. Preserve a usable ICAO-shaped value,
+                        // but never feed an unresolved three-letter code into
+                        // the planner.
+                        flight[actualKey] = actualCode
+                    } else {
+                        flight[actualIATAKey] = actualCode
+                        flight.removeValue(forKey: actualKey)
+                    }
+                }
+
+                let canonicalAdvertised = try canonicalFR24AirportIdentifier(
+                    advertisedICAO,
+                    database: database
+                ) ?? canonicalFR24AirportIdentifier(
+                    advertisedIATA,
+                    database: database
+                )
+                if let canonicalAdvertised {
+                    flight[icaoKey] = canonicalAdvertised.uppercased()
+                } else if Self.isFourCharacterAirportCode(advertisedICAO) {
+                    flight[icaoKey] = advertisedICAO
+                } else {
+                    flight.removeValue(forKey: icaoKey)
+                }
+                if !advertisedIATA.isEmpty {
+                    flight[iataKey] = advertisedIATA
+                }
+            }
+            return flight
         }
     }
 
@@ -4475,7 +4541,11 @@ final class PlannerService: @unchecked Sendable {
         return try lookupPoint(token, database: database)
     }
 
-    private func fr24AirportInfo(point: [String: Any], database: SQLiteDatabase) throws -> [String: Any] {
+    private func fr24AirportInfo(
+        point: [String: Any],
+        requestedToken: String = "",
+        database: SQLiteDatabase
+    ) throws -> [String: Any] {
         let ident = navString(point["ident"]).uppercased()
         let airport = try database.first(
             sql: """
@@ -4487,14 +4557,23 @@ final class PlannerService: @unchecked Sendable {
             """,
             arguments: [.text(ident)]
         )
-        let iata = navString(airport?["iata_ata_designator"]).uppercased()
+        let compatibility = Self.fr24AirportCompatibilityAlias(
+            for: requestedToken,
+            resolvedIdentifier: ident
+        )
+        let icao = compatibility?.icao ?? ident
+        let iata = compatibility?.iata
+            ?? navString(airport?["iata_ata_designator"]).uppercased()
         var codes = [ident]
+        if icao != ident {
+            codes.append(icao)
+        }
         if !iata.isEmpty, iata != ident {
             codes.append(iata)
         }
         return [
             "ident": ident,
-            "icao": ident,
+            "icao": icao,
             "iata": iata,
             "schedule_code": iata.isEmpty ? ident : iata,
             "codes": codes,
@@ -5124,7 +5203,10 @@ final class PlannerService: @unchecked Sendable {
     }
 
     private func resolveAirportIdentifier(_ ident: String, database: SQLiteDatabase) throws -> String? {
-        let token = ident.uppercased()
+        let token = ident
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+        guard !token.isEmpty else { return nil }
         let row = try database.first(
             sql: """
             select airport_identifier
@@ -5135,7 +5217,75 @@ final class PlannerService: @unchecked Sendable {
             """,
             arguments: [.text(token), .text(token), .text(token)]
         )
-        return row.map { navString($0["airport_identifier"]) }
+        if let row {
+            return navString(row["airport_identifier"])
+        }
+        guard let alias = Self.fr24AirportCompatibilityAliases[token],
+              try database.first(
+                sql: "select airport_identifier from tbl_airports where airport_identifier = ? limit 1",
+                arguments: [.text(alias.databaseIdentifier)]
+              ) != nil else {
+            return nil
+        }
+        return alias.databaseIdentifier
+    }
+
+    private func canonicalFR24AirportIdentifier(
+        _ value: String,
+        database: SQLiteDatabase
+    ) throws -> String? {
+        let token = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+        guard let resolved = try resolveAirportIdentifier(token, database: database) else {
+            return nil
+        }
+        return Self.fr24AirportCompatibilityAlias(
+            for: token,
+            resolvedIdentifier: resolved
+        )?.icao ?? resolved
+    }
+
+    private struct FR24AirportCompatibilityAlias {
+        let databaseIdentifier: String
+        let icao: String
+        let iata: String
+    }
+
+    /// Some PMDG AIRAC exports keep Turpan Jiaohe under its legacy local
+    /// identifier `ZW01` while FR24 uses the current `ZWTL` / `TLQ` pair. Keep
+    /// that compatibility in the shared core so App and Local Web resolve the
+    /// same physical airport and FR24 still receives its recognized IATA code.
+    private static let fr24AirportCompatibilityAliases: [String: FR24AirportCompatibilityAlias] = {
+        let alias = FR24AirportCompatibilityAlias(
+            databaseIdentifier: "ZW01",
+            icao: "ZWTL",
+            iata: "TLQ"
+        )
+        return ["ZWTL": alias, "TLQ": alias]
+    }()
+
+    private static func fr24AirportCompatibilityAlias(
+        for token: String,
+        resolvedIdentifier: String
+    ) -> FR24AirportCompatibilityAlias? {
+        let normalized = token
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+        guard let alias = fr24AirportCompatibilityAliases[normalized],
+              alias.databaseIdentifier == resolvedIdentifier.uppercased() else {
+            return nil
+        }
+        return alias
+    }
+
+    private static func isFourCharacterAirportCode(_ value: String) -> Bool {
+        value.count == 4 && value.unicodeScalars.allSatisfy { scalar in
+            scalar.isASCII && (
+                (48...57).contains(scalar.value)
+                || (65...90).contains(scalar.value)
+            )
+        }
     }
 
     private func procedureSummaries(table: String, airport: String, database: SQLiteDatabase) throws -> [[String: Any]] {

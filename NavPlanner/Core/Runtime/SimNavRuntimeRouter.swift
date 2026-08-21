@@ -75,7 +75,8 @@ public final class SimNavRuntimeRouter: @unchecked Sendable {
     public convenience init(
         configuration: RuntimeConfiguration,
         fileManager: FileManager = .default,
-        fr24BrowserFetcher: FR24BrowserFetching? = nil
+        fr24BrowserFetcher: FR24BrowserFetching? = nil,
+        fr24APIBaseURL: URL = URL(string: "https://api.flightradar24.com")!
     ) {
         let dataStore = LocalDataStore(
             fileManager: fileManager,
@@ -100,7 +101,8 @@ public final class SimNavRuntimeRouter: @unchecked Sendable {
             sessionFileURL: configuration.dataRoot
                 .appendingPathComponent("Config", isDirectory: true)
                 .appendingPathComponent("fr24-session.json"),
-            browserFetcher: fr24BrowserFetcher
+            browserFetcher: fr24BrowserFetcher,
+            apiBaseURL: fr24APIBaseURL
         )
         self.init(
             plannerService: plannerService,
@@ -596,7 +598,9 @@ public final class SimNavRuntimeRouter: @unchecked Sendable {
                 return jsonResponse(["error": "FR24 download requires POST."], status: 405)
             }
             let body = jsonBody(request.body)
-            let rawFlight = body["flight"] as? [String: Any] ?? [:]
+            let rawFlight = plannerService.canonicalizedFR24FlightAirports(
+                body["flight"] as? [String: Any] ?? [:]
+            )
             let flightID = FR24Service.extractFlightID(from: body["flight_id"] as? String ?? "")
                 ?? FR24Service.extractFlightID(from: rawFlight["fr24_id"] as? String ?? "")
             guard let flightID, !flightID.isEmpty else {
@@ -941,10 +945,32 @@ public final class SimNavRuntimeRouter: @unchecked Sendable {
     }
 
     private func fr24JSONResponse(_ object: Any, status: Int = 200) -> RuntimeResponse {
-        jsonResponse(
-            exposesLocalFilePaths ? object : redactFR24LocalFilePaths(object),
+        let canonicalized = canonicalizedFR24AirportObject(object)
+        return jsonResponse(
+            exposesLocalFilePaths ? canonicalized : redactFR24LocalFilePaths(canonicalized),
             status: status
         )
+    }
+
+    private func canonicalizedFR24AirportObject(_ value: Any) -> Any {
+        switch value {
+        case let dictionary as [String: Any]:
+            var output = dictionary.reduce(into: [String: Any]()) { result, entry in
+                result[entry.key] = canonicalizedFR24AirportObject(entry.value)
+            }
+            let keys = Set(output.keys)
+            if !keys.isDisjoint(with: [
+                "origin_icao", "origin_iata", "origin_actual_code",
+                "dest_icao", "dest_iata", "dest_actual_code"
+            ]) {
+                output = plannerService.canonicalizedFR24FlightAirports(output)
+            }
+            return output
+        case let array as [Any]:
+            return array.map(canonicalizedFR24AirportObject)
+        default:
+            return value
+        }
     }
 
     private func redactFR24LocalFilePaths(_ value: Any) -> Any {

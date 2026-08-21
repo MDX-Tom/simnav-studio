@@ -8,11 +8,15 @@ import NIOPosix
 import NIOWebSocket
 import SimNavCore
 
-/// Local Web's thin equivalent of the Apple WKWebView FR24 adapter.
+/// Local Web's verification-only equivalent of the Apple FR24 browser.
 ///
-/// It launches a dedicated Chromium profile, never the user's normal profile,
-/// and reads only page responses from targets created for SimNav. Cookies stay
-/// inside that profile; no cookie-export DevTools command is used.
+/// On macOS it uses an app-owned WebKit verification window, matching the
+/// Apple App's session hand-off without depending on Edge or another installed
+/// browser. Windows and Linux keep the isolated Chromium adapter. In either
+/// case the page is created only after an explicit verification action, exports
+/// its session to the shared FR24 HTTP service, and closes after verification
+/// succeeds. Schedule, history, and playback requests never create browser
+/// targets.
 final class LocalWebFR24BrowserFetch: @unchecked Sendable,
     FR24BrowserFetching,
     FR24BrowserSessionManaging {
@@ -26,7 +30,9 @@ final class LocalWebFR24BrowserFetch: @unchecked Sendable,
         var websiteBaseURL: URL
         var launchHeadless: Bool
         var revealVerificationWindow: Bool
+        var performsDataRequests: Bool
         var additionalBrowserArguments: [String]
+        var useNativeWebKitVerification: Bool
 
         init(
             dataRoot: URL,
@@ -51,7 +57,16 @@ final class LocalWebFR24BrowserFetch: @unchecked Sendable,
             self.websiteBaseURL = websiteBaseURL
             launchHeadless = environment["SIMNAV_FR24_BROWSER_HEADLESS"] == "1"
             revealVerificationWindow = environment["SIMNAV_FR24_BROWSER_REVEAL"] != "0"
+            performsDataRequests = false
             additionalBrowserArguments = []
+#if os(macOS)
+            useNativeWebKitVerification = environment["SIMNAV_FR24_WEBKIT_VERIFICATION"] != "0"
+                && environment["SIMNAV_FR24_BROWSER"] == nil
+                && externalEndpointURL == nil
+                && !launchHeadless
+#else
+            useNativeWebKitVerification = false
+#endif
         }
 
         init(
@@ -63,7 +78,9 @@ final class LocalWebFR24BrowserFetch: @unchecked Sendable,
             websiteBaseURL: URL,
             launchHeadless: Bool = false,
             revealVerificationWindow: Bool = true,
-            additionalBrowserArguments: [String] = []
+            performsDataRequests: Bool = false,
+            additionalBrowserArguments: [String] = [],
+            useNativeWebKitVerification: Bool = false
         ) {
             self.profileRoot = profileRoot
             self.browserExecutableURL = browserExecutableURL
@@ -73,7 +90,9 @@ final class LocalWebFR24BrowserFetch: @unchecked Sendable,
             self.websiteBaseURL = websiteBaseURL
             self.launchHeadless = launchHeadless
             self.revealVerificationWindow = revealVerificationWindow
+            self.performsDataRequests = performsDataRequests
             self.additionalBrowserArguments = additionalBrowserArguments
+            self.useNativeWebKitVerification = useNativeWebKitVerification
         }
 
         private static func validEndpointToken(_ value: String?) -> String? {
@@ -98,8 +117,7 @@ final class LocalWebFR24BrowserFetch: @unchecked Sendable,
             candidates += [
                 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
                 "/Applications/Chromium.app/Contents/MacOS/Chromium",
-                "/Applications/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
-                "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+                "/Applications/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
             ]
 #elseif os(Windows)
             for root in [environment["PROGRAMFILES"], environment["PROGRAMFILES(X86)"], environment["LOCALAPPDATA"]].compactMap({ $0 }) {
@@ -370,27 +388,40 @@ final class LocalWebFR24BrowserFetch: @unchecked Sendable,
     private var ownedBrowserProcess: Process?
     private var endpointURL: URL?
     private var verificationTargetID: String?
+    private let nativeVerification: LocalWebFR24NativeVerificationSession?
 
     init(
         dataRoot: URL,
         environment: [String: String] = ProcessInfo.processInfo.environment,
         fileManager: FileManager = .default
     ) {
-        self.configuration = Configuration(
+        let configuration = Configuration(
             dataRoot: dataRoot,
             environment: environment,
             fileManager: fileManager
         )
+        self.configuration = configuration
         self.fileManager = fileManager
+        self.nativeVerification = configuration.useNativeWebKitVerification
+            ? makeLocalWebFR24NativeVerificationSession()
+            : nil
     }
 
     init(configuration: Configuration, fileManager: FileManager = .default) {
         self.configuration = configuration
         self.fileManager = fileManager
+        self.nativeVerification = configuration.useNativeWebKitVerification
+            ? makeLocalWebFR24NativeVerificationSession()
+            : nil
     }
 
     deinit {
+        nativeVerification?.close()
         terminateOwnedBrowser()
+    }
+
+    var performsBrowserDataRequests: Bool {
+        configuration.performsDataRequests
     }
 
     func performJSONRequest(path: String, params: [(String, String)]) throws -> [String: Any] {
@@ -510,6 +541,20 @@ final class LocalWebFR24BrowserFetch: @unchecked Sendable,
     func openVerificationPage() throws -> [String: Any] {
         requestLock.lock()
         defer { requestLock.unlock() }
+        if let nativeVerification {
+            let visible = try nativeVerification.open(
+                url: configuration.websiteBaseURL,
+                reveal: configuration.revealVerificationWindow
+            )
+            return [
+                "opened": true,
+                "visible": visible,
+                "access_method": "managed_browser",
+                "isolated_profile": true,
+                "verification_transport": "app_webkit",
+                "message": "FR24 verification opened in SimNav's built-in WebKit window."
+            ]
+        }
         closeRetainedVerificationTarget()
         let target = try createTarget(url: configuration.websiteBaseURL)
         retainForVerification(target)
@@ -526,6 +571,19 @@ final class LocalWebFR24BrowserFetch: @unchecked Sendable,
     }
 
     func browserSessionStatusPayload() -> [String: Any] {
+        if let nativeVerification {
+            return [
+                "available": nativeVerification.isAvailable,
+                "running": nativeVerification.isOpen,
+                "isolated_profile": true,
+                "background_requests": false,
+                "verification_only": true,
+                "automatic_sync": true,
+                "browser": nativeVerification.displayName,
+                "verification_transport": "app_webkit",
+                "verification_opened": nativeVerification.isOpen
+            ]
+        }
         let storedEndpoint = stateLock.withLock { endpointURL }
         let running = storedEndpoint.map(endpointIsReady) ?? false
         let available = configuration.externalEndpointURL != nil
@@ -534,15 +592,124 @@ final class LocalWebFR24BrowserFetch: @unchecked Sendable,
             "available": available,
             "running": running,
             "isolated_profile": true,
-            "background_requests": true,
+            "background_requests": false,
+            "verification_only": true,
+            "automatic_sync": true,
             "browser": browserDisplayName,
             "verification_opened": stateLock.withLock { verificationTargetID != nil }
         ]
     }
 
+    func browserSessionSnapshotPayload() throws -> [String: Any] {
+        requestLock.lock()
+        defer { requestLock.unlock() }
+        if let nativeVerification {
+            return try nativeVerification.snapshot(for: configuration.websiteBaseURL)
+        }
+        guard let target = retainedVerificationTarget() else {
+            return [
+                "verification_opened": false,
+                "web_cookie": "",
+                "frpl": ""
+            ]
+        }
+
+        let page = (try? evaluate(
+            target: target,
+            expression: #"""
+            (() => {
+              const keys = (storage) => {
+                const output = [];
+                try {
+                  for (let index = 0; index < storage.length; index += 1) {
+                    const key = storage.key(index);
+                    if (key) output.push(key);
+                  }
+                } catch (_error) {}
+                return output;
+              };
+              const findFRPl = (storage) => {
+                try {
+                  for (const name of ["_frPl", "_frpl", "frPl", "frpl"]) {
+                    const value = storage.getItem(name);
+                    if (value) return value;
+                  }
+                  for (const name of keys(storage)) {
+                    if (String(name).toLowerCase().includes("frpl")) {
+                      const value = storage.getItem(name);
+                      if (value) return value;
+                    }
+                  }
+                } catch (_error) {}
+                return "";
+              };
+              return {
+                href: location.href || "",
+                title: document.title || "",
+                text: String(document.body?.innerText || "").slice(0, 4000),
+                cookie: document.cookie || "",
+                frpl: findFRPl(localStorage) || findFRPl(sessionStorage) || ""
+              };
+            })()
+            """#,
+            timeout: 8
+        )) as? [String: Any] ?? [:]
+
+        var cookieValues = cookieValues(fromHeader: stringValue(page["cookie"]))
+        if let result = try? performTargetCommand(
+            target: target,
+            method: "Network.getAllCookies",
+            timeout: 8
+        ), let cookies = result["cookies"] as? [[String: Any]] {
+            for cookie in cookies where cookieBelongsToVerificationSite(cookie) {
+                let name = stringValue(cookie["name"])
+                let value = stringValue(cookie["value"])
+                if !name.isEmpty, !value.isEmpty {
+                    cookieValues[name] = value
+                }
+            }
+        }
+        let header = cookieValues.keys.sorted().compactMap { name -> String? in
+            guard let value = cookieValues[name], !value.isEmpty else { return nil }
+            return "\(name)=\(value)"
+        }.joined(separator: "; ")
+        let frPl = cookieValues["_frPl"]
+            ?? stringValue(page["frpl"])
+        let verificationPending = isVerificationPage(
+            title: stringValue(page["title"]),
+            text: stringValue(page["text"])
+        )
+        return [
+            "verification_opened": true,
+            "verification_pending": verificationPending,
+            "web_cookie": header,
+            "frpl": frPl,
+            "cookie_count": cookieValues.count
+        ]
+    }
+
+    func closeVerificationPage() throws {
+        requestLock.lock()
+        defer { requestLock.unlock() }
+        if let nativeVerification {
+            nativeVerification.close()
+            return
+        }
+        closeRetainedVerificationTarget()
+        if configuration.externalEndpointURL == nil {
+            terminateOwnedBrowser()
+        }
+        stateLock.withLock {
+            endpointURL = nil
+            verificationTargetID = nil
+        }
+    }
+
     func clearBrowserSession() throws {
         requestLock.lock()
         defer { requestLock.unlock() }
+        nativeVerification?.close()
+        try nativeVerification?.clearWebsiteData(for: configuration.websiteBaseURL)
         terminateOwnedBrowser()
         stateLock.withLock {
             endpointURL = nil
@@ -566,6 +733,9 @@ final class LocalWebFR24BrowserFetch: @unchecked Sendable,
     }
 
     private var browserDisplayName: String {
+        if let nativeVerification {
+            return nativeVerification.displayName
+        }
         let name = configuration.browserExecutableURL?.lastPathComponent.lowercased() ?? ""
         if name.contains("edge") { return "Microsoft Edge" }
         if name.contains("chromium") { return "Chromium" }
@@ -602,7 +772,7 @@ final class LocalWebFR24BrowserFetch: @unchecked Sendable,
             return external
         }
         guard let executable = configuration.browserExecutableURL else {
-            throw BrowserError(message: "Install Google Chrome, Microsoft Edge, or Chromium to use FR24 in Local Web.")
+            throw BrowserError(message: "Install Google Chrome, Chromium, or Microsoft Edge to open FR24 verification in Local Web.")
         }
 
         let profile = configuration.profileRoot.standardizedFileURL
@@ -769,9 +939,22 @@ final class LocalWebFR24BrowserFetch: @unchecked Sendable,
         activateTarget(target)
     }
 
+    private func retainedVerificationTarget() -> Target? {
+        guard let retainedID = stateLock.withLock({ verificationTargetID }),
+              let endpoint = stateLock.withLock({ endpointURL }),
+              let listURL = URL(string: "/json/list", relativeTo: endpoint),
+              let list = try? performHTTPJSONList(controlRequest(url: listURL)),
+              let item = list.first(where: { stringValue($0["id"]) == retainedID }),
+              let webSocket = URL(string: stringValue(item["webSocketDebuggerUrl"])),
+              let webSocketURL = externalWebSocketURL(webSocket, endpoint: endpoint) else {
+            return nil
+        }
+        return Target(id: retainedID, webSocketURL: webSocketURL)
+    }
+
     /// Moves the dedicated headed window on-screen only for the user-triggered
-    /// verification action. Data requests continue to use the same profile and
-    /// FR24Service backend, but their short-lived targets remain off-screen.
+    /// verification action. All schedule/history/playback data requests stay in
+    /// the shared FR24Service and never create a browser target.
     private func revealTargetWindow(_ target: Target) -> Bool {
         do {
             let window = try performTargetCommand(
@@ -1084,6 +1267,14 @@ final class LocalWebFR24BrowserFetch: @unchecked Sendable,
         return object
     }
 
+    private func performHTTPJSONList(_ request: URLRequest) throws -> [[String: Any]] {
+        let data = try performHTTPData(request)
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            throw BrowserError(message: "FR24 browser control returned an invalid target list.")
+        }
+        return object
+    }
+
     private func controlRequest(url: URL) -> URLRequest {
         var request = URLRequest(url: url)
         if let token = configuration.externalEndpointToken {
@@ -1202,6 +1393,29 @@ final class LocalWebFR24BrowserFetch: @unchecked Sendable,
         case is NSNull, nil: return ""
         default: return String(describing: value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         }
+    }
+
+    private func cookieValues(fromHeader header: String) -> [String: String] {
+        var values: [String: String] = [:]
+        for part in header.split(separator: ";") {
+            let item = part.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let separator = item.firstIndex(of: "=") else { continue }
+            let name = String(item[..<separator]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let value = String(item[item.index(after: separator)...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !name.isEmpty, !value.isEmpty {
+                values[name] = value
+            }
+        }
+        return values
+    }
+
+    private func cookieBelongsToVerificationSite(_ cookie: [String: Any]) -> Bool {
+        guard let host = configuration.websiteBaseURL.host?.lowercased() else { return false }
+        let domain = stringValue(cookie["domain"])
+            .lowercased()
+            .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        return !domain.isEmpty && (host == domain || host.hasSuffix(".\(domain)"))
     }
 
     private func isVerificationPage(title: String, text: String) -> Bool {

@@ -31,23 +31,22 @@ Security defaults are active in development: the socket binds only to `127.0.0.1
 Origin are restricted to loopback, unsafe requests require a per-process token, and static file
 paths cannot escape the shared Web root.
 
-Local Web FR24 uses the same `FR24Service` as the Apple Apps through a thin managed-browser adapter.
-Startup, query, history, and playback work use an off-screen managed Chrome, Chromium, or Edge
-subprocess with an isolated profile under the Local Web data root. A browser window is shown only
-after the user explicitly selects **Open FR24 verification page**. After any normal FR24 / Cloudflare
-verification on that homepage, **Sync Browser Session** probes the same profile and enables route
-queries plus playback downloads. The homepage remains the only visible verification target;
-schedule/playback targets stay in the background and close if challenged. Every headed launcher
-reserves a randomized non-zero loopback DevTools port;
-this keeps `navigator.webdriver=false` instead of activating Chromium's `--remote-debugging-port=0`
-automation signal, while the endpoint remains host-private. No official API credential is
-requested, the normal browser profile is never opened, and cookies are not exported. GPX and FR24
+Local Web FR24 uses the same `FR24Service` as the Apple Apps. Query, history, and playback run through
+that shared Swift backend without creating browser data pages. On macOS, the explicit **Open FR24
+verification page** action creates an App-owned WebKit window in the Local Web process; it does not
+launch Edge, Chrome, Safari, or the user's default browser. Windows/Linux use a thin private
+Chrome/Chromium/Edge CDP adapter for the same explicit action, selected from the actual environment.
+After the normal FR24 / Cloudflare verification completes, Local Web copies the session into its
+private state, probes it through `FR24Service`, and closes the page automatically. Chromium fallback
+reserves a randomized non-zero loopback DevTools port, preserving normal headed-browser semantics
+while keeping the endpoint host-private. No official API credential is requested and the normal
+browser profile is never opened. GPX and FR24
 CSV/KML import plus **Match Current Track** continue to use the same local Swift route engine.
-macOS and native Windows launch the isolated browser directly. Linux Docker keeps that browser on
-the Linux desktop and exposes its loopback CDP only to a relay bound to the private Compose gateway;
-the Windows Docker fallback uses an ephemeral authenticated PowerShell relay. CDP HTTP and WebSocket
-are transported by the pinned SwiftNIO dependency, while every schedule/playback/cache/match decision
-remains in the shared `FR24Service` and `SimNavRuntimeRouter`.
+Native Windows launches the isolated fallback directly. Linux Docker keeps it on the Linux desktop
+and exposes loopback CDP only to a relay bound to the private Compose gateway; the Windows Docker
+fallback uses an ephemeral authenticated PowerShell relay. CDP HTTP and WebSocket
+are transported by the pinned SwiftNIO dependency, while every session probe, schedule, playback,
+cache, and match decision remains in the shared `FR24Service` and `SimNavRuntimeRouter`.
 
 ## Cross-platform release payload
 

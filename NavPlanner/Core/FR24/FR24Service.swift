@@ -13,7 +13,23 @@ public protocol FR24BrowserFetching: AnyObject {
 public protocol FR24BrowserSessionManaging: AnyObject {
     func openVerificationPage() throws -> [String: Any]
     func browserSessionStatusPayload() -> [String: Any]
+    /// Returns browser-derived session material for the shared HTTP FR24
+    /// backend. Implementations must keep the visible browser limited to the
+    /// user-requested verification page.
+    func browserSessionSnapshotPayload() throws -> [String: Any]
+    /// Closes the explicit verification page after its session has been
+    /// accepted by the shared backend.
+    func closeVerificationPage() throws
+    /// Apple uses a hidden WKWebView as its request transport. Local Web sets
+    /// this to false so schedule/playback requests never create browser tabs.
+    var performsBrowserDataRequests: Bool { get }
     func clearBrowserSession() throws
+}
+
+public extension FR24BrowserSessionManaging {
+    func browserSessionSnapshotPayload() throws -> [String: Any] { [:] }
+    func closeVerificationPage() throws {}
+    var performsBrowserDataRequests: Bool { true }
 }
 
 struct FR24CacheExport: Sendable {
@@ -340,7 +356,7 @@ final class FR24Service: @unchecked Sendable {
     private let rootDirectory: URL
     private let session: URLSession
     private let browserFetcher: FR24BrowserFetching?
-    private let apiBaseURL = "https://api.flightradar24.com"
+    private let apiBaseURL: URL
     private let isoFormatter = ISO8601DateFormatter()
 
     init(
@@ -348,13 +364,15 @@ final class FR24Service: @unchecked Sendable {
         userDefaults: UserDefaults = .standard,
         rootDirectory: URL? = nil,
         sessionFileURL: URL? = nil,
-        browserFetcher: FR24BrowserFetching? = nil
+        browserFetcher: FR24BrowserFetching? = nil,
+        apiBaseURL: URL = URL(string: "https://api.flightradar24.com")!
     ) {
         self.fileManager = fileManager
         self.userDefaults = sessionFileURL.map {
             FR24SessionPreferences(fileURL: $0, fileManager: fileManager)
         } ?? FR24SessionPreferences(userDefaults: userDefaults)
         self.browserFetcher = browserFetcher
+        self.apiBaseURL = apiBaseURL
         if let rootDirectory {
             self.rootDirectory = rootDirectory.standardizedFileURL
         } else {
@@ -503,11 +521,52 @@ final class FR24Service: @unchecked Sendable {
     }
 
     func syncBrowserSessionPayload() -> [String: Any] {
-        guard browserFetcher is FR24BrowserSessionManaging else {
+        guard let manager = browserFetcher as? FR24BrowserSessionManaging else {
             return ["error": "FR24 managed browser is unavailable.", "access": accessStatusPayload()]
         }
+
+        do {
+            let snapshot = try manager.browserSessionSnapshotPayload()
+            let webCookie = Self.stringValue(snapshot["web_cookie"])
+            let frPl = Self.stringValue(snapshot["frpl"])
+            let hasSnapshot = !webCookie.isEmpty || !frPl.isEmpty
+            if !snapshot.isEmpty, !hasSnapshot {
+                var payload = accessStatusPayload()
+                payload["verified"] = false
+                payload["probe_result"] = "waiting_for_verification"
+                payload["automatic_sync"] = true
+                payload["message"] = "正在等待 FR24 验证完成，会话将在完成后自动同步。"
+                return payload
+            }
+            if hasSnapshot {
+                _ = FR24SessionStore.updateAccessPayload(
+                    webCookie: webCookie,
+                    frPl: frPl,
+                    userDefaults: userDefaults
+                )
+            }
+        } catch {
+            var payload = accessStatusPayload()
+            payload["verified"] = false
+            payload["probe_result"] = "waiting_for_verification"
+            payload["automatic_sync"] = true
+            payload["message"] = "正在等待 FR24 验证完成，会话将在完成后自动同步。"
+            return payload
+        }
+
         FR24SessionStore.markBrowserSync(userDefaults: userDefaults)
-        return probeAccessPayload()
+        var payload = probeAccessPayload()
+        payload["automatic_sync"] = true
+        if payload["verified"] as? Bool == true {
+            do {
+                try manager.closeVerificationPage()
+                payload["verification_closed"] = true
+                payload["message"] = "FR24 会话已自动同步，验证页已关闭。"
+            } catch {
+                payload["verification_closed"] = false
+            }
+        }
+        return payload
     }
 
     func probeAccessPayload() -> [String: Any] {
@@ -754,7 +813,7 @@ final class FR24Service: @unchecked Sendable {
         let clampedLimit = limit <= 0 ? 0 : max(1, min(limit, 100))
         do {
             let flights: [[String: Any]]
-            if let browserFetcher {
+            if let browserFetcher, shouldUseBrowserDataRequests {
                 let page = try browserFetcher.performFlightHistoryPageRequest(flightToken: token)
                 FR24SessionStore.recordSuccessfulAccess(userDefaults: userDefaults)
                 flights = parseFlightHistoryPage(
@@ -1898,7 +1957,7 @@ final class FR24Service: @unchecked Sendable {
         retryChallenge: Bool = true
     ) throws -> [String: Any] {
         let retryDelays: [TimeInterval] = [0.7, 1.5]
-        if useBrowser, let browserFetcher {
+        if useBrowser, shouldUseBrowserDataRequests, let browserFetcher {
             for attempt in 0...retryDelays.count {
                 do {
                     let payload = try browserFetcher.performJSONRequest(path: path, params: params)
@@ -1940,7 +1999,12 @@ final class FR24Service: @unchecked Sendable {
             }
         }
 
-        guard var components = URLComponents(string: "\(apiBaseURL)\(path)") else {
+        guard var components = URLComponents(
+            url: apiBaseURL.appendingPathComponent(
+                path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            ),
+            resolvingAgainstBaseURL: false
+        ) else {
             throw serviceError("FR24 web request failed.")
         }
         components.queryItems = params.map { URLQueryItem(name: $0.0, value: $0.1) }
@@ -1968,6 +2032,11 @@ final class FR24Service: @unchecked Sendable {
             }
             throw error
         }
+    }
+
+    private var shouldUseBrowserDataRequests: Bool {
+        guard let browserFetcher else { return false }
+        return (browserFetcher as? FR24BrowserSessionManaging)?.performsBrowserDataRequests ?? true
     }
 
     private static func isChallengeLikeRequestError(_ message: String) -> Bool {

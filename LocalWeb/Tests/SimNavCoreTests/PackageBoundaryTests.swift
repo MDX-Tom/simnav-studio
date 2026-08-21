@@ -122,7 +122,19 @@ final class PackageBoundaryTests: XCTestCase {
         XCTAssertTrue(playbackBody.contains("if (count < 2)"))
         XCTAssertTrue(playbackBody.contains("FR24 轨迹已绘制，机场同步未完成"))
         XCTAssertTrue(app.contains("FR24 拟合沿用当前查询机场，机场同步未完成"))
-        XCTAssertTrue(app.contains("payload?.browser_adapter_available"))
+        XCTAssertTrue(app.contains("Promise.allSettled(["))
+        XCTAssertTrue(app.contains("elements.departureInput.value = optimisticDeparture"))
+        XCTAssertTrue(app.contains("elements.arrivalInput.value = optimisticArrival"))
+        XCTAssertTrue(app.contains("function isCanonicalAirportCode(value)"))
+        XCTAssertTrue(app.contains("originCandidates.find(isCanonicalAirportCode)"))
+        XCTAssertTrue(app.contains("destinationCandidates.find(isCanonicalAirportCode)"))
+        XCTAssertFalse(app.contains("|| Boolean(payload?.browser_adapter_available)"))
+
+        let matchCurrent = try XCTUnwrap(app.range(of: "async function matchCurrentFR24Track()"))
+        let matchCurrentBody = String(app[matchCurrent.lowerBound...])
+        let currentTrack = try XCTUnwrap(matchCurrentBody.range(of: "state.fr24TrackPayload?.track_points"))
+        let routeInputs = try XCTUnwrap(matchCurrentBody.range(of: "currentQueryRouteInputs()"))
+        XCTAssertLessThan(currentTrack.lowerBound, routeInputs.lowerBound)
     }
 
     func testNativeDarkProviderUsesDedicatedArcGISDarkGrayTiles() throws {
@@ -466,6 +478,71 @@ final class PackageBoundaryTests: XCTestCase {
         XCTAssertFalse(serializedPayloads.localizedCaseInsensitiveContains("bearer"))
         XCTAssertTrue(browser.requestedPaths.contains("/common/v1/airport.json"))
         XCTAssertTrue(browser.requestedPaths.contains("/common/v1/flight-playback.json"))
+    }
+
+    func testFR24AirportCodesAreCanonicalizedToDatabaseICAO() throws {
+        var workspaceRoot = URL(fileURLWithPath: #filePath)
+        for _ in 0..<4 {
+            workspaceRoot.deleteLastPathComponent()
+        }
+        let databaseURL = [
+            workspaceRoot.appendingPathComponent("database/e_dfd_PMDG_release.s3db"),
+            workspaceRoot.appendingPathComponent("NavPlanner/Resources/Database/navdata.sqlite")
+        ].first { FileManager.default.fileExists(atPath: $0.path) }
+        guard let databaseURL else {
+            throw XCTSkip("Local ignored navigation database is not available.")
+        }
+
+        let service = PlannerService(dataStore: LocalDataStore(databaseURL: databaseURL))
+        let canonical = service.canonicalizedFR24FlightAirports([
+            "origin_icao": "",
+            "origin_iata": "PEK",
+            "origin_actual_code": "PEK",
+            "dest_icao": "",
+            "dest_iata": "LXA",
+            "dest_actual_code": "LXA"
+        ])
+        XCTAssertEqual(canonical["origin_icao"] as? String, "ZBAA")
+        XCTAssertEqual(canonical["origin_actual_code"] as? String, "ZBAA")
+        XCTAssertEqual(canonical["origin_iata"] as? String, "PEK")
+        XCTAssertEqual(canonical["dest_icao"] as? String, "ZULS")
+        XCTAssertEqual(canonical["dest_actual_code"] as? String, "ZULS")
+        XCTAssertEqual(canonical["dest_iata"] as? String, "LXA")
+
+        let unresolved = service.canonicalizedFR24FlightAirports([
+            "origin_icao": "ZBAA",
+            "origin_iata": "PEK",
+            "origin_actual_code": "PEK",
+            "dest_icao": "ZULS",
+            "dest_iata": "LXA",
+            "dest_actual_code": "XYZ"
+        ])
+        XCTAssertEqual(unresolved["origin_actual_code"] as? String, "ZBAA")
+        XCTAssertEqual(unresolved["dest_icao"] as? String, "ZULS")
+        XCTAssertNil(unresolved["dest_actual_code"])
+        XCTAssertEqual(unresolved["dest_actual_iata"] as? String, "XYZ")
+
+        let turpan = service.canonicalizedFR24FlightAirports([
+            "origin_icao": "ZBAD",
+            "origin_iata": "PKX",
+            "dest_icao": "",
+            "dest_iata": "TLQ",
+            "dest_actual_code": "TLQ"
+        ])
+        XCTAssertEqual(turpan["origin_icao"] as? String, "ZBAD")
+        XCTAssertEqual(turpan["dest_icao"] as? String, "ZWTL")
+        XCTAssertEqual(turpan["dest_actual_code"] as? String, "ZWTL")
+
+        let routeAirports = service.fr24RouteAirportsPayload(
+            departure: "ZBAD",
+            arrival: "ZWTL"
+        )
+        XCTAssertNil(routeAirports["error"])
+        let arrival = try XCTUnwrap(routeAirports["arrival"] as? [String: Any])
+        XCTAssertEqual(arrival["ident"] as? String, "ZW01")
+        XCTAssertEqual(arrival["icao"] as? String, "ZWTL")
+        XCTAssertEqual(arrival["iata"] as? String, "TLQ")
+        XCTAssertEqual(arrival["schedule_code"] as? String, "TLQ")
     }
 
     func testDirectRouterCoreSmokeWithDevelopmentDatabase() throws {

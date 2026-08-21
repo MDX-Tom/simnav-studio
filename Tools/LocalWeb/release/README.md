@@ -7,7 +7,8 @@ sources used by the apps. It does not contain a second frontend or backend imple
 ## Start / 启动
 
 - macOS: double-click `run-macos.command`. The universal native server is preferred; Docker is
-  the fallback.
+  the fallback. Explicit FR24 verification uses an App-owned WebKit window and does not launch a
+  third-party browser.
 - Windows: right-click `run-windows.ps1` and choose **Run with PowerShell**. A packaged
   SwiftNIO `simnav-local-web.exe` runs directly on Windows with no Linux server. Docker Desktop
   is used only when that native bundle is absent; the managed Chrome/Chromium/Edge process stays
@@ -29,23 +30,23 @@ server copies that read-only release database into the Local Web data root and a
 airport search and planning work immediately. A database later imported or selected in the browser
 remains active across native-process or container restarts; **Restore bundled database** returns to
 the release copy. No user map, track, cookie, FR24 session, cache, log, or secret is bundled. Local
-Web uses Chrome, Chromium, or Edge with an isolated profile under its data root. Startup and normal
-FR24 requests stay off-screen; select **Open FR24 verification page** to show the dedicated window,
-complete any normal FR24 / Cloudflare verification, then select **Sync Browser Session** in Query.
-The FR24 homepage remains the only visible verification target; schedule/playback targets
-stay in the background and close if challenged. The launchers use a randomized non-zero private
-loopback DevTools port, preserving normal headed-browser semantics (`navigator.webdriver=false`)
-instead of Chromium's port-zero automation mode. The shared Swift `FR24Service` performs route
-queries and playback downloads through the same profile; no official API credential is requested,
-normal browser profiles are not read, and
-cookies are not exported. GPX and FR24 CSV/KML import remain available. Local Web does not automate
+Web uses a private platform verification session. macOS hosts it in an App-owned WebKit window;
+Windows/Linux select Chrome, Chromium, or Edge from the actual environment with an isolated profile
+under the Web data root. Startup, schedule, history, and playback use the shared Swift FR24 backend
+without browser data pages. Select **Open FR24 verification page** to show the dedicated window;
+after the normal FR24 / Cloudflare verification completes, Local Web automatically transfers the
+session and closes the page. Windows/Linux Chromium fallback uses a randomized non-zero private
+loopback DevTools port, preserving normal headed-browser semantics. The shared Swift `FR24Service` performs route
+queries and playback downloads after that session handoff; no official API credential is requested,
+normal browser profiles are not read, and session data is stored only in Local Web's private data
+root. GPX and FR24 CSV/KML import remain available. Local Web does not automate
 CAPTCHA or bypass Cloudflare.
 
-For Docker launches, Chromium continues to expose DevTools on host loopback only. Linux forwards it
+For Windows/Linux Docker launches, Chromium exposes DevTools on host loopback only. Linux forwards it
 only through the private Compose gateway; Windows uses an ephemeral authenticated host relay. The
-container never receives the user's normal browser profile or a cookie export, and the user-facing
-steps remain **Open verification page → complete any normal check → Sync Browser Session → query →
-download/draw/match**.
+container never receives the user's normal browser profile, and the user-facing steps are
+**query → if challenged, open verification page → complete the normal check → automatic sync and
+close → query/download/draw/match**.
 
 Use the matching `stop-*` script for either a recorded native process or the Docker fallback.
 Closing a native-server terminal or pressing Control-C also stops that native process. Stop scripts

@@ -647,9 +647,9 @@ const TRANSLATIONS = {
   "query.cacheBrowserList": { "zh-Hans": "Local Web 缓存文件可从下方缓存航班列表直接下载。", en: "Local Web cache files can be downloaded from the cached-flight list below." },
   "query.cacheDirectoryFailed": { "zh-Hans": "无法打开 FR24 缓存目录。", en: "Could not open the FR24 cache folder." },
   "query.access": { "zh-Hans": "FR24 网络访问", en: "FR24 Network Access" },
-  "query.accessInitial": { "zh-Hans": "可直接在后台查询；仅当 FR24 要求验证时才需手动打开验证页并同步会话。", en: "Query in the background first; open verification and sync only if FR24 requests it." },
+  "query.accessInitial": { "zh-Hans": "航班查询与轨迹下载使用 App 共用 FR24 后端；仅验证页会在手动打开时显示。", en: "Flight queries and track downloads use the shared App FR24 backend; only manually opened verification is shown." },
   "query.accessSummary": { "zh-Hans": "FR24：{method} · {state}。", en: "FR24: {method} · {state}." },
-  "query.accessMethodManagedBrowser": { "zh-Hans": "SimNav 专用浏览器会话", en: "dedicated SimNav browser session" },
+  "query.accessMethodManagedBrowser": { "zh-Hans": "SimNav 内置验证会话", en: "built-in SimNav verification session" },
   "query.accessMethodWeb": { "zh-Hans": "App 内 Web 会话", en: "in-app Web session" },
   "query.accessMethodNone": { "zh-Hans": "未配置访问方式", en: "no access method configured" },
   "query.accessSyncedState": { "zh-Hans": "已同步", en: "synced" },
@@ -670,6 +670,10 @@ const TRANSLATIONS = {
   "query.accessVerified": { "zh-Hans": "FR24 在线访问已验证，可执行查询与轨迹下载。", en: "FR24 online access verified; queries and track downloads are available." },
   "query.accessProbeFailed": { "zh-Hans": "FR24 尚未接受当前浏览器会话；旧结果已保留，请在验证窗口完成验证后重新同步。", en: "FR24 has not accepted the current browser session. Previous results were kept; complete verification in the browser window and sync again." },
   "query.accessOpening": { "zh-Hans": "已打开 FR24 验证页；正常完成验证后点“同步浏览器会话”。", en: "FR24 verification opened. Complete it normally, then select Sync Browser Session." },
+  "query.accessOpeningAuto": { "zh-Hans": "已打开 FR24 验证页；完成验证后会自动同步并关闭。", en: "FR24 verification opened; it will sync and close automatically after verification." },
+  "query.accessAutoSyncing": { "zh-Hans": "正在等待验证完成；会话将自动同步并关闭验证页...", en: "Waiting for verification; the session will sync and close the page automatically..." },
+  "query.accessAutoSynced": { "zh-Hans": "FR24 会话已自动同步，验证页已关闭。", en: "The FR24 session synced automatically and the verification page was closed." },
+  "query.accessAutoSyncTimeout": { "zh-Hans": "验证页仍保持打开；完成验证后可再次点击“打开 FR24 验证页”继续自动同步。", en: "Verification remains open. Complete it, then select Open FR24 Verification again to resume automatic sync." },
   "query.accessSyncing": { "zh-Hans": "正在同步并验证 FR24 浏览器会话...", en: "Syncing and verifying the FR24 browser session..." },
   "query.accessSynced": { "zh-Hans": "FR24 浏览器会话已同步。", en: "The FR24 browser session was synced." },
   "query.accessSyncMissing": { "zh-Hans": "浏览器中还没有可用的 FR24 会话。请先正常完成 FR24 / Cloudflare 验证。", en: "No usable FR24 session is available in the browser yet. Complete FR24 / Cloudflare verification normally first." },
@@ -682,7 +686,7 @@ const TRANSLATIONS = {
   "query.accessSaved": { "zh-Hans": "已保存 FR24 Web 会话配置。", en: "FR24 Web session saved." },
   "query.accessCleared": { "zh-Hans": "已清除 FR24 浏览器会话与兼容配置。", en: "FR24 browser-session and compatibility settings cleared." },
   "query.accessHint": { "zh-Hans": "App 会先在后台尝试 FR24 查询；只有实际遇到验证时，才需手动打开验证页、正常完成验证并同步会话。", en: "The app tries FR24 in the background first. Open verification, complete it normally, and sync only if a challenge is actually returned." },
-  "query.accessHintLocalWeb": { "zh-Hans": "Local Web 会先使用隔离的 SimNav 后台浏览器查询和下载；只有实际遇到验证时才显示用户手动打开的验证页，无需填写官方 API。", en: "Local Web queries and downloads through its isolated SimNav browser in the background first. A window appears only when the user opens verification after a real challenge; no official API entry is required." },
+  "query.accessHintLocalWeb": { "zh-Hans": "Local Web 的查询、历史与轨迹下载直接复用 App 的 FR24 后端，不创建浏览器查询页；手动打开验证页后会自动同步并关闭。", en: "Local Web reuses the App FR24 backend directly for queries, history, and playback without browser data pages. A manually opened verification page syncs and closes automatically." },
   "query.undoTrack": { "zh-Hans": "撤销上一步绘制", en: "Undo Last Drawing" },
   "query.redoTrack": { "zh-Hans": "重做上次撤销", en: "Redo Last Undo" },
   "query.clearTrack": { "zh-Hans": "清除绘制", en: "Clear Drawing" },
@@ -920,6 +924,7 @@ const state = {
   fr24AccessProbePromise: null,
   fr24AccessProbeVersion: 0,
   fr24LastProbeStartedAt: 0,
+  fr24VerificationAutoSyncVersion: 0,
   fr24QueryBusy: false,
   fr24QueryRequestVersion: 0,
   fr24BusyByKey: new Map(),
@@ -8289,7 +8294,7 @@ function updateRuntimeCapabilityLabels() {
     elements.fr24OpenBrowserButton.textContent = t("query.accessOpenBrowser");
   }
   if (elements.fr24SyncBrowserButton) {
-    elements.fr24SyncBrowserButton.classList.remove("hidden");
+    elements.fr24SyncBrowserButton.classList.toggle("hidden", usesManagedBrowser);
     elements.fr24SyncBrowserButton.textContent = t("query.accessSyncBrowser");
   }
   document.querySelector(".query-manual-access")?.classList.toggle("hidden", usesManagedBrowser);
@@ -13997,11 +14002,16 @@ function optionalQueryRouteInputs() {
   return departure && arrival ? { departure, arrival } : null;
 }
 
+function isCanonicalAirportCode(value) {
+  return /^[A-Z0-9]{4}$/.test(String(value || "").trim().toUpperCase());
+}
+
 function fr24AirportCandidates(flight, side) {
   const values = [
     flight?.[`${side}_actual_code`],
     flight?.[`${side}_icao`],
     flight?.[`${side}_iata`],
+    flight?.[`${side}_actual_iata`],
   ].map((value) => String(value || "").trim().toUpperCase()).filter(Boolean);
   return [...new Set(values)];
 }
@@ -14015,8 +14025,12 @@ async function loadFR24AirportIntoPlan(flight, side, slot, options = {}) {
         signal: options.signal,
         activate: false,
       });
-      const ident = String(payload?.airport?.airport_identifier || candidate).trim().toUpperCase();
-      return { ident, payload };
+      const ident = isCanonicalAirportCode(candidate)
+        ? candidate
+        : String(payload?.airport?.airport_identifier || candidate).trim().toUpperCase();
+      if (isCanonicalAirportCode(ident)) {
+        return { ident, payload };
+      }
     } catch (error) {
       if (isAbortError(error)) {
         throw error;
@@ -14039,29 +14053,58 @@ async function syncPlanAirportsFromFR24Flight(flight, options = {}) {
 
   const currentDeparture = elements.departureInput.value.trim().toUpperCase();
   const currentArrival = elements.arrivalInput.value.trim().toUpperCase();
-  const advertisedDeparture = originCandidates[0];
-  const advertisedArrival = destinationCandidates[0];
+  const advertisedDeparture = originCandidates.find(isCanonicalAirportCode) || "";
+  const advertisedArrival = destinationCandidates.find(isCanonicalAirportCode) || "";
   const originHasActualCode = Boolean(String(flight?.origin_actual_code || "").trim());
   const destinationHasActualCode = Boolean(String(flight?.dest_actual_code || "").trim());
   const alreadyMatches = (originHasActualCode
-    ? currentDeparture === advertisedDeparture
+    ? isCanonicalAirportCode(flight?.origin_actual_code)
+      && currentDeparture === String(flight.origin_actual_code).trim().toUpperCase()
     : originCandidates.includes(currentDeparture))
     && (destinationHasActualCode
-      ? currentArrival === advertisedArrival
+      ? isCanonicalAirportCode(flight?.dest_actual_code)
+        && currentArrival === String(flight.dest_actual_code).trim().toUpperCase()
       : destinationCandidates.includes(currentArrival));
   if (alreadyMatches) {
     return { departure: currentDeparture, arrival: currentArrival };
   }
 
-  const [departureResult, arrivalResult] = await Promise.all([
+  // Fill the plan immediately so a successfully drawn track remains usable
+  // even if one airport-detail request is unavailable. Each side resolves
+  // independently from IATA/ICAO to the canonical database identifier.
+  const optimisticDeparture = advertisedDeparture
+    || (isCanonicalAirportCode(currentDeparture) ? currentDeparture : "");
+  const optimisticArrival = advertisedArrival
+    || (isCanonicalAirportCode(currentArrival) ? currentArrival : "");
+  if (optimisticDeparture) {
+    elements.departureInput.value = optimisticDeparture;
+  }
+  if (optimisticArrival) {
+    elements.arrivalInput.value = optimisticArrival;
+  }
+  const [departureSettled, arrivalSettled] = await Promise.allSettled([
     loadFR24AirportIntoPlan(flight, "origin", "departure", options),
     loadFR24AirportIntoPlan(flight, "dest", "arrival", options),
   ]);
   throwIfAborted(options.signal);
-  const departure = departureResult?.ident || advertisedDeparture;
-  const arrival = arrivalResult?.ident || advertisedArrival;
-  elements.departureInput.value = departure;
-  elements.arrivalInput.value = arrival;
+  if (departureSettled.status === "rejected" && isAbortError(departureSettled.reason)) {
+    throw departureSettled.reason;
+  }
+  if (arrivalSettled.status === "rejected" && isAbortError(arrivalSettled.reason)) {
+    throw arrivalSettled.reason;
+  }
+  const departure = departureSettled.status === "fulfilled"
+    ? (departureSettled.value?.ident || optimisticDeparture)
+    : optimisticDeparture;
+  const arrival = arrivalSettled.status === "fulfilled"
+    ? (arrivalSettled.value?.ident || optimisticArrival)
+    : optimisticArrival;
+  if (isCanonicalAirportCode(departure)) {
+    elements.departureInput.value = departure;
+  }
+  if (isCanonicalAirportCode(arrival)) {
+    elements.arrivalInput.value = arrival;
+  }
   if (currentDeparture !== departure) {
     state.selectedRunways.departure = "ALL";
   }
@@ -14096,8 +14139,9 @@ function flightPrimaryLabel(flight) {
 function flightAirportCode(flight, side) {
   const actualCode = flight[`${side}_actual_code`];
   const icao = flight[`${side}_icao`];
-  const iata = flight[`${side}_iata`];
-  return actualCode || icao || iata || "----";
+  return [actualCode, icao]
+    .map((value) => String(value || "").trim().toUpperCase())
+    .find(isCanonicalAirportCode) || "----";
 }
 
 function normalizeFlightTimestamp(value) {
@@ -14436,10 +14480,51 @@ async function openFR24VerificationBrowser() {
     if (payload?.pending_native) {
       setFR24QueryStatus(t("query.accessOpening"));
     } else {
-      setFR24QueryStatus(t("query.accessOpening"), !payload?.opened);
+      setFR24QueryStatus(t("query.accessOpeningAuto"), !payload?.opened);
+      if (payload?.opened) {
+        autoSyncFR24VerificationSession().catch((error) => {
+          console.warn("FR24 验证页自动同步结束", error);
+        });
+      }
     }
   } catch (error) {
     setFR24QueryStatus(localizedErrorMessage(error?.message || "FR24 browser launch failed."), true);
+  }
+}
+
+async function autoSyncFR24VerificationSession() {
+  const version = ++state.fr24VerificationAutoSyncVersion;
+  const deadline = Date.now() + 5 * 60_000;
+  if (elements.fr24OpenBrowserButton) {
+    elements.fr24OpenBrowserButton.disabled = true;
+  }
+  try {
+    while (version === state.fr24VerificationAutoSyncVersion && Date.now() < deadline) {
+      setFR24QueryStatus(t("query.accessAutoSyncing"));
+      try {
+        const payload = await runtime.syncFR24Session();
+        if (version !== state.fr24VerificationAutoSyncVersion) {
+          return null;
+        }
+        updateFR24AccessSummary(payload?.access || payload || {});
+        if (payload?.verified) {
+          setFR24QueryStatus(t("query.accessAutoSynced"));
+          await refreshFR24AccessStatus().catch(() => null);
+          return payload;
+        }
+      } catch (_error) {
+        await refreshFR24AccessStatus().catch(() => null);
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 1_200));
+    }
+    if (version === state.fr24VerificationAutoSyncVersion) {
+      setFR24QueryStatus(t("query.accessAutoSyncTimeout"), true);
+    }
+    return null;
+  } finally {
+    if (version === state.fr24VerificationAutoSyncVersion && elements.fr24OpenBrowserButton) {
+      elements.fr24OpenBrowserButton.disabled = false;
+    }
   }
 }
 
@@ -14563,12 +14648,6 @@ function fr24SessionIsConfigured(payload = state.fr24AccessStatus) {
     payload?.cookie_configured
     || payload?.frpl_configured
     || payload?.browser_cookie_detected
-    // A managed browser can often read FR24's public schedule/playback data
-    // without a pre-existing cookie. Let the shared FR24Service try in its
-    // background target first; only an actual challenge should send the user
-    // to the explicitly opened verification page.
-    || (runtime.capabilities.fr24ManagedBrowserSession
-      && payload?.browser_adapter_available)
   );
 }
 
@@ -14675,6 +14754,7 @@ async function saveFR24Access() {
 }
 
 async function clearFR24Access() {
+  state.fr24VerificationAutoSyncVersion += 1;
   state.fr24AccessProbeVersion += 1;
   state.fr24AccessProbeController?.abort();
   state.fr24AccessProbeController = null;
@@ -14698,21 +14778,18 @@ async function searchFR24Flights() {
     if (!state.fr24AccessStatus) {
       await refreshFR24AccessStatus();
     }
-    if (runtime.capabilities.fr24ManagedBrowserSession
-      && !fr24SessionIsConfigured(state.fr24AccessStatus)) {
-      setFR24QueryStatus(t("query.accessRequiredForSearch"), true, requestVersion);
-      return;
-    }
-    const accessProbe = await maybeProbeFR24Access({ announce: true });
-    if (requestVersion !== state.fr24QueryRequestVersion) {
-      return;
-    }
-    if (String(state.fr24AccessStatus?.access_state || "") === "challenge") {
-      setFR24QueryStatus(t("query.accessProbeFailed"), true, requestVersion);
-      return;
-    }
-    if (!await waitForFR24SessionWarmup(requestVersion)) {
-      return;
+    if (fr24SessionIsConfigured(state.fr24AccessStatus)) {
+      await maybeProbeFR24Access({ announce: true });
+      if (requestVersion !== state.fr24QueryRequestVersion) {
+        return;
+      }
+      if (String(state.fr24AccessStatus?.access_state || "") === "challenge") {
+        setFR24QueryStatus(t("query.accessProbeFailed"), true, requestVersion);
+        return;
+      }
+      if (!await waitForFR24SessionWarmup(requestVersion)) {
+        return;
+      }
     }
     setFR24QueryStatus(t("query.loading"), false, requestVersion);
     const payload = await fetchJson(
@@ -14756,11 +14833,6 @@ async function searchFR24ManualHistory() {
   }
   if (!state.fr24AccessStatus) {
     await refreshFR24AccessStatus();
-  }
-  if (runtime.capabilities.fr24ManagedBrowserSession
-    && !fr24SessionIsConfigured(state.fr24AccessStatus)) {
-    setFR24QueryStatus(t("query.accessRequiredForSearch"), true);
-    return;
   }
   const route = optionalQueryRouteInputs();
   const params = new URLSearchParams({ query, limit: "0" });
@@ -15553,10 +15625,13 @@ async function matchFR24FlightTrack(key) {
 }
 
 async function matchCurrentFR24Track() {
-  const route = currentQueryRouteInputs();
   const trackPoints = state.fr24TrackPayload?.track_points || [];
-  if (!route || trackPoints.length < 2 || state.fr24TrackPayload?.planned === true) {
+  if (trackPoints.length < 2 || state.fr24TrackPayload?.planned === true) {
     setFR24QueryStatus(t("query.noFR24Track"), true);
+    return;
+  }
+  const route = currentQueryRouteInputs();
+  if (!route) {
     return;
   }
   const controller = beginRouteOperation(t("track.operation"));
@@ -16723,7 +16798,7 @@ async function runSimulatorSyntheticFR24Track(options = {}) {
 
   const departure = state.currentRouteAirports?.departure || elements.departureInput?.value || "LGAV";
   const arrival = state.currentRouteAirports?.arrival || elements.arrivalInput?.value || "EDDM";
-  renderFR24Flights([{
+  const syntheticFlight = {
     fr24_id: "SIM-LGAV-EDDM-A3802",
     flight: "A3 802",
     callsign: "AEE802",
@@ -16738,7 +16813,12 @@ async function runSimulatorSyntheticFR24Track(options = {}) {
     scheduled_arrival: startTimestamp + durationSeconds + 180,
     actual_arrival: startTimestamp + durationSeconds,
     duration_seconds: durationSeconds,
-  }], { prefix: "simulator-screenshot" });
+  };
+  if (options.verifyPlanSync === true) {
+    elements.departureInput.value = "";
+    elements.arrivalInput.value = "";
+  }
+  renderFR24Flights([syntheticFlight], { prefix: "simulator-screenshot" });
   const flightKey = state.fr24Flights.keys().next().value;
   const drawnCount = drawFR24TrackPoints(trackPoints, {
     fitBounds: options.fitBounds !== false,
@@ -16746,6 +16826,30 @@ async function runSimulatorSyntheticFR24Track(options = {}) {
   });
   if (drawnCount >= 2 && flightKey) {
     setFR24CurrentDrawnCard(flightKey);
+  }
+  let planSync = null;
+  if (options.verifyPlanSync === true) {
+    await syncPlanAirportsFromFR24Flight(syntheticFlight);
+    const synchronizedDeparture = elements.departureInput.value.trim().toUpperCase();
+    const synchronizedArrival = elements.arrivalInput.value.trim().toUpperCase();
+    const trackReady = state.fr24TrackPayload?.planned !== true
+      && (state.fr24TrackPayload?.track_points?.length || 0) >= 2;
+    let matchAccepted = true;
+    if (options.verifyCurrentMatch === true) {
+      await matchCurrentFR24Track();
+      matchAccepted = elements.fr24QueryStatus?.textContent !== t("query.noFR24Track")
+        && Boolean(state.currentRoutePayload?.points?.length);
+    }
+    planSync = {
+      departure: synchronizedDeparture,
+      arrival: synchronizedArrival,
+      trackReady,
+      matchAccepted,
+      passed: synchronizedDeparture === departure
+        && synchronizedArrival === arrival
+        && trackReady
+        && matchAccepted,
+    };
   }
   setFR24QueryStatus(t("query.drawn", { count: drawnCount }));
   await simulatorDebugNextPaint(3);
@@ -16772,10 +16876,12 @@ async function runSimulatorSyntheticFR24Track(options = {}) {
     passed: drawnCount === pointCount
       && chartMetrics.viewBoxWidth === chartMetrics.clientWidth
       && chartMetrics.viewBoxHeight === chartMetrics.clientHeight
-      && Math.abs(chartMetrics.axisScaleRatio - 1) <= 0.02,
+      && Math.abs(chartMetrics.axisScaleRatio - 1) <= 0.02
+      && (planSync?.passed ?? true),
     pointCount: drawnCount,
     totalDistanceNm: Number(totalDistanceNm.toFixed(1)),
     chartMetrics,
+    planSync,
   };
   writeLocalStorageValue("navplannerDebugSyntheticFR24Result", JSON.stringify(result));
   if (options.reportMetrics === true) {

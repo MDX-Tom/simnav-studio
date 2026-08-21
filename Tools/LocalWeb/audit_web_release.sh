@@ -59,6 +59,7 @@ required_files=(
   app/NavPlanner/Core/Runtime/SimNavRuntimeRouter.swift
   app/NavPlanner/Core/FR24/FR24BrowserScripts.swift
   app/LocalWeb/Sources/SimNavLocalWeb/LocalWebFR24BrowserFetch.swift
+  app/LocalWeb/Sources/SimNavLocalWeb/LocalWebFR24WebKitVerification.swift
   app/LocalWeb/Sources/SimNavLocalWeb/LocalWebHTTPServer.swift
   app/LocalWeb/Sources/SimNavLocalWeb/LocalWebRequestProcessor.swift
   app/LocalWeb/Sources/SimNavLocalWeb/NIOHTTPServer.swift
@@ -187,10 +188,17 @@ if manifest.get("http_transports") != {
     raise SystemExit("Web manifest does not pin the platform HTTP transports.")
 if manifest.get("fr24") != {
     "backend": "shared-FR24Service",
-    "adapter": "managed-Chromium-CDP",
+    "adapter": "platform-verification-only",
     "official_api_credential_required": False,
-    "browser_profile": "isolated-and-persistent",
-    "background_requests": True,
+    "verification_transports": {
+        "macos": "app-owned-WebKit",
+        "windows": "isolated-Chromium-CDP",
+        "linux": "isolated-Chromium-CDP",
+    },
+    "browser_profile": "private-platform-session",
+    "background_requests": False,
+    "data_transport": "shared-FR24Service-HTTP",
+    "session_handoff": "automatic-and-close-verification",
     "visible_window_trigger": "explicit-open-verification-only",
     "linux_docker_bridge": "private-compose-gateway",
     "windows_docker_bridge": "ephemeral-authenticated-host-relay",
