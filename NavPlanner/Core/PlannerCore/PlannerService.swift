@@ -18,6 +18,10 @@ final class PlannerService: @unchecked Sendable {
     private var planningCacheDatabaseKey: String?
     private var airwayGraphCache: AirwayGraph?
     private var routeBetweenCache: [RouteBetweenCacheKey: RoutePath] = [:]
+    private var trackMatchCache: [TrackMatchCacheKey: [String: Any]] = [:]
+    private var trackMatchCacheOrder: [TrackMatchCacheKey] = []
+    private let trackMatchPerformanceLock = NSLock()
+    private var lastTrackMatchPerformance: [String: Any] = [:]
     private var navOverlayCacheDatabaseKey: String?
     private var navOverlayCache: [String: [[String: Any]]]?
     private static let localizedAirportAliases: [String: [String]] = [
@@ -918,21 +922,46 @@ final class PlannerService: @unchecked Sendable {
     }
 
     func trackMatchPayload(departure: String, arrival: String, trackPoints: [[String: Any]]) -> [String: Any] {
+        let context = TrackMatchContext()
         let departureToken = departure.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         let arrivalToken = arrival.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let normalizeStartedAt = DispatchTime.now().uptimeNanoseconds
+        let normalizedTrackPoints = normalizeImportedTrackPoints(trackPoints)
+        context.record("normalize", startedAt: normalizeStartedAt)
+        guard normalizedTrackPoints.count >= 2 else {
+            let payload = ["error": "Imported track needs at least two lat/lon points."]
+            publishTrackMatchPerformance(context: context, cacheHit: false, outcome: "invalid_track")
+            return payload
+        }
 
-        return dataStore.read(fallback: ["error": "本地导航数据库不可用。"]) { database in
+        let cacheKey = TrackMatchCacheKey(
+            database: currentDatabaseCacheKey(),
+            departure: departureToken,
+            arrival: arrivalToken,
+            coordinates: normalizedTrackPoints.flatMap { [$0.lat.bitPattern, $0.lon.bitPattern] }
+        )
+        if let cached = cachedTrackMatchPayload(for: cacheKey) {
+            context.increment("response_cache_hit")
+            publishTrackMatchPerformance(context: context, cacheHit: true, outcome: "success")
+            return cached
+        }
+
+        let payload = dataStore.read(fallback: ["error": "本地导航数据库不可用。"]) { database in
             do {
+                // LocalDataStore serializes reads. Rechecking here means simultaneous
+                // identical requests naturally collapse behind the first completed match.
+                if let cached = cachedTrackMatchPayload(for: cacheKey) {
+                    context.increment("response_cache_hit_after_wait")
+                    return cached
+                }
+                let airportLookupStartedAt = DispatchTime.now().uptimeNanoseconds
                 guard let departurePoint = try lookupDepartureArrivalPoint(departureToken, database: database),
                       let arrivalPoint = try lookupDepartureArrivalPoint(arrivalToken, database: database) else {
                     return ["error": "Departure or arrival could not be resolved."]
                 }
+                context.record("airport_lookup", startedAt: airportLookupStartedAt)
 
-                let normalizedTrackPoints = normalizeImportedTrackPoints(trackPoints)
-                guard normalizedTrackPoints.count >= 2 else {
-                    return ["error": "Imported track needs at least two lat/lon points."]
-                }
-
+                let procedureStartedAt = DispatchTime.now().uptimeNanoseconds
                 let procedureMatch = try matchProceduresForTrack(
                     departurePoint: departurePoint,
                     arrivalPoint: arrivalPoint,
@@ -941,16 +970,19 @@ final class PlannerService: @unchecked Sendable {
                     trackPoints: normalizedTrackPoints,
                     database: database
                 )
+                context.record("procedure_matching", startedAt: procedureStartedAt)
                 let airwayTrackPoints = procedureMatch.usesProcedureFirst
                     ? procedureMatch.enrouteTrackPoints
                     : normalizedTrackPoints
                 let matched = try matchTrackPointsToAirways(
                     airwayTrackPoints,
-                    database: database
+                    database: database,
+                    context: context
                 )
                 let matchedRoute: RoutePath
                 let selectedProcedures: [String: Any]
                 let selectedRunways: [String: String]
+                let boundaryStartedAt = DispatchTime.now().uptimeNanoseconds
                 if procedureMatch.usesProcedureFirst {
                     matchedRoute = try applyProcedureBoundaries(
                         matched: matched,
@@ -974,8 +1006,10 @@ final class PlannerService: @unchecked Sendable {
                     selectedProcedures = legacyMatch.selectedProcedures
                     selectedRunways = legacyMatch.selectedRunways
                 }
+                context.record("boundary_apply", startedAt: boundaryStartedAt)
+                let payloadStartedAt = DispatchTime.now().uptimeNanoseconds
                 let points = dedupeRoutePoints([departurePoint] + matchedRoute.points + [arrivalPoint])
-                return [
+                let response: [String: Any] = [
                     "departure": departurePoint,
                     "arrival": arrivalPoint,
                     "legs": matchedRoute.legs,
@@ -992,10 +1026,25 @@ final class PlannerService: @unchecked Sendable {
                         "track_points": normalizedTrackPoints.map(\.dictionary)
                     ]
                 ]
+                context.record("payload", startedAt: payloadStartedAt)
+                cacheTrackMatchPayload(response, for: cacheKey)
+                return response
             } catch {
                 return ["error": error.localizedDescription]
             }
         }
+        publishTrackMatchPerformance(
+            context: context,
+            cacheHit: (context.counters["response_cache_hit_after_wait"] ?? 0) > 0,
+            outcome: payload["error"] == nil ? "success" : "error"
+        )
+        return payload
+    }
+
+    func lastTrackMatchPerformancePayload() -> [String: Any] {
+        trackMatchPerformanceLock.lock()
+        defer { trackMatchPerformanceLock.unlock() }
+        return lastTrackMatchPerformance
     }
 
     private func routeErrorPayload(_ message: String) -> [String: Any] {
@@ -1073,6 +1122,51 @@ final class PlannerService: @unchecked Sendable {
 
         var dictionary: [String: Any] {
             ["lat": lat, "lon": lon]
+        }
+    }
+
+    private struct TrackMatchCacheKey: Hashable {
+        let database: String
+        let departure: String
+        let arrival: String
+        let coordinates: [UInt64]
+    }
+
+    private struct TrackCoordinateKey: Hashable {
+        let latitude: UInt64
+        let longitude: UInt64
+
+        init(lat: Double, lon: Double) {
+            latitude = lat.bitPattern
+            longitude = lon.bitPattern
+        }
+    }
+
+    private struct TrackGraphPathKey: Hashable {
+        let start: String
+        let end: String
+    }
+
+    private enum TrackGraphPathMemoValue {
+        case path(nodes: [String], airways: [String])
+        case missing
+    }
+
+    private final class TrackMatchContext {
+        let startedAt = DispatchTime.now().uptimeNanoseconds
+        var phases: [String: Double] = [:]
+        var nearestNodes: [TrackCoordinateKey: [(key: String, distanceNM: Double)]] = [:]
+        var shortestPaths: [TrackGraphPathKey: TrackGraphPathMemoValue] = [:]
+        var legPoints: [Data: [[String: Any]]] = [:]
+        var counters: [String: Int] = [:]
+
+        func record(_ name: String, startedAt: UInt64) {
+            let elapsed = Double(DispatchTime.now().uptimeNanoseconds - startedAt) / 1_000_000
+            phases[name, default: 0] += elapsed
+        }
+
+        func increment(_ name: String) {
+            counters[name, default: 0] += 1
         }
     }
 
@@ -2968,13 +3062,59 @@ final class PlannerService: @unchecked Sendable {
     }
 
     private func currentDatabaseCacheKey() -> String {
-        dataStore.databaseURL?.path ?? "__navplanner_database__"
+        guard let databaseURL = dataStore.databaseURL else {
+            return "__navplanner_database__"
+        }
+        let values = try? databaseURL.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+        let modified = values?.contentModificationDate?.timeIntervalSince1970 ?? 0
+        return "\(databaseURL.path)|\(values?.fileSize ?? 0)|\(modified)"
+    }
+
+    private func cachedTrackMatchPayload(for key: TrackMatchCacheKey) -> [String: Any]? {
+        planningCacheLock.lock()
+        defer { planningCacheLock.unlock() }
+        preparePlanningCacheLocked(databaseKey: key.database)
+        return trackMatchCache[key]
+    }
+
+    private func cacheTrackMatchPayload(_ payload: [String: Any], for key: TrackMatchCacheKey) {
+        planningCacheLock.lock()
+        defer { planningCacheLock.unlock() }
+        preparePlanningCacheLocked(databaseKey: key.database)
+        trackMatchCache[key] = payload
+        trackMatchCacheOrder.removeAll { $0 == key }
+        trackMatchCacheOrder.append(key)
+        while trackMatchCacheOrder.count > 8 {
+            trackMatchCache.removeValue(forKey: trackMatchCacheOrder.removeFirst())
+        }
+    }
+
+    private func publishTrackMatchPerformance(
+        context: TrackMatchContext,
+        cacheHit: Bool,
+        outcome: String
+    ) {
+        let totalMilliseconds = Double(
+            DispatchTime.now().uptimeNanoseconds - context.startedAt
+        ) / 1_000_000
+        let payload: [String: Any] = [
+            "total_ms": totalMilliseconds,
+            "cache_hit": cacheHit,
+            "outcome": outcome,
+            "phases_ms": context.phases,
+            "counters": context.counters
+        ]
+        trackMatchPerformanceLock.lock()
+        lastTrackMatchPerformance = payload
+        trackMatchPerformanceLock.unlock()
     }
 
     private func resetPlanningCachesLocked(databaseKey: String?) {
         planningCacheDatabaseKey = databaseKey
         airwayGraphCache = nil
         routeBetweenCache.removeAll()
+        trackMatchCache.removeAll()
+        trackMatchCacheOrder.removeAll()
         navOverlayCacheDatabaseKey = databaseKey
         navOverlayCache = nil
     }
@@ -3594,7 +3734,8 @@ final class PlannerService: @unchecked Sendable {
         lon: Double,
         allowedNodes: Set<String>,
         graph: AirwayGraph,
-        limit: Int
+        limit: Int,
+        maximumDistanceNM: Double? = nil
     ) -> [(key: String, distanceNM: Double)] {
         guard limit > 0 else { return [] }
 
@@ -3608,6 +3749,13 @@ final class PlannerService: @unchecked Sendable {
                 graph: graph,
                 limit: limit
             )
+            if let maximumDistanceNM {
+                // nearbyGraphNodeKeys spans at least two degrees in latitude and
+                // the longitude equivalent. That encloses the complete 80 NM
+                // snap radius, so a whole-graph scan cannot add an acceptable
+                // candidate and would only burn CPU over every airway node.
+                return nearby.filter { $0.distanceNM <= maximumDistanceNM }
+            }
             if nearby.count == limit,
                (nearby.last?.distanceNM ?? .greatestFiniteMagnitude) <= 80.0 {
                 return nearby
@@ -3911,27 +4059,43 @@ final class PlannerService: @unchecked Sendable {
 
     private func matchTrackPointsToAirways(
         _ trackPoints: [TrackPoint],
-        database: SQLiteDatabase
+        database: SQLiteDatabase,
+        context: TrackMatchContext
     ) throws -> RoutePath {
+        let graphStartedAt = DispatchTime.now().uptimeNanoseconds
         let graph = try buildAirwayGraph(database: database)
+        context.record("graph_build_or_hit", startedAt: graphStartedAt)
         let allNodes = Set(graph.nodes.keys)
         let maxSnapNM = 80.0
         var snappedKeys: [String] = []
 
+        let snapStartedAt = DispatchTime.now().uptimeNanoseconds
         for trackPoint in trackPoints {
-            guard let candidate = nearestGraphNodes(
-                lat: trackPoint.lat,
-                lon: trackPoint.lon,
-                allowedNodes: allNodes,
-                graph: graph,
-                limit: 1
-            ).first, candidate.distanceNM <= maxSnapNM else {
+            let coordinateKey = TrackCoordinateKey(lat: trackPoint.lat, lon: trackPoint.lon)
+            let candidates: [(key: String, distanceNM: Double)]
+            if let cached = context.nearestNodes[coordinateKey] {
+                context.increment("nearest_node_memo_hit")
+                candidates = cached
+            } else {
+                context.increment("nearest_node_memo_miss")
+                candidates = nearestGraphNodes(
+                    lat: trackPoint.lat,
+                    lon: trackPoint.lon,
+                    allowedNodes: allNodes,
+                    graph: graph,
+                    limit: 1,
+                    maximumDistanceNM: maxSnapNM
+                )
+                context.nearestNodes[coordinateKey] = candidates
+            }
+            guard let candidate = candidates.first, candidate.distanceNM <= maxSnapNM else {
                 continue
             }
             if snappedKeys.last != candidate.key {
                 snappedKeys.append(candidate.key)
             }
         }
+        context.record("snap", startedAt: snapStartedAt)
 
         guard snappedKeys.count >= 2 else {
             throw plannerError("导入轨迹点无法匹配到足够的 airway fix。")
@@ -3941,6 +4105,7 @@ final class PlannerService: @unchecked Sendable {
         let maxDetourRatio = 1.8
         let maxDetourExtraNM = 80.0
 
+        let shortestPathStartedAt = DispatchTime.now().uptimeNanoseconds
         for index in 0..<(snappedKeys.count - 1) {
             let startKey = snappedKeys[index]
             let endKey = snappedKeys[index + 1]
@@ -3949,7 +4114,24 @@ final class PlannerService: @unchecked Sendable {
                 continue
             }
             let directDistance = routeDistanceNM(startPoint, endPoint)
-            if let segment = shortestGraphPath(startKey: startKey, endKey: endKey, graph: graph) {
+            let pathKey = TrackGraphPathKey(start: startKey, end: endKey)
+            let segment: (nodes: [String], airways: [String])?
+            if let memoized = context.shortestPaths[pathKey] {
+                context.increment("shortest_path_memo_hit")
+                switch memoized {
+                case let .path(nodes, airways): segment = (nodes, airways)
+                case .missing: segment = nil
+                }
+            } else {
+                context.increment("shortest_path_memo_miss")
+                segment = shortestGraphPath(startKey: startKey, endKey: endKey, graph: graph)
+                if let segment {
+                    context.shortestPaths[pathKey] = .path(nodes: segment.nodes, airways: segment.airways)
+                } else {
+                    context.shortestPaths[pathKey] = .missing
+                }
+            }
+            if let segment {
                 let segmentPoints = segment.nodes.compactMap { graph.nodes[$0] }
                 let airwayDistance = pathLengthNM(segmentPoints)
                 let isDetour = directDistance > 1.0 && (
@@ -3970,25 +4152,38 @@ final class PlannerService: @unchecked Sendable {
             }
             appendMatchedLeg(directLeg(from: startPoint, to: endPoint), to: &legs)
         }
+        context.record("shortest_path", startedAt: shortestPathStartedAt)
 
+        let simplifyStartedAt = DispatchTime.now().uptimeNanoseconds
         let simplifiedLegs = try simplifyMatchedTrackLegs(
             mergeRepeatedAirwayLegs(legs),
             trackPoints: trackPoints,
             graph: graph,
-            database: database
+            database: database,
+            context: context
         )
+        context.record("simplify", startedAt: simplifyStartedAt)
+        let smoothStartedAt = DispatchTime.now().uptimeNanoseconds
         let smoothedLegs = try smoothMatchedTrackZigzagLegs(
             simplifiedLegs,
             trackPoints: trackPoints,
-            database: database
+            database: database,
+            context: context
         )
+        context.record("smooth", startedAt: smoothStartedAt)
         let mergedLegs = mergeRepeatedAirwayLegs(smoothedLegs).filter {
             navString($0["entry"]) != navString($0["exit"])
         }
         guard !mergedLegs.isEmpty else {
             throw plannerError("No legal airway path could be built from the imported trajectory.")
         }
-        let points = try pointsFromLegs(mergedLegs, database: database)
+        let finalPointsStartedAt = DispatchTime.now().uptimeNanoseconds
+        let points = try memoizedTrackMatchPointsFromLegs(
+            mergedLegs,
+            database: database,
+            context: context
+        )
+        context.record("leg_points", startedAt: finalPointsStartedAt)
         guard points.count >= 2 else {
             throw plannerError("No drawable route points could be built from the imported trajectory.")
         }
@@ -4003,7 +4198,8 @@ final class PlannerService: @unchecked Sendable {
         _ legs: [[String: Any]],
         trackPoints: [TrackPoint],
         graph: AirwayGraph,
-        database: SQLiteDatabase
+        database: SQLiteDatabase,
+        context: TrackMatchContext
     ) throws -> [[String: Any]] {
         var simplified = legs.filter { navString($0["entry"]) != navString($0["exit"]) }
         var changed = true
@@ -4032,8 +4228,16 @@ final class PlannerService: @unchecked Sendable {
                             continue
                         }
 
-                        let currentPoints = try pointsFromLegs(Array(simplified[index...endIndex]), database: database)
-                        let candidatePoints = try pointsFromLegs([candidate], database: database)
+                        let currentPoints = try memoizedTrackMatchPointsFromLegs(
+                            Array(simplified[index...endIndex]),
+                            database: database,
+                            context: context
+                        )
+                        let candidatePoints = try memoizedTrackMatchPointsFromLegs(
+                            [candidate],
+                            database: database,
+                            context: context
+                        )
                         guard currentPoints.count >= 2,
                               candidatePoints.count >= 2 else {
                             continue
@@ -4071,7 +4275,8 @@ final class PlannerService: @unchecked Sendable {
     private func smoothMatchedTrackZigzagLegs(
         _ legs: [[String: Any]],
         trackPoints: [TrackPoint],
-        database: SQLiteDatabase
+        database: SQLiteDatabase,
+        context: TrackMatchContext
     ) throws -> [[String: Any]] {
         guard !trackPoints.isEmpty else { return legs }
         var smoothed = legs
@@ -4097,7 +4302,11 @@ final class PlannerService: @unchecked Sendable {
                     if !window.contains(where: { navString($0["type"]) == "direct" }) {
                         continue
                     }
-                    let currentPoints = try pointsFromLegs(window, database: database)
+                    let currentPoints = try memoizedTrackMatchPointsFromLegs(
+                        window,
+                        database: database,
+                        context: context
+                    )
                     if currentPoints.count < 3 {
                         continue
                     }
@@ -4396,6 +4605,22 @@ final class PlannerService: @unchecked Sendable {
             }
         }
         legs.append(leg)
+    }
+
+    private func memoizedTrackMatchPointsFromLegs(
+        _ legs: [[String: Any]],
+        database: SQLiteDatabase,
+        context: TrackMatchContext
+    ) throws -> [[String: Any]] {
+        let key = try JSONSerialization.data(withJSONObject: legs, options: [.sortedKeys])
+        if let cached = context.legPoints[key] {
+            context.increment("leg_points_memo_hit")
+            return cached
+        }
+        context.increment("leg_points_memo_miss")
+        let points = try pointsFromLegs(legs, database: database)
+        context.legPoints[key] = points
+        return points
     }
 
     private func pointsFromLegs(_ legs: [[String: Any]], database: SQLiteDatabase) throws -> [[String: Any]] {

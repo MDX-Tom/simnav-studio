@@ -614,11 +614,20 @@ final class PackageBoundaryTests: XCTestCase {
 private final class ManagedBrowserFR24Fixture: FR24BrowserFetching, FR24BrowserSessionManaging {
     static let flightID = "40fc18c8"
 
-    private(set) var requestedPaths: [String] = []
+    private let lock = NSLock()
+    private var requestedPathsStorage: [String] = []
     private var opened = false
 
+    var requestedPaths: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return requestedPathsStorage
+    }
+
     func openVerificationPage() throws -> [String: Any] {
+        lock.lock()
         opened = true
+        lock.unlock()
         return [
             "opened": true,
             "access_method": "managed_browser",
@@ -628,21 +637,28 @@ private final class ManagedBrowserFR24Fixture: FR24BrowserFetching, FR24BrowserS
     }
 
     func browserSessionStatusPayload() -> [String: Any] {
-        [
+        lock.lock()
+        let isOpened = opened
+        lock.unlock()
+        return [
             "available": true,
-            "running": opened,
+            "running": isOpened,
             "isolated_profile": true,
             "browser": "Fixture Chromium",
-            "verification_opened": opened
+            "verification_opened": isOpened
         ]
     }
 
     func clearBrowserSession() throws {
+        lock.lock()
         opened = false
+        lock.unlock()
     }
 
     func performJSONRequest(path: String, params: [(String, String)]) throws -> [String: Any] {
-        requestedPaths.append(path)
+        lock.lock()
+        requestedPathsStorage.append(path)
+        lock.unlock()
         if path == "/common/v1/airport.json" {
             if params.contains(where: { $0.0 == "plugin-setting[schedule][timestamp]" }) {
                 throw NSError(

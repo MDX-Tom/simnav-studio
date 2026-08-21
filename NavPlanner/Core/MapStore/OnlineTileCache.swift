@@ -29,13 +29,13 @@ final class SimNavOnlineTileCache: @unchecked Sendable {
     }
 
     enum RequestPriority: Int {
-        case visible = 1
-        case preview = 2
+        case preview = 1
+        case visible = 2
 
         var operationQueuePriority: Operation.QueuePriority {
             switch self {
-            case .visible: .high
-            case .preview: .veryHigh
+            case .visible: .veryHigh
+            case .preview: .high
             }
         }
     }
@@ -119,13 +119,17 @@ final class SimNavOnlineTileCache: @unchecked Sendable {
     private static let downloadWorkers = 8
     private static let downloadRetries = 1
     private static let retryDelay: TimeInterval = 0.35
-    private static let maxPendingDownloads = 512
+    // Keep rapid pan/zoom bursts bounded below the UI regression threshold.
+    // Overflow cancellation always prefers older/lower-priority work while the
+    // current visible generation remains the shared cache's first concern.
+    private static let maxPendingDownloads = 120
     private static let maxDownloadTasksPerSession = 48
 
     private let fileManager: FileManager
     private let rootDirectory: URL
     private let previousRootDirectories: [URL]
     private var session: URLSession
+    private let downloadSessionConfiguration: URLSessionConfiguration
     private let sessionLock = NSLock()
     private var sessionTaskCount = 0
     private var sessionRotationCount = 0
@@ -222,7 +226,11 @@ final class SimNavOnlineTileCache: @unchecked Sendable {
         )
     ]
 
-    init(fileManager: FileManager = .default, rootDirectory: URL? = nil) {
+    init(
+        fileManager: FileManager = .default,
+        rootDirectory: URL? = nil,
+        sessionConfiguration: URLSessionConfiguration? = nil
+    ) {
         self.fileManager = fileManager
         if let rootDirectory {
             self.rootDirectory = rootDirectory.standardizedFileURL
@@ -237,7 +245,9 @@ final class SimNavOnlineTileCache: @unchecked Sendable {
                 navRoot.appendingPathComponent("MapCache", isDirectory: true)
             ]
         }
-        self.session = URLSession(configuration: Self.sessionConfiguration())
+        let configuration = sessionConfiguration ?? Self.sessionConfiguration()
+        self.downloadSessionConfiguration = configuration
+        self.session = URLSession(configuration: configuration)
 
         let queue = OperationQueue()
         queue.name = "com.mdxtom.simnavstudio.online-map-cache"
@@ -583,7 +593,7 @@ final class SimNavOnlineTileCache: @unchecked Sendable {
         let task = sessionLock.simNavWithLock { () -> URLSessionDataTask in
             if sessionTaskCount >= Self.maxDownloadTasksPerSession {
                 previousSession = session
-                session = URLSession(configuration: Self.sessionConfiguration())
+                session = URLSession(configuration: downloadSessionConfiguration)
                 sessionTaskCount = 0
                 sessionRotationCount += 1
             }

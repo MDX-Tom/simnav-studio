@@ -61,7 +61,8 @@ let package = Package(
         .testTarget(
             name: "SimNavCoreTests",
             dependencies: ["SimNavCore"],
-            path: "LocalWeb/Tests/SimNavCoreTests"
+            path: "LocalWeb/Tests/SimNavCoreTests",
+            resources: [.copy("Fixtures")]
         ),
         .testTarget(
             name: "SimNavLocalWebTests",

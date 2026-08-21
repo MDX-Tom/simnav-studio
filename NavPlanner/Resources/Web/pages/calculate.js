@@ -92,6 +92,7 @@ const CALC_ROUTE_SIGNATURE_LIMIT = 120;
 const CALC_TERRAIN_TILE_ZOOM = 10;
 const CALC_TERRAIN_FALLBACK_MAX_FT = 16800;
 const CALC_TERRAIN_MAX_RETRIES = 8;
+const CALC_TERRAIN_MAX_CONCURRENT = 4;
 const calculateTerrainRetryCount = new Map();
 const calculateTerrainRetryAfter = new Map();
 const CALC_WEATHER_LEVELS = Object.freeze([
@@ -142,6 +143,11 @@ export function createCalculatePage(context) {
     apiResourceUrl,
   } = context;
   let calculateSliderFrame = null;
+  let calculateTerrainActiveCount = 0;
+  let calculateTerrainJobSequence = 0;
+  const calculateTerrainQueue = [];
+  const calculateTerrainJobs = new Map();
+  const calculateTerrainRetryTimers = new Map();
 
   function localizedCatalogLabel(label) {
     if (!label) {
@@ -794,61 +800,195 @@ export function createCalculatePage(context) {
     return ctx.getImageData(0, 0, 256, 256).data;
   }
 
-  function queueTerrainTile(tile) {
+  function syncTerrainSchedulerMetrics() {
+    state.calculateTerrainActiveCount = calculateTerrainActiveCount;
+    state.calculateTerrainQueuedCount = calculateTerrainQueue.length;
+    state.calculateTerrainPeakActiveCount = Math.max(
+      state.calculateTerrainPeakActiveCount || 0,
+      calculateTerrainActiveCount,
+    );
+    state.calculateTerrainPeakQueuedCount = Math.max(
+      state.calculateTerrainPeakQueuedCount || 0,
+      calculateTerrainQueue.length,
+    );
+  }
+
+  function terrainRetryHeaderMilliseconds(response) {
+    const explicit = Number(response.headers.get("X-Map-Retry-After-Ms"));
+    if (Number.isFinite(explicit) && explicit >= 0) {
+      return explicit;
+    }
+    const seconds = Number(response.headers.get("Retry-After"));
+    return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : 0;
+  }
+
+  function terrainRetryJitterMilliseconds(key, attempt) {
+    const hash = Array.from(`${key}:${attempt}`).reduce(
+      (value, character) => ((value * 33) ^ character.charCodeAt(0)) >>> 0,
+      5381,
+    );
+    return 25 + (hash % 91);
+  }
+
+  function cancelCalculateTerrainGeneration() {
+    state.calculateTerrainGeneration = (state.calculateTerrainGeneration || 0) + 1;
+    calculateTerrainQueue.splice(0).forEach((job) => {
+      state.calculateTerrainPendingTiles.delete(job.key);
+      calculateTerrainJobs.delete(job.key);
+      state.calculateTerrainCancelledCount += 1;
+    });
+    calculateTerrainJobs.forEach((job) => {
+      if (job.controller) {
+        job.controller.abort();
+        state.calculateTerrainCancelledCount += 1;
+      }
+      job.retryResolve?.();
+      state.calculateTerrainPendingTiles.delete(job.key);
+    });
+    calculateTerrainJobs.clear();
+    calculateTerrainRetryTimers.forEach((timer, key) => {
+      window.clearTimeout(timer);
+      calculateTerrainRetryCount.delete(key);
+      calculateTerrainRetryAfter.delete(key);
+      state.calculateTerrainCancelledCount += 1;
+    });
+    calculateTerrainRetryTimers.clear();
+    syncTerrainSchedulerMetrics();
+  }
+
+  function waitForTerrainRetry(job, delay) {
+    const cooldown = Math.max(0, delay);
+    calculateTerrainRetryAfter.set(job.key, Date.now() + cooldown);
+    return new Promise((resolve) => {
+      const finish = () => {
+        if (job.retryResolve !== finish) {
+          return;
+        }
+        job.retryResolve = null;
+        window.clearTimeout(timer);
+        calculateTerrainRetryTimers.delete(job.key);
+        calculateTerrainRetryAfter.delete(job.key);
+        resolve();
+      };
+      job.retryResolve = finish;
+      const timer = window.setTimeout(finish, cooldown);
+      calculateTerrainRetryTimers.set(job.key, timer);
+    });
+  }
+
+  async function runTerrainJob(job) {
+    calculateTerrainActiveCount += 1;
+    syncTerrainSchedulerMetrics();
+    try {
+      while (job.generation === state.calculateTerrainGeneration) {
+        job.controller = new AbortController();
+        try {
+          const url = apiResourceUrl(`/api/terrain/terrarium/${job.tile.zoom}/${job.tile.x}/${job.tile.y}.png`);
+          const response = await fetch(url, { signal: job.controller.signal });
+          if (!response.ok) {
+            throw new Error(`terrain ${response.status}`);
+          }
+          const cacheState = String(response.headers.get("X-Map-Cache") || "HIT").toUpperCase();
+          if (cacheState !== "HIT") {
+            const error = new Error(`terrain cache ${cacheState}`);
+            error.terrainPending = cacheState === "QUEUED" || cacheState === "PENDING" || cacheState === "FALLBACK";
+            error.terrainRetryAfterMs = terrainRetryHeaderMilliseconds(response);
+            throw error;
+          }
+          const data = await decodeTerrainTile(await response.blob());
+          if (!data?.length || (data[3] === 0 && data[(128 * 256 + 128) * 4 + 3] === 0)) {
+            const error = new Error("terrain placeholder tile");
+            error.terrainPending = true;
+            throw error;
+          }
+          if (job.generation !== state.calculateTerrainGeneration) {
+            return;
+          }
+          state.calculateTerrainTileCache.set(job.key, data);
+          calculateTerrainRetryCount.delete(job.key);
+          calculateTerrainRetryAfter.delete(job.key);
+          scheduleCalculateRender(40);
+          return;
+        } catch (error) {
+          if (error?.name === "AbortError" || job.generation !== state.calculateTerrainGeneration) {
+            return;
+          }
+          const attempt = (calculateTerrainRetryCount.get(job.key) || 0) + 1;
+          calculateTerrainRetryCount.set(job.key, attempt);
+          const pending = Boolean(error?.terrainPending);
+          const serverDelay = Number(error?.terrainRetryAfterMs) || 0;
+          const baseDelay = pending
+            ? clampNumber(280 + attempt * 180, 350, 1800)
+            : clampNumber(1800 * attempt, 2500, 12000);
+          const delay = Math.max(serverDelay, baseDelay)
+            + terrainRetryJitterMilliseconds(job.key, attempt);
+          if (attempt > CALC_TERRAIN_MAX_RETRIES) {
+            calculateTerrainRetryAfter.set(job.key, Date.now() + 5 * 60 * 1000);
+            return;
+          }
+          await waitForTerrainRetry(job, delay);
+        }
+      }
+    } finally {
+      calculateTerrainActiveCount = Math.max(0, calculateTerrainActiveCount - 1);
+      if (calculateTerrainJobs.get(job.key) === job) {
+        calculateTerrainJobs.delete(job.key);
+        state.calculateTerrainPendingTiles.delete(job.key);
+      }
+      syncTerrainSchedulerMetrics();
+      drainTerrainQueue();
+    }
+  }
+
+  function drainTerrainQueue() {
+    calculateTerrainQueue.sort((left, right) => (
+      left.priority === right.priority
+        ? left.sequence - right.sequence
+        : left.priority - right.priority
+    ));
+    while (calculateTerrainActiveCount < CALC_TERRAIN_MAX_CONCURRENT && calculateTerrainQueue.length) {
+      const job = calculateTerrainQueue.shift();
+      if (job.generation !== state.calculateTerrainGeneration) {
+        calculateTerrainJobs.delete(job.key);
+        state.calculateTerrainPendingTiles.delete(job.key);
+        state.calculateTerrainCancelledCount += 1;
+        continue;
+      }
+      runTerrainJob(job);
+    }
+    syncTerrainSchedulerMetrics();
+  }
+
+  function queueTerrainTile(tile, priority = 1) {
     const key = `${tile.zoom}/${tile.x}/${tile.y}`;
     const retryAfter = calculateTerrainRetryAfter.get(key) || 0;
     if (state.calculateTerrainTileCache.has(key)
-      || state.calculateTerrainPendingTiles.has(key)
       || Date.now() < retryAfter
+      || calculateTerrainRetryTimers.has(key)
       || !apiResourceUrl) {
       return;
     }
+    const existing = calculateTerrainJobs.get(key);
+    if (existing) {
+      existing.priority = Math.min(existing.priority, priority);
+      drainTerrainQueue();
+      return;
+    }
+    calculateTerrainJobSequence += 1;
+    const job = {
+      key,
+      tile,
+      priority,
+      sequence: calculateTerrainJobSequence,
+      generation: state.calculateTerrainGeneration,
+      controller: null,
+      retryResolve: null,
+    };
+    calculateTerrainJobs.set(key, job);
     state.calculateTerrainPendingTiles.add(key);
-    const url = apiResourceUrl(`/api/terrain/terrarium/${tile.zoom}/${tile.x}/${tile.y}.png`);
-    fetch(url)
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`terrain ${response.status}`);
-        }
-        const cacheState = String(response.headers.get("X-Map-Cache") || "HIT").toUpperCase();
-        if (cacheState !== "HIT") {
-          const error = new Error(`terrain cache ${cacheState}`);
-          error.terrainPending = cacheState === "QUEUED" || cacheState === "PENDING";
-          throw error;
-        }
-        return response.blob();
-      })
-      .then(decodeTerrainTile)
-      .then((data) => {
-        if (!data?.length || (data[3] === 0 && data[(128 * 256 + 128) * 4 + 3] === 0)) {
-          const error = new Error("terrain placeholder tile");
-          error.terrainPending = true;
-          throw error;
-        }
-        state.calculateTerrainTileCache.set(key, data);
-        calculateTerrainRetryCount.delete(key);
-        calculateTerrainRetryAfter.delete(key);
-        scheduleCalculateRender(40);
-      })
-      .catch((error) => {
-        const attempt = (calculateTerrainRetryCount.get(key) || 0) + 1;
-        calculateTerrainRetryCount.set(key, attempt);
-        const pending = Boolean(error?.terrainPending);
-        const delay = pending
-          ? clampNumber(280 + attempt * 180, 350, 1800)
-          : clampNumber(1800 * attempt, 2500, 12000);
-        const cooldown = attempt <= CALC_TERRAIN_MAX_RETRIES ? delay : 5 * 60 * 1000;
-        calculateTerrainRetryAfter.set(key, Date.now() + cooldown);
-        if (attempt <= CALC_TERRAIN_MAX_RETRIES) {
-          window.setTimeout(() => {
-            calculateTerrainRetryAfter.delete(key);
-            queueTerrainTile(tile);
-          }, delay);
-        }
-      })
-      .finally(() => {
-        state.calculateTerrainPendingTiles.delete(key);
-      });
+    calculateTerrainQueue.push(job);
+    syncTerrainSchedulerMetrics();
+    drainTerrainQueue();
   }
 
   function terrainSampleForPoint(point, totalDistanceNm, distanceNm) {
@@ -866,7 +1006,14 @@ export function createCalculatePage(context) {
       state.calculateTerrainCache.set(key, normalized);
       return { elevationFt: normalized, source: "dem" };
     }
-    queueTerrainTile(tile);
+    const routeRatio = totalDistanceNm > 0 ? distanceNm / totalDistanceNm : 0;
+    const focusDistance = Number(state.calculateProfileFocusNm);
+    const priority = routeRatio <= 0.12
+      || routeRatio >= 0.88
+      || (Number.isFinite(focusDistance) && Math.abs(distanceNm - focusDistance) <= 80)
+      ? 0
+      : 1;
+    queueTerrainTile(tile, priority);
     const explicit = explicitTerrainFt(point);
     if (Number.isFinite(explicit)) {
       return { elevationFt: explicit, source: "navdata" };
@@ -884,6 +1031,10 @@ export function createCalculatePage(context) {
       }))
       .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
     if (routePoints.length < 2) {
+      if (state.calculateRouteSignature) {
+        state.calculateRouteSignature = "";
+        cancelCalculateTerrainGeneration();
+      }
       return null;
     }
     const signature = calculateRouteSignature(routePoints);
@@ -891,6 +1042,7 @@ export function createCalculatePage(context) {
       state.calculateAltitudeOverrides.clear();
       state.calculateRouteSignature = signature;
       state.calculateProfileFocusNm = null;
+      cancelCalculateTerrainGeneration();
     }
     const segments = [];
     const pointDistances = new Array(routePoints.length).fill(null);
@@ -1066,7 +1218,7 @@ export function createCalculatePage(context) {
     return bestIndex;
   }
 
-  function normalizeWeatherPayload(payload, requestSamples, source, updatedHeader) {
+  function normalizeWeatherPayload(payload, requestSamples, source, updatedHeader, cacheState, signature) {
     const payloads = Array.isArray(payload) ? payload : [payload];
     const points = payloads.map((item, index) => {
       const hourly = item?.hourly || {};
@@ -1123,12 +1275,14 @@ export function createCalculatePage(context) {
       source,
       model: CALC_WEATHER_MODELS[source] || CALC_WEATHER_MODELS[CALCULATE_DEFAULTS.weatherSource],
       updatedAt: updatedHeader || new Date().toUTCString(),
+      cacheState: cacheState || "MISS",
+      signature,
       weatherTime: points.find((point) => point.weatherTime)?.weatherTime || "",
       points,
     };
   }
 
-  async function requestCalculateOnlineWeather(route, signature) {
+  async function requestCalculateOnlineWeather(route, signature, controller) {
     const source = CALC_WEATHER_SOURCE_KEYS.has(state.calculateWeatherSource)
       ? state.calculateWeatherSource
       : CALCULATE_DEFAULTS.weatherSource;
@@ -1166,25 +1320,35 @@ export function createCalculatePage(context) {
     state.calculateOnlineWeatherPending = true;
     state.calculateOnlineWeatherError = "";
     try {
-      const response = await fetch(apiResourceUrl(`/api/weather/open-meteo?${params.toString()}`));
+      const response = await fetch(apiResourceUrl(`/api/weather/open-meteo?${params.toString()}`), {
+        signal: controller.signal,
+      });
       const updatedHeader = response.headers.get("X-Weather-Updated") || response.headers.get("Date") || "";
+      const cacheState = response.headers.get("X-Weather-Cache") || "MISS";
       if (!response.ok) {
         throw new Error(`weather ${response.status}`);
       }
       const payload = await response.json();
-      const normalized = normalizeWeatherPayload(payload, requestSamples, source, updatedHeader);
-      if (state.calculateOnlineWeatherSignature === signature && normalized.points.length) {
+      const normalized = normalizeWeatherPayload(payload, requestSamples, source, updatedHeader, cacheState, signature);
+      if (state.calculateOnlineWeatherSignature === signature
+          && state.calculateOnlineWeatherController === controller
+          && normalized.points.length) {
         state.calculateOnlineWeather = normalized;
         state.calculateOnlineWeatherError = "";
       }
     } catch (error) {
-      if (state.calculateOnlineWeatherSignature === signature) {
-        state.calculateOnlineWeather = null;
+      if (error?.name === "AbortError") {
+        return;
+      }
+      if (state.calculateOnlineWeatherSignature === signature
+          && state.calculateOnlineWeatherController === controller) {
         state.calculateOnlineWeatherError = error?.message || "weather request failed";
       }
     } finally {
-      if (state.calculateOnlineWeatherSignature === signature) {
+      if (state.calculateOnlineWeatherSignature === signature
+          && state.calculateOnlineWeatherController === controller) {
         state.calculateOnlineWeatherPending = false;
+        state.calculateOnlineWeatherController = null;
       }
       scheduleCalculateRender(40);
     }
@@ -1195,10 +1359,13 @@ export function createCalculatePage(context) {
     if (state.calculateOnlineWeatherSignature === signature) {
       return;
     }
+    state.calculateOnlineWeatherController?.abort();
+    const controller = new AbortController();
     state.calculateOnlineWeatherSignature = signature;
-    state.calculateOnlineWeather = null;
+    state.calculateOnlineWeatherController = controller;
+    state.calculateOnlineWeatherPending = true;
     state.calculateOnlineWeatherError = "";
-    requestCalculateOnlineWeather(route, signature);
+    requestCalculateOnlineWeather(route, signature, controller);
   }
 
   function onlineWeatherPointForDistance(distanceNm) {
@@ -2023,7 +2190,7 @@ export function createCalculatePage(context) {
       x: xForDistance(sample.distanceNm),
       y: yForAltitude(sample.altitudeFt),
     })), "y");
-    const waitingForOnlineWeather = state.calculateOnlineWeatherPending && !profile.weatherOnline;
+    const waitingForOnlineWeather = state.calculateOnlineWeatherPending;
     const cruiseSamples = profile.samples.filter((sample) => sample.phase === "cruise");
     const avgCruiseFl = Math.round((cruiseSamples.reduce((sum, sample) => sum + sample.altitudeFt, 0) / Math.max(1, cruiseSamples.length)) / 100);
 
@@ -2543,7 +2710,7 @@ export function createCalculatePage(context) {
     }
     const target = sample || profile.samples[Math.floor(profile.samples.length / 2)];
     if (elements.calcWeatherReadout) {
-      if (state.calculateOnlineWeatherPending && !profile.weatherOnline) {
+      if (state.calculateOnlineWeatherPending) {
         elements.calcWeatherReadout.textContent = t("calculate.weatherReadoutPending");
       } else {
         elements.calcWeatherReadout.textContent = t("calculate.weatherReadout", {
@@ -2605,7 +2772,7 @@ export function createCalculatePage(context) {
       return;
     }
     if (elements.calcStatusText) {
-      const weatherMode = state.calculateOnlineWeatherPending && !profile.weatherOnline
+      const weatherMode = state.calculateOnlineWeatherPending
         ? t("calculate.weatherModePending")
         : profile.weatherOnline
         ? t("calculate.weatherModeOnline", {

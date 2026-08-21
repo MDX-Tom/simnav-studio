@@ -878,13 +878,16 @@ const state = {
   airwayLegChips: new Map(),
   navAirwayLayers: new Map(),
   navAirwayLabels: new Map(),
+  navAirwayPaths: new Map(),
   hoveredAirwayKey: null,
   selectedNavAirway: null,
   lastRouteWasGenerated: false,
   lastGeneratedRouteDisplay: "",
   navOverlayVersion: 0,
+  navOverlayDrawVersion: 0,
   navOverlayAbortController: null,
   navOverlayPayload: null,
+  navOverlayDrawPayload: null,
   navOverlayFetchBounds: null,
   navOverlayDrawBounds: null,
   navOverlayZoom: null,
@@ -893,6 +896,7 @@ const state = {
   navOverlayDeferredUntil: 0,
   navLabelCollisionLayout: null,
   navOverlayLabelStats: null,
+  navOverlayBuildMetrics: null,
   onlineTileTransitionStats: null,
   simulatorDebugHideNavOverlay: false,
   activeRouteAbortController: null,
@@ -957,8 +961,15 @@ const state = {
   calculateTerrainCache: new Map(),
   calculateTerrainTileCache: new Map(),
   calculateTerrainPendingTiles: new Set(),
+  calculateTerrainGeneration: 0,
+  calculateTerrainActiveCount: 0,
+  calculateTerrainQueuedCount: 0,
+  calculateTerrainPeakActiveCount: 0,
+  calculateTerrainPeakQueuedCount: 0,
+  calculateTerrainCancelledCount: 0,
   calculateOnlineWeather: null,
   calculateOnlineWeatherSignature: "",
+  calculateOnlineWeatherController: null,
   calculateOnlineWeatherPending: false,
   calculateOnlineWeatherError: "",
   calculateWeatherLayout: null,
@@ -1062,6 +1073,7 @@ const MOBILE_PANEL_DEFAULT_MAP_RATIO = 66;
 const MOBILE_PANEL_MIN_MAP_RATIO = 30;
 const MOBILE_PANEL_RATIO_STEP = 0.2;
 const NAV_OVERLAY_REFRESH_DELAY_MS = 110;
+const NAV_OVERLAY_FRAME_BUDGET_MS = 7;
 const NAV_OVERLAY_FETCH_PADDING_RATIO = 0.16;
 const NAV_OVERLAY_DRAW_PADDING_RATIO = 0.12;
 const NAV_AIRWAY_INTERACTIVE_MIN_ZOOM = 6;
@@ -8196,6 +8208,8 @@ function resetDatabaseDependentCaches() {
   clearProcedureOverview({ announce: false });
   state.airportPopupCache.clear();
   state.navOverlayPayload = null;
+  state.navOverlayDrawVersion += 1;
+  state.navOverlayDrawPayload = null;
   state.navOverlayFetchBounds = null;
   state.navOverlayDrawBounds = null;
   state.navOverlayZoom = null;
@@ -8815,6 +8829,7 @@ function beginRouteOperation(label) {
   state.activeRouteAbortController?.abort();
   deferNavOverlayWork(2400);
   state.navOverlayVersion += 1;
+  state.navOverlayDrawVersion += 1;
   state.navOverlayAbortController?.abort();
   state.navOverlayAbortController = null;
   const controller = new AbortController();
@@ -11099,7 +11114,7 @@ function nearestAirwayForLatLng(latlng, candidates, maxDistancePx = 18) {
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
 function setNavAirwayHighlight(name, active) {
-  const layers = state.navAirwayLayers.get(name) || [];
+  let layers = state.navAirwayLayers.get(name) || [];
   const labels = state.navAirwayLabels.get(name) || [];
   const zoom = map.getZoom();
   const vectorDeclutter = state.baseMap === "vector";
@@ -11108,6 +11123,23 @@ function setNavAirwayHighlight(name, active) {
     ? (zoom >= 8 ? 0.78 : zoom >= 6 ? 0.56 : 0.4)
     : (zoom >= 8 ? 0.55 : zoom >= 6 ? 0.36 : 0.24);
   const baseColor = vectorDeclutter ? "#176d9f" : MAP_COLORS.airway;
+  if (active && !layers.length) {
+    const paths = state.navAirwayPaths.get(name) || [];
+    if (paths.length) {
+      const highlightLayer = L.polyline(paths, {
+        pane: "navPane",
+        color: MAP_COLORS.airwayActive,
+        weight: 3.3,
+        opacity: 0.92,
+        renderer: navRenderer,
+        interactive: false,
+        bubblingMouseEvents: false,
+      }).addTo(navAirwayLayerGroup);
+      highlightLayer._plannerNavAirwayHighlight = true;
+      layers = [highlightLayer];
+      state.navAirwayLayers.set(name, layers);
+    }
+  }
   layers.forEach((layer) => {
     layer.setStyle({
       weight: active ? 3.3 : baseWeight,
@@ -11118,6 +11150,10 @@ function setNavAirwayHighlight(name, active) {
       layer.bringToFront();
     }
   });
+  if (!active && layers.some((layer) => layer._plannerNavAirwayHighlight)) {
+    layers.forEach((layer) => navAirwayLayerGroup.removeLayer(layer));
+    state.navAirwayLayers.delete(name);
+  }
   labels.forEach((marker) => {
     marker.getElement()?.classList.toggle("active", active);
   });
@@ -11377,12 +11413,64 @@ function removeNavOverlayLayerAfterPaint(layer) {
   });
 }
 
+class NavOverlaySupersededError extends Error {
+  constructor() {
+    super("nav overlay build superseded");
+    this.name = "NavOverlaySupersededError";
+  }
+}
+
+let navOverlayDrawChain = Promise.resolve();
+
+function assertNavOverlayDrawCurrent(drawVersion) {
+  if (drawVersion !== state.navOverlayDrawVersion) {
+    throw new NavOverlaySupersededError();
+  }
+}
+
+async function buildNavOverlayChunked(items, drawVersion, callback) {
+  let frameStartedAt = performance.now();
+  for (let index = 0; index < items.length; index += 1) {
+    assertNavOverlayDrawCurrent(drawVersion);
+    callback(items[index], index);
+    if (performance.now() - frameStartedAt >= NAV_OVERLAY_FRAME_BUDGET_MS && index + 1 < items.length) {
+      await new Promise((resolve) => window.requestAnimationFrame(resolve));
+      assertNavOverlayDrawCurrent(drawVersion);
+      frameStartedAt = performance.now();
+    }
+  }
+}
+
+function drawNavOverlay(payload) {
+  const roundedZoom = Math.round(map.getZoom());
+  const visibleBounds = currentMapBounds();
+  if (state.navOverlayDrawPayload === payload
+      && state.navOverlayDrawZoom === roundedZoom
+      && boundsContainBounds(state.navOverlayDrawBounds, visibleBounds)) {
+    return Promise.resolve(true);
+  }
+  const drawVersion = (state.navOverlayDrawVersion += 1);
+  const queuedBuild = navOverlayDrawChain
+    .catch(() => false)
+    .then(() => buildNavOverlay(payload, drawVersion));
+  navOverlayDrawChain = queuedBuild;
+  return queuedBuild;
+}
+
 /**
  * 功能：绘制 `drawNavOverlay` 对应的业务逻辑。
  * 输入：payload。
  * 输出：函数处理结果，或对应的界面/地图副作用。
  */
-function drawNavOverlay(payload) {
+async function buildNavOverlay(payload, drawVersion) {
+  const buildStartedAt = performance.now();
+  const phaseTimings = {};
+  const runPhase = async (name, work) => {
+    const startedAt = performance.now();
+    await work();
+    phaseTimings[name] = performance.now() - startedAt;
+  };
+  assertNavOverlayDrawCurrent(drawVersion);
   // 缩放或移动后重绘导航数据时，先在离屏图层组里完成新内容，再替换旧图层。
   // 这样旧航路不会在 fetch / draw 间隙先消失，避免 iPhone 上明显闪烁。
   const previousNavLayerGroup = navLayerGroup;
@@ -11395,6 +11483,7 @@ function drawNavOverlay(payload) {
   const previousNavPointLabelLayerGroup = navPointLabelLayerGroup;
   const previousNavAirwayLayers = state.navAirwayLayers;
   const previousNavAirwayLabels = state.navAirwayLabels;
+  const previousNavAirwayPaths = state.navAirwayPaths;
   navAirwayLayerGroup = L.layerGroup();
   navAirwayLabelLayerGroup = L.layerGroup();
   navLayerGroup = L.layerGroup();
@@ -11406,6 +11495,7 @@ function drawNavOverlay(payload) {
   const selectedAirway = state.selectedNavAirway;
   state.navAirwayLayers = new Map();
   state.navAirwayLabels = new Map();
+  state.navAirwayPaths = new Map();
 
   try {
   const zoom = map.getZoom();
@@ -11425,106 +11515,86 @@ function drawNavOverlay(payload) {
   const airports = payload.airports || EMPTY_LIST;
   const navaids = payload.navaids || EMPTY_LIST;
   const waypoints = payload.waypoints || EMPTY_LIST;
-  const navaidIdents = new Set(navaids.map((item) => String(item.ident || "").toUpperCase()));
+  const navaidIdents = new Set();
+  await runPhase("indexes", async () => {
+    await buildNavOverlayChunked(navaids, drawVersion, (item) => {
+      navaidIdents.add(String(item.ident || "").toUpperCase());
+    });
+  });
   state.navLabelCollisionLayout = createNavLabelCollisionLayout(zoom);
 
-  if (zoom < NAV_AIRWAY_INTERACTIVE_MIN_ZOOM) {
-    const batchedAirwayPaths = [];
-    const batchedAirwayCandidates = [];
-    airways.forEach((airway) => {
-      if (!airway.path || airway.path.length < 2) {
-        return;
-      }
-      worldOffsets.forEach((longitudeOffset) => {
-        const airwayPath = pathLatLngsForWorld(airway.path, longitudeOffset);
-        if (latLngPathIntersectsBounds(airwayPath, viewBounds)) {
-          batchedAirwayPaths.push(airwayPath);
-          batchedAirwayCandidates.push({ airway, path: airwayPath });
-        }
-      });
-    });
-    if (batchedAirwayPaths.length) {
-      L.polyline(batchedAirwayPaths, {
-        pane: "navPane",
-        color: airwayColor,
-        weight: airwayWeight,
-        opacity: airwayOpacity,
-        renderer: navRenderer,
-        interactive: false,
-        bubblingMouseEvents: false,
-      }).addTo(navAirwayLayerGroup);
-      const batchedAirwayHitLayer = L.polyline(batchedAirwayPaths, {
-        pane: "navPane",
-        color: "#ffffff",
-        weight: Math.max(14, airwayWeight + 11),
-        opacity: 0,
-        renderer: navRenderer,
-        interactive: true,
-        bubblingMouseEvents: false,
-      }).addTo(navAirwayLayerGroup);
-      batchedAirwayHitLayer.on("click", (event) => {
-        const airway = nearestAirwayForLatLng(event.latlng, batchedAirwayCandidates);
-        if (airway) {
-          showAirwayPopupFromEvent(airway, event);
-        }
-      });
+  await runPhase("airways", async () => {
+  const batchedAirwayPaths = [];
+  const batchedAirwayCandidates = [];
+  await buildNavOverlayChunked(airways, drawVersion, (airway) => {
+    if (!airway.path || airway.path.length < 2) {
+      return;
     }
-  } else {
-    airways.forEach((airway) => {
-      if (!airway.path || airway.path.length < 2) {
+    worldOffsets.forEach((longitudeOffset) => {
+      const rawAirwayPath = pathLatLngsForWorld(airway.path, longitudeOffset);
+      if (!latLngPathIntersectsBounds(rawAirwayPath, viewBounds)) {
         return;
       }
-      worldOffsets.forEach((longitudeOffset) => {
-        const airwayPath = pathLatLngsForWorld(airway.path, longitudeOffset);
-        if (!latLngPathIntersectsBounds(airwayPath, viewBounds)) {
+      // Convert each tiny segment while the frame-budget scheduler is active.
+      // The final Leaflet layer then receives pre-normalized LatLng instances
+      // instead of converting tens of thousands of points in one constructor.
+      batchedAirwayPaths.push(rawAirwayPath.map(([lat, lon]) => L.latLng(lat, lon)));
+      batchedAirwayCandidates.push({ airway, path: rawAirwayPath });
+      const pathsForName = state.navAirwayPaths.get(airway.name) || [];
+      pathsForName.push(rawAirwayPath);
+      state.navAirwayPaths.set(airway.name, pathsForName);
+      if (roundedZoom >= NAV_AIRWAY_INTERACTIVE_MIN_ZOOM && airway.label) {
+        const labelAt = airway.label_at
+          ? latLngForWorld(airway.label_at, longitudeOffset)
+          : [
+              (rawAirwayPath[0][0] + rawAirwayPath.at(-1)[0]) / 2,
+              (rawAirwayPath[0][1] + rawAirwayPath.at(-1)[1]) / 2,
+            ];
+        if (!latLngPathIntersectsBounds([labelAt], viewBounds)) {
           return;
         }
-        const airwayLayer = L.polyline(airwayPath, {
-          pane: "navPane",
-          color: airwayColor,
-          weight: airwayWeight,
-          opacity: airwayOpacity,
-          renderer: navRenderer,
+        addNavLabel(labelAt[0], labelAt[1], airwayLabelText(airway), "nav-airway-label", {
+          directionClass: airway.direction === "F" ? "dir-f" : airway.direction === "B" ? "dir-b" : "",
           interactive: true,
-          bubblingMouseEvents: false,
-        }).addTo(navAirwayLayerGroup);
-        airwayLayer.on("click", (event) => showAirwayPopupFromEvent(airway, event));
-        const airwayHitLayer = L.polyline(airwayPath, {
-          pane: "navPane",
-          color: "#ffffff",
-          weight: Math.max(12, airwayWeight + 9),
-          opacity: 0,
-          renderer: navRenderer,
-          interactive: true,
-          bubblingMouseEvents: false,
-        }).addTo(navAirwayLayerGroup);
-        airwayHitLayer.on("click", (event) => showAirwayPopupFromEvent(airway, event));
-        const layerList = state.navAirwayLayers.get(airway.name) || [];
-        layerList.push(airwayLayer);
-        state.navAirwayLayers.set(airway.name, layerList);
-        if (airway.label) {
-          const labelAt = airway.label_at
-            ? latLngForWorld(airway.label_at, longitudeOffset)
-            : [
-                (airwayPath[0][0] + airwayPath.at(-1)[0]) / 2,
-                (airwayPath[0][1] + airwayPath.at(-1)[1]) / 2,
-              ];
-          if (!latLngPathIntersectsBounds([labelAt], viewBounds)) {
-            return;
-          }
-          addNavLabel(labelAt[0], labelAt[1], airwayLabelText(airway), "nav-airway-label", {
-            directionClass: airway.direction === "F" ? "dir-f" : airway.direction === "B" ? "dir-b" : "",
-            interactive: true,
-            group: navAirwayLabelLayerGroup,
-            airwayName: airway.name,
-            onClick: (_latlng, event) => showAirwayPopupFromEvent(airway, event),
-          });
-        }
-      });
+          group: navAirwayLabelLayerGroup,
+          airwayName: airway.name,
+          onClick: (_latlng, event) => showAirwayPopupFromEvent(airway, event),
+        });
+      }
+    });
+  });
+  if (batchedAirwayPaths.length) {
+    L.polyline(batchedAirwayPaths, {
+      pane: "navPane",
+      color: airwayColor,
+      weight: airwayWeight,
+      opacity: airwayOpacity,
+      renderer: navRenderer,
+      interactive: false,
+      bubblingMouseEvents: false,
+    }).addTo(navAirwayLayerGroup);
+    const batchedAirwayHitLayer = L.polyline(batchedAirwayPaths, {
+      pane: "navPane",
+      color: "#ffffff",
+      weight: zoom < NAV_AIRWAY_INTERACTIVE_MIN_ZOOM
+        ? Math.max(14, airwayWeight + 11)
+        : Math.max(12, airwayWeight + 9),
+      opacity: 0,
+      renderer: navRenderer,
+      interactive: true,
+      bubblingMouseEvents: false,
+    }).addTo(navAirwayLayerGroup);
+    batchedAirwayHitLayer.on("click", (event) => {
+      const airway = nearestAirwayForLatLng(event.latlng, batchedAirwayCandidates);
+      if (airway) {
+        showAirwayPopupFromEvent(airway, event);
+      }
     });
   }
+  });
 
-  runways.forEach((runway) => {
+  await runPhase("runways_ils", async () => {
+  await buildNavOverlayChunked(runways, drawVersion, (runway) => {
     worldOffsets.forEach((longitudeOffset) => {
       const runwayPath = pathLatLngsForWorld(runway.path, longitudeOffset);
       if (!latLngPathIntersectsBounds(runwayPath, viewBounds)) {
@@ -11545,7 +11615,7 @@ function drawNavOverlay(payload) {
     });
   });
 
-  ilsList.forEach((ils) => {
+  await buildNavOverlayChunked(ilsList, drawVersion, (ils) => {
     worldOffsets.forEach((longitudeOffset) => {
       const ilsPath = pathLatLngsForWorld(ils.path, longitudeOffset);
       if (!latLngPathIntersectsBounds(ilsPath, viewBounds)) {
@@ -11565,8 +11635,10 @@ function drawNavOverlay(payload) {
       }
     });
   });
+  });
 
-  airports.forEach((airport) => {
+  await runPhase("airports", async () => {
+  await buildNavOverlayChunked(airports, drawVersion, (airport) => {
     worldOffsets.forEach((longitudeOffset) => {
       const airportCopy = navPointWorldCopy({ ...airport, kind: "airport" }, longitudeOffset);
       if (!navPointIntersectsBounds(airportCopy, viewBounds)) {
@@ -11582,9 +11654,11 @@ function drawNavOverlay(payload) {
       });
     });
   });
+  });
 
   if (roundedZoom >= 6) {
-    navaids.forEach((navaid) => {
+    await runPhase("navaids", async () => {
+    await buildNavOverlayChunked(navaids, drawVersion, (navaid) => {
       const className = navaid.kind === "ndb" ? "nav-ndb-label" : "nav-vor-label";
       const symbolClass = classifyNavaidSymbol(navaid);
       if (symbolClass === "nav-symbol-localizer") {
@@ -11602,10 +11676,12 @@ function drawNavOverlay(payload) {
         });
       });
     });
+    });
   }
 
   if (roundedZoom >= 8) {
-    waypoints.forEach((waypoint) => {
+    await runPhase("waypoints_labels", async () => {
+    await buildNavOverlayChunked(waypoints, drawVersion, (waypoint) => {
       if (navaidIdents.has(String(waypoint.ident || "").toUpperCase())) {
         return;
       }
@@ -11627,8 +11703,11 @@ function drawNavOverlay(payload) {
         });
       });
     });
+    });
   }
 
+  await runPhase("swap", async () => {
+  assertNavOverlayDrawCurrent(drawVersion);
   if (selectedAirway) {
     setNavAirwayHighlight(selectedAirway, true);
   }
@@ -11653,6 +11732,26 @@ function drawNavOverlay(payload) {
     previousNavPointLabelLayerGroup,
   ].forEach(removeNavOverlayLayerAfterPaint);
   scheduleNavLabelSnapshot();
+  });
+  state.navOverlayDrawPayload = payload;
+  state.navOverlayBuildMetrics = {
+    generation: drawVersion,
+    cancelled: false,
+    phases: phaseTimings,
+    totalMs: performance.now() - buildStartedAt,
+    frameBudgetMs: NAV_OVERLAY_FRAME_BUDGET_MS,
+    counts: {
+      airways: navAirwayLayerGroup.getLayers().length,
+      airwayLabels: navAirwayLabelLayerGroup.getLayers().length,
+      main: navLayerGroup.getLayers().length,
+      mainLabels: navLabelLayerGroup.getLayers().length,
+      terminal: navTerminalLayerGroup.getLayers().length,
+      terminalLabels: navTerminalLabelLayerGroup.getLayers().length,
+      points: navPointLayerGroup.getLayers().length,
+      pointLabels: navPointLabelLayerGroup.getLayers().length,
+    },
+  };
+  return true;
   } catch (error) {
     navLayerGroup.clearLayers();
     navLabelLayerGroup.clearLayers();
@@ -11672,7 +11771,18 @@ function drawNavOverlay(payload) {
     navPointLabelLayerGroup = previousNavPointLabelLayerGroup;
     state.navAirwayLayers = previousNavAirwayLayers;
     state.navAirwayLabels = previousNavAirwayLabels;
+    state.navAirwayPaths = previousNavAirwayPaths;
     state.navLabelCollisionLayout = null;
+    state.navOverlayBuildMetrics = {
+      generation: drawVersion,
+      cancelled: error instanceof NavOverlaySupersededError,
+      phases: phaseTimings,
+      totalMs: performance.now() - buildStartedAt,
+      frameBudgetMs: NAV_OVERLAY_FRAME_BUDGET_MS,
+    };
+    if (error instanceof NavOverlaySupersededError) {
+      return false;
+    }
     throw error;
   }
 }
@@ -11709,6 +11819,8 @@ async function refreshNavOverlay() {
   if (state.simulatorDebugHideNavOverlay) {
     state.navOverlayAbortController?.abort();
     state.navOverlayAbortController = null;
+    state.navOverlayDrawVersion += 1;
+    state.navOverlayDrawPayload = null;
     navLayerGroup.clearLayers();
     navLabelLayerGroup.clearLayers();
     navAirwayLayerGroup.clearLayers();
@@ -11746,8 +11858,10 @@ async function refreshNavOverlay() {
     state.navOverlayZoom === zoom &&
     boundsContainBounds(state.navOverlayFetchBounds, visibleBounds)
   ) {
-    drawNavOverlay(state.navOverlayPayload);
-    state.navOverlayDrawBounds = currentMapBounds(0, NAV_OVERLAY_DRAW_PADDING_RATIO);
+    const drawn = await drawNavOverlay(state.navOverlayPayload);
+    if (drawn) {
+      state.navOverlayDrawBounds = currentMapBounds(0, NAV_OVERLAY_DRAW_PADDING_RATIO);
+    }
     return;
   }
 
@@ -11777,9 +11891,11 @@ async function refreshNavOverlay() {
     }
     state.navOverlayPayload = payload;
     state.navOverlayFetchBounds = bounds;
-    state.navOverlayDrawBounds = currentMapBounds(0, NAV_OVERLAY_DRAW_PADDING_RATIO);
     state.navOverlayZoom = zoom;
-    drawNavOverlay(payload);
+    const drawn = await drawNavOverlay(payload);
+    if (drawn && version === state.navOverlayVersion) {
+      state.navOverlayDrawBounds = currentMapBounds(0, NAV_OVERLAY_DRAW_PADDING_RATIO);
+    }
   } catch (error) {
     if (error.name === "AbortError" || version !== state.navOverlayVersion) {
       return;
@@ -17257,6 +17373,8 @@ async function runSimulatorOnlineFailureFallbackProbe(options = {}) {
   };
 
   try {
+    state.calculateOnlineWeatherController?.abort();
+    state.calculateOnlineWeatherController = null;
     state.calculateOnlineWeather = null;
     state.calculateOnlineWeatherSignature = "";
     state.calculateOnlineWeatherPending = false;
@@ -17635,6 +17753,7 @@ async function applySimulatorDebugLaunch() {
   if (config.hideNavOverlay === true) {
     state.simulatorDebugHideNavOverlay = true;
     state.navOverlayVersion += 1;
+    state.navOverlayDrawVersion += 1;
     await refreshNavOverlay();
   }
   if (typeof config.fr24DepartureOverride === "string") {
@@ -17980,6 +18099,40 @@ async function applySimulatorDebugLaunch() {
   }
   console.info("NavPlanner simulator debug launch applied", config.name || "");
 }
+
+// Read-only/runtime regression surface used by the three platform performance
+// harnesses. It deliberately reuses the same user actions and internal state;
+// no alternate planner, map, weather, terrain, or FR24 implementation exists.
+window.navplannerPerformanceProbe = Object.freeze({
+  runWorkflowStress: (options = {}) => runSimulatorWorkflowStress(options),
+  runFR24Stress: (options = {}) => runSimulatorFR24Stress(options),
+  snapshot: () => ({
+    navOverlay: cloneJSON(state.navOverlayBuildMetrics),
+    navOverlayLabels: cloneJSON(state.navOverlayLabelStats),
+    terrain: {
+      generation: state.calculateTerrainGeneration,
+      active: state.calculateTerrainActiveCount,
+      queued: state.calculateTerrainQueuedCount,
+      peakActive: state.calculateTerrainPeakActiveCount,
+      peakQueued: state.calculateTerrainPeakQueuedCount,
+      cancelled: state.calculateTerrainCancelledCount,
+      cachedTiles: state.calculateTerrainTileCache.size,
+      pendingTiles: state.calculateTerrainPendingTiles.size,
+    },
+    weather: {
+      pending: state.calculateOnlineWeatherPending,
+      error: state.calculateOnlineWeatherError,
+      cache: state.calculateOnlineWeather?.cacheState || "",
+      signature: state.calculateOnlineWeather?.signature || "",
+    },
+    mapCache: cloneJSON(state.mapCacheStatus),
+    resources: performance.getEntriesByType("resource").map((entry) => ({
+      name: entry.name,
+      duration: Number(entry.duration.toFixed(2)),
+      transferSize: entry.transferSize,
+    })),
+  }),
+});
 
 /**
  * 功能：执行 `init` 对应的业务逻辑。

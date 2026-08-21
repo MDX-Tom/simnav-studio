@@ -67,7 +67,7 @@ public final class SimNavRuntimeRouter: @unchecked Sendable {
     private let onlineTileCache: SimNavOnlineTileCache?
     private let fr24Service: FR24Service
     private let exposesLocalFilePaths: Bool
-    private let weatherProxy = SimNavWeatherProxy()
+    private let weatherProxy: SimNavWeatherProxy
     private static let transparentTile = Data(
         base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg=="
     ) ?? Data()
@@ -109,6 +109,7 @@ public final class SimNavRuntimeRouter: @unchecked Sendable {
             mapStore: mapStore,
             onlineTileCache: onlineTileCache,
             fr24Service: fr24Service,
+            weatherProxy: SimNavWeatherProxy(),
             exposesLocalFilePaths: false
         )
     }
@@ -118,12 +119,14 @@ public final class SimNavRuntimeRouter: @unchecked Sendable {
         mapStore: MapStore? = nil,
         onlineTileCache: SimNavOnlineTileCache? = nil,
         fr24Service: FR24Service = FR24Service(),
+        weatherProxy: SimNavWeatherProxy = SimNavWeatherProxy(),
         exposesLocalFilePaths: Bool = true
     ) {
         self.plannerService = plannerService
         self.mapStore = mapStore
         self.onlineTileCache = onlineTileCache
         self.fr24Service = fr24Service
+        self.weatherProxy = weatherProxy
         self.exposesLocalFilePaths = exposesLocalFilePaths
     }
 
@@ -692,21 +695,10 @@ public final class SimNavRuntimeRouter: @unchecked Sendable {
             )
         }
 
-        let finalState: SimNavOnlineTileCache.TileState
-        switch initialState {
-        case .queued, .pending:
-            finalState = onlineTileCache.tile(
-                providerKey: providerKey,
-                z: z,
-                x: x,
-                y: y,
-                waitForDownload: SimNavOnlineTileCache.tileResponseWaitTimeout,
-                demandGeneration: demandGeneration,
-                priority: .visible
-            )
-        case .failed, .hit:
-            finalState = initialState
-        }
+        // A miss already owns a shared background cache job. HTTP/WebKit
+        // callers poll X-Map-Cache, so holding the transport worker for the
+        // former 2.4-second window only amplifies a cold-view queue.
+        let finalState = initialState
         if case let .hit(data, contentType) = finalState {
             return onlineTileHitResponse(data: data, contentType: contentType)
         }
@@ -726,11 +718,14 @@ public final class SimNavRuntimeRouter: @unchecked Sendable {
                 )
             }
         }
-        return placeholderTileResponse(cacheState: onlineTileStateName(finalState))
+        return placeholderTileResponse(
+            cacheState: onlineTileStateName(finalState),
+            retryAfterMilliseconds: 350
+        )
     }
 
     private func onlineTileHitResponse(data: Data, contentType: String) -> RuntimeResponse {
-        RuntimeResponse(
+        return RuntimeResponse(
             status: 200,
             headers: [
                 "Cache-Control": "public, max-age=31536000, immutable",
@@ -756,7 +751,9 @@ public final class SimNavRuntimeRouter: @unchecked Sendable {
                 "X-Map-Cache": "FALLBACK",
                 "X-Map-Fallback-Levels": String(fallbackLevels),
                 "X-Map-Fallback-Zoom": String(sourceZoom),
-                "X-Map-Fallback-Target-State": onlineTileStateName(targetState)
+                "X-Map-Fallback-Target-State": onlineTileStateName(targetState),
+                "X-Map-Retry-After-Ms": "350",
+                "Retry-After": "1"
             ],
             body: data
         )
@@ -898,15 +895,23 @@ public final class SimNavRuntimeRouter: @unchecked Sendable {
         return jsonResponse(["error": "Offline maps API not found"], status: 404)
     }
 
-    private func placeholderTileResponse(cacheState: String = "MISS") -> RuntimeResponse {
-        RuntimeResponse(
+    private func placeholderTileResponse(
+        cacheState: String = "MISS",
+        retryAfterMilliseconds: Int? = nil
+    ) -> RuntimeResponse {
+        var headers = [
+            "Cache-Control": "no-store",
+            "Content-Type": "image/png",
+            "X-Map-Cache": cacheState,
+            "X-Offline-Map": cacheState
+        ]
+        if let retryAfterMilliseconds {
+            headers["X-Map-Retry-After-Ms"] = String(retryAfterMilliseconds)
+            headers["Retry-After"] = String(max(1, Int(ceil(Double(retryAfterMilliseconds) / 1_000))))
+        }
+        return RuntimeResponse(
             status: 200,
-            headers: [
-                "Cache-Control": "no-store",
-                "Content-Type": "image/png",
-                "X-Map-Cache": cacheState,
-                "X-Offline-Map": cacheState
-            ],
+            headers: headers,
             body: Self.transparentTile
         )
     }

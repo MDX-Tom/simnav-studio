@@ -58,6 +58,51 @@ private final class FR24RequestResultBox: @unchecked Sendable {
     }
 }
 
+private final class FR24ScheduleBranchResultBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [Int: Result<[String: Any], Error>] = [:]
+
+    func store(_ value: Result<[String: Any], Error>, at index: Int) {
+        lock.lock()
+        values[index] = value
+        lock.unlock()
+    }
+
+    func value(at index: Int) -> Result<[String: Any], Error>? {
+        lock.lock()
+        defer { lock.unlock() }
+        return values[index]
+    }
+}
+
+private final class FR24RouteFlight: @unchecked Sendable {
+    private let condition = NSCondition()
+    private var result: Result<[[String: Any]], Error>?
+
+    func finish(_ result: Result<[[String: Any]], Error>) {
+        condition.lock()
+        self.result = result
+        condition.broadcast()
+        condition.unlock()
+    }
+
+    func wait(timeout: TimeInterval) throws -> [[String: Any]] {
+        condition.lock()
+        let deadline = Date().addingTimeInterval(timeout)
+        while result == nil, condition.wait(until: deadline) {}
+        let resolved = result
+        condition.unlock()
+        guard let resolved else {
+            throw NSError(
+                domain: "NavPlanner.FR24Service",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "FR24 route query timed out while awaiting shared request."]
+            )
+        }
+        return try resolved.get()
+    }
+}
+
 final class FR24SessionPreferences: @unchecked Sendable {
     private enum Backend {
         case userDefaults(UserDefaults)
@@ -358,6 +403,35 @@ final class FR24Service: @unchecked Sendable {
     private let browserFetcher: FR24BrowserFetching?
     private let apiBaseURL: URL
     private let isoFormatter = ISO8601DateFormatter()
+    private let routeCacheLock = NSLock()
+    private let routeCacheTTL: TimeInterval
+    private let now: @Sendable () -> Date
+    private var routeCacheGeneration = 0
+    private var routeCache: [FR24RouteCacheKey: FR24RouteCacheEntry] = [:]
+    private var routeFlightsInProgress: [FR24RouteCacheKey: FR24RouteFlight] = [:]
+
+    private struct FR24RouteCacheKey: Hashable {
+        let departureCodes: [String]
+        let arrivalCodes: [String]
+        let departureScheduleCode: String
+        let arrivalScheduleCode: String
+        let limit: Int
+        let flightNumber: String
+        let callsign: String
+        let lookbackHours: Int
+        let sessionGeneration: Int
+    }
+
+    private struct FR24RouteCacheEntry {
+        let storedAt: Date
+        let flights: [[String: Any]]
+    }
+
+    private enum FR24RouteCacheLookup {
+        case hit([[String: Any]])
+        case owner(FR24RouteFlight)
+        case waiter(FR24RouteFlight)
+    }
 
     init(
         fileManager: FileManager = .default,
@@ -365,7 +439,9 @@ final class FR24Service: @unchecked Sendable {
         rootDirectory: URL? = nil,
         sessionFileURL: URL? = nil,
         browserFetcher: FR24BrowserFetching? = nil,
-        apiBaseURL: URL = URL(string: "https://api.flightradar24.com")!
+        apiBaseURL: URL = URL(string: "https://api.flightradar24.com")!,
+        routeCacheTTL: TimeInterval = 90,
+        now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.fileManager = fileManager
         self.userDefaults = sessionFileURL.map {
@@ -373,6 +449,8 @@ final class FR24Service: @unchecked Sendable {
         } ?? FR24SessionPreferences(userDefaults: userDefaults)
         self.browserFetcher = browserFetcher
         self.apiBaseURL = apiBaseURL
+        self.routeCacheTTL = max(0, routeCacheTTL)
+        self.now = now
         if let rootDirectory {
             self.rootDirectory = rootDirectory.standardizedFileURL
         } else {
@@ -490,11 +568,13 @@ final class FR24Service: @unchecked Sendable {
     }
 
     func updateAccessPayload(webCookie: String?, frPl: String?) -> [String: Any] {
-        FR24SessionStore.updateAccessPayload(
+        let payload = FR24SessionStore.updateAccessPayload(
             webCookie: webCookie,
             frPl: frPl,
             userDefaults: userDefaults
         )
+        invalidateRouteCache()
+        return payload
     }
 
     func clearAccessPayload() -> [String: Any] {
@@ -502,6 +582,7 @@ final class FR24Service: @unchecked Sendable {
             try? manager.clearBrowserSession()
         }
         _ = FR24SessionStore.clearAccessPayload(userDefaults: userDefaults)
+        invalidateRouteCache()
         var payload = accessStatusPayload()
         payload["message"] = "已清除 FR24 浏览器会话与兼容配置。"
         return payload
@@ -544,6 +625,7 @@ final class FR24Service: @unchecked Sendable {
                     frPl: frPl,
                     userDefaults: userDefaults
                 )
+                invalidateRouteCache()
             }
         } catch {
             var payload = accessStatusPayload()
@@ -555,6 +637,7 @@ final class FR24Service: @unchecked Sendable {
         }
 
         FR24SessionStore.markBrowserSync(userDefaults: userDefaults)
+        invalidateRouteCache()
         var payload = probeAccessPayload()
         payload["automatic_sync"] = true
         if payload["verified"] as? Bool == true {
@@ -567,6 +650,19 @@ final class FR24Service: @unchecked Sendable {
             }
         }
         return payload
+    }
+
+    private func invalidateRouteCache() {
+        routeCacheLock.lock()
+        routeCacheGeneration &+= 1
+        routeCache.removeAll()
+        routeFlightsInProgress.removeAll()
+        routeCacheLock.unlock()
+    }
+
+    private func recordChallengeAndInvalidateRouteCache() {
+        FR24SessionStore.recordChallenge(userDefaults: userDefaults)
+        invalidateRouteCache()
     }
 
     func probeAccessPayload() -> [String: Any] {
@@ -605,7 +701,7 @@ final class FR24Service: @unchecked Sendable {
             return payload
         } catch {
             if Self.isChallengeLikeRequestError(error.localizedDescription) {
-                FR24SessionStore.recordChallenge(userDefaults: userDefaults)
+                recordChallengeAndInvalidateRouteCache()
             }
             var payload = accessStatusPayload()
             payload["verified"] = false
@@ -841,7 +937,7 @@ final class FR24Service: @unchecked Sendable {
             ]
         } catch {
             if Self.isChallengeLikeRequestError(error.localizedDescription) {
-                FR24SessionStore.recordChallenge(userDefaults: userDefaults)
+                recordChallengeAndInvalidateRouteCache()
             }
             return [
                 "error": error.localizedDescription,
@@ -1573,25 +1669,102 @@ final class FR24Service: @unchecked Sendable {
               let arrival = routeAirports["arrival"] as? [String: Any] else {
             throw serviceError("Departure or arrival could not be resolved.")
         }
+        let lookupTime = now()
+        routeCacheLock.lock()
+        let cacheKey = FR24RouteCacheKey(
+            departureCodes: Self.stringArray(departure["codes"]).map { $0.uppercased() }.sorted(),
+            arrivalCodes: Self.stringArray(arrival["codes"]).map { $0.uppercased() }.sorted(),
+            departureScheduleCode: scheduleCode(for: departure),
+            arrivalScheduleCode: scheduleCode(for: arrival),
+            limit: limit,
+            flightNumber: normalizedFlightToken(flightNumber),
+            callsign: normalizedFlightToken(callsign),
+            lookbackHours: lookbackHours,
+            sessionGeneration: routeCacheGeneration
+        )
+        let lookup: FR24RouteCacheLookup
+        if let cached = routeCache[cacheKey],
+           lookupTime.timeIntervalSince(cached.storedAt) <= routeCacheTTL {
+            lookup = .hit(cached.flights)
+        } else if let flight = routeFlightsInProgress[cacheKey] {
+            lookup = .waiter(flight)
+        } else {
+            let flight = FR24RouteFlight()
+            routeCache.removeValue(forKey: cacheKey)
+            routeFlightsInProgress[cacheKey] = flight
+            lookup = .owner(flight)
+        }
+        routeCacheLock.unlock()
+
+        switch lookup {
+        case let .hit(flights):
+            return flights
+        case let .waiter(flight):
+            return try flight.wait(timeout: 50)
+        case let .owner(flight):
+            do {
+                let flights = try routeFlightsUncached(
+                    routeAirports: routeAirports,
+                    limit: limit,
+                    flightNumber: flightNumber,
+                    callsign: callsign,
+                    lookbackHours: lookbackHours
+                )
+                routeCacheLock.lock()
+                if cacheKey.sessionGeneration == routeCacheGeneration {
+                    routeCache[cacheKey] = FR24RouteCacheEntry(storedAt: now(), flights: flights)
+                    if routeCache.count > 32 {
+                        let oldest = routeCache.min { $0.value.storedAt < $1.value.storedAt }?.key
+                        if let oldest { routeCache.removeValue(forKey: oldest) }
+                    }
+                }
+                routeFlightsInProgress.removeValue(forKey: cacheKey)
+                routeCacheLock.unlock()
+                flight.finish(.success(flights))
+                return flights
+            } catch {
+                routeCacheLock.lock()
+                routeFlightsInProgress.removeValue(forKey: cacheKey)
+                routeCacheLock.unlock()
+                flight.finish(.failure(error))
+                throw error
+            }
+        }
+    }
+
+    private func routeFlightsUncached(
+        routeAirports: [String: Any],
+        limit: Int,
+        flightNumber: String,
+        callsign: String,
+        lookbackHours: Int
+    ) throws -> [[String: Any]] {
+        guard let departure = routeAirports["departure"] as? [String: Any],
+              let arrival = routeAirports["arrival"] as? [String: Any] else {
+            throw serviceError("Departure or arrival could not be resolved.")
+        }
         let departureCodes = Set(Self.stringArray(departure["codes"]).map { $0.uppercased() })
         let arrivalCodes = Set(Self.stringArray(arrival["codes"]).map { $0.uppercased() })
         let flightFilter = normalizedFlightToken(flightNumber)
         let callsignFilter = normalizedFlightToken(callsign)
         let departureScheduleCode = scheduleCode(for: departure)
         let arrivalScheduleCode = scheduleCode(for: arrival)
-        let now = Date()
+        let queryTime = now()
         let stepHours = 24
         var flights: [[String: Any]] = []
         var seen = Set<String>()
 
         for offsetHours in stride(from: 0, through: max(1, lookbackHours), by: stepHours) {
-            let timestamp = Int(now.addingTimeInterval(TimeInterval(-offsetHours * 3600)).timeIntervalSince1970)
+            let timestamp = Int(queryTime.addingTimeInterval(TimeInterval(-offsetHours * 3600)).timeIntervalSince1970)
             var offsetHadSuccess = false
             var offsetHTTP400Count = 0
-            for modeInfo in [
+            let modeInfos = [
                 (mode: "departures", airportCode: departureScheduleCode),
                 (mode: "arrivals", airportCode: arrivalScheduleCode)
-            ] {
+            ]
+            let branchResults = FR24ScheduleBranchResultBox()
+            DispatchQueue.concurrentPerform(iterations: modeInfos.count) { index in
+                let modeInfo = modeInfos[index]
                 var params = [
                     ("code", modeInfo.airportCode),
                     ("plugin[]", "schedule"),
@@ -1603,20 +1776,33 @@ final class FR24Service: @unchecked Sendable {
                 } else {
                     params.append(("plugin-setting[schedule][timestamp]", String(timestamp)))
                 }
-                let payload: [String: Any]
                 do {
-                    payload = try webGet(
+                    branchResults.store(.success(try webGet(
                         path: "/common/v1/airport.json",
                         params: params,
                         expectedPaginationHTTP400: offsetHours > 0
-                    )
-                    offsetHadSuccess = true
+                    )), at: index)
                 } catch {
+                    branchResults.store(.failure(error), at: index)
+                }
+            }
+            for (index, modeInfo) in modeInfos.enumerated() {
+                let payload: [String: Any]
+                switch branchResults.value(at: index) {
+                case let .success(value):
+                    payload = value
+                    offsetHadSuccess = true
+                case let .failure(error):
                     if error.localizedDescription.contains("HTTP 400") {
                         offsetHTTP400Count += 1
                     }
                     if offsetHours == 0, flights.isEmpty {
                         throw error
+                    }
+                    continue
+                case .none:
+                    if offsetHours == 0, flights.isEmpty {
+                        throw serviceError("FR24 schedule branch did not return a result.")
                     }
                     continue
                 }
@@ -1978,7 +2164,7 @@ final class FR24Service: @unchecked Sendable {
                         )
                     }
                     if retryable {
-                        FR24SessionStore.recordChallenge(userDefaults: userDefaults)
+                        recordChallengeAndInvalidateRouteCache()
                         if retryChallenge, attempt < retryDelays.count {
                             let jitter = Double.random(in: 0.05...0.25)
                             Thread.sleep(forTimeInterval: retryDelays[attempt] + jitter)
@@ -2028,7 +2214,7 @@ final class FR24Service: @unchecked Sendable {
             return payload
         } catch {
             if Self.isChallengeLikeRequestError(error.localizedDescription) {
-                FR24SessionStore.recordChallenge(userDefaults: userDefaults)
+                recordChallengeAndInvalidateRouteCache()
             }
             throw error
         }

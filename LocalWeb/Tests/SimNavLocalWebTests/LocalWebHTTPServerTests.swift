@@ -145,7 +145,7 @@ final class LocalWebHTTPServerTests: XCTestCase {
             XCTAssertTrue(html.contains(#"window.location.protocol === "navplanner:""#))
             XCTAssertTrue(html.contains(#"window.location.protocol === "file:""#))
             XCTAssertTrue(html.contains(#"usesAppleResourceBridge ? "navplanner://app/" : "/""#))
-            XCTAssertTrue(html.contains("20260820-fr24-webkit-icao-v111"))
+            XCTAssertTrue(html.contains("20260821-performance-remediation-v112"))
             XCTAssertTrue(html.contains(#"href="/app-icons/style2-day-medium.png""#))
             XCTAssertTrue(html.contains(#"id="darkMapToggle" type="checkbox""#))
             XCTAssertFalse(html.contains(#"id="darkMapToggle" type="checkbox" checked"#))

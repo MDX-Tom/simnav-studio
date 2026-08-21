@@ -189,12 +189,17 @@ final class NavPlannerSchemeHandler: NSObject, WKURLSchemeHandler {
                 "Content-Range",
                 "Date",
                 "ETag",
+                "Retry-After",
                 "X-Map-Cache",
                 "X-Map-Fallback-Levels",
                 "X-Map-Fallback-Target-State",
                 "X-Map-Fallback-Zoom",
+                "X-Map-Retry-After-Ms",
                 "X-Offline-Map",
+                "X-Weather-Cache",
+                "X-Weather-Cache-Age",
                 "X-Weather-Source",
+                "X-Weather-Stale-Reason",
                 "X-Weather-Updated"
             ].joined(separator: ", "),
             "Cache-Control": "no-store"
